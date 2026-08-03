@@ -1,0 +1,116 @@
+﻿:root{
+  --sr-hero-min: calc(100vh - 86px);
+  --sr-hero-pad: clamp(18px, 2.2vw, 30px);
+  --sr-hero-text: #ffffff;
+  --sr-hero-shadow: rgba(0, 0, 0, 0.55);
+  --sr-hero-panel: rgba(30, 30, 30, 0.12);
+}
+
+.sr-inicio{
+  min-height: calc(100vh - 86px);
+  overflow: hidden;
+}
+
+.sr-hero{
+  position: relative;
+  min-height: var(--sr-hero-min);
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  padding: 14px;
+}
+
+.sr-hero__bg{
+  position: absolute;
+  inset: 0;
+  background-image: url("/casa-diseno.jpg");
+  background-size: cover;
+  background-position: center;
+  filter: contrast(1.05) brightness(0.9);
+  z-index: -2;
+}
+
+.sr-hero__overlay{
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.22), rgba(0,0,0,0.42));
+  z-index: -1;
+}
+
+.sr-hero__content{
+  width: min(960px, 92vw);
+  padding: calc(var(--sr-hero-pad) * 1.15);
+  text-align: center;
+  color: var(--sr-hero-text);
+  background: var(--sr-hero-panel);
+  box-shadow: 0 12px 40px var(--sr-hero-shadow);
+  border-radius: 18px;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.sr-hero__logo{
+  display: block;
+  margin: 0 auto 12px;
+  width: clamp(240px, 34vw, 340px);
+  height: auto;
+}
+
+.sr-hero__title{
+  color: #fff;
+  font-size: clamp(30px, 4.6vw, 46px);
+  line-height: 1.05;
+  font-weight: 900;
+  letter-spacing: .3px;
+  margin: 2px 0 10px 0;
+  text-shadow: 0 1px 3px rgba(0,0,0,.35);
+}
+
+.sr-hero__subtitle{
+  color: #fff;
+  font-size: clamp(15px, 2vw, 19px);
+  line-height: 1.55;
+  margin: 0 auto;
+  max-width: 880px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+
+@media (max-height: 760px){
+  .sr-hero{ padding: 10px; }
+  .sr-hero__content{ padding: 18px 22px; }
+  .sr-hero__logo{
+    width: clamp(220px, 30vw, 300px);
+    margin-bottom: 8px;
+  }
+  .sr-hero__title{
+    font-size: clamp(28px, 4.2vw, 40px);
+    margin-bottom: 8px;
+  }
+  .sr-hero__subtitle{
+    font-size: clamp(14px, 1.8vw, 17px);
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 640px){
+  .sr-inicio{ overflow: visible; }
+  .sr-hero{
+    min-height: calc(100vh - 78px);
+    padding: 14px;
+  }
+  .sr-hero__content{
+    width: min(94vw, 520px);
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+  .sr-hero__logo{
+    width: clamp(190px, 68vw, 270px);
+  }
+  .sr-hero__title{
+    font-size: clamp(26px, 8vw, 34px);
+  }
+  .sr-hero__subtitle{
+    font-size: 15px;
+    line-height: 1.45;
+  }
+}
