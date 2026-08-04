@@ -115,7 +115,7 @@ const SERVICES = [
     title: "Deudas y morosidad",
     text: "ASNEF, ficheros de morosidad e incidencias relacionadas con crédito.",
     action: "Comprobar mi situación",
-    to: "/asnef",
+    to: "/morosidad",
   },
   {
     icon: "🏛️",
