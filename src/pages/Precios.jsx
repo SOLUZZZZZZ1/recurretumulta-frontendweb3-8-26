@@ -1,77 +1,330 @@
 import React from "react";
-import Seo from "../components/Seo.jsx";
 import { Link } from "react-router-dom";
+import Seo from "../components/Seo.jsx";
+
+const REVIEW_PRICES = [
+  {
+    icon: "🚗",
+    title: "Multas y vehículos",
+    price: "10 €",
+    text: "Revisión inicial de la documentación y de la situación del expediente.",
+    to: "/trafico",
+    action: "Ver Multas y vehículos",
+  },
+  {
+    icon: "💳",
+    title: "Deudas y morosidad",
+    price: "10 €",
+    text: "Revisión inicial de inclusiones en ficheros de morosidad y problemas relacionados con deudas.",
+    to: "/morosidad",
+    action: "Ver Deudas y morosidad",
+  },
+  {
+    icon: "🏛️",
+    title: "Administración pública",
+    price: "25 €",
+    text: "Revisión inicial de expedientes frente a administraciones y organismos públicos.",
+    to: "/administracion",
+    action: "Ver Administración",
+  },
+];
 
 export default function Precios() {
   return (
     <>
       <Seo
-        title="Precios · RecurreTuMulta"
-        description="Servicio completo de análisis, preparación y presentación de recurso de multa en tu nombre."
+        title="Precios · RTM"
+        description="Consulta las tarifas de revisión inicial y el funcionamiento de los presupuestos de gestión de RTM."
       />
 
-      <main style={{ padding: "40px", maxWidth: "800px", margin: "0 auto" }}>
+      <main
+        style={{
+          minHeight: "calc(100vh - 120px)",
+          padding: "54px 20px 70px",
+          background: "#f8fafc",
+          color: "#0f172a",
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 1120, margin: "0 auto" }}>
+          <header
+            style={{
+              maxWidth: 780,
+              margin: "0 auto 34px",
+              textAlign: "center",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                marginBottom: 15,
+                padding: "7px 12px",
+                borderRadius: 999,
+                background: "#dbeafe",
+                color: "#1d4ed8",
+                fontSize: 14,
+                fontWeight: 850,
+              }}
+            >
+              Tarifas RTM
+            </span>
 
-        <h1 style={{ textAlign: "center" }}>
-          Servicio completo para recurrir tu multa
-        </h1>
+            <h1
+              style={{
+                margin: "0 0 14px",
+                fontSize: "clamp(36px, 5vw, 58px)",
+                lineHeight: 1.04,
+                letterSpacing: "-.04em",
+                fontWeight: 950,
+              }}
+            >
+              Empieza por una revisión inicial
+            </h1>
 
-        <p style={{ textAlign: "center", marginBottom: "30px" }}>
-          No vendemos plantillas ni documentos descargables.  
-          Nos encargamos de todo el proceso por ti.
-        </p>
+            <p
+              style={{
+                margin: 0,
+                color: "#64748b",
+                fontSize: "clamp(17px, 2vw, 20px)",
+                lineHeight: 1.6,
+              }}
+            >
+              Primero revisamos el expediente. Si existe una vía razonable de
+              actuación, podrás decidir si quieres continuar con la gestión.
+            </p>
+          </header>
 
-        <div style={{
-          border: "2px solid black",
-          padding: "25px",
-          borderRadius: "10px"
-        }}>
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(245px, 1fr))",
+              gap: 18,
+              alignItems: "stretch",
+            }}
+          >
+            {REVIEW_PRICES.map((item) => (
+              <article
+                key={item.title}
+                style={{
+                  display: "flex",
+                  minHeight: 330,
+                  padding: 25,
+                  flexDirection: "column",
+                  border: "1px solid #dbeafe",
+                  borderRadius: 24,
+                  background: "#fff",
+                  boxShadow: "0 16px 42px rgba(15,23,42,.08)",
+                }}
+              >
+                <div
+                  aria-hidden="true"
+                  style={{
+                    width: 50,
+                    height: 50,
+                    display: "grid",
+                    placeItems: "center",
+                    marginBottom: 17,
+                    borderRadius: 15,
+                    background: "#eff6ff",
+                    fontSize: 27,
+                  }}
+                >
+                  {item.icon}
+                </div>
 
-          <h2>Gestión completa</h2>
+                <h2
+                  style={{
+                    margin: "0 0 9px",
+                    fontSize: 25,
+                    lineHeight: 1.15,
+                    fontWeight: 950,
+                  }}
+                >
+                  {item.title}
+                </h2>
 
-          <h3 style={{ fontSize: "32px", margin: "10px 0" }}>
-            39€
-          </h3>
+                <div
+                  style={{
+                    margin: "5px 0 14px",
+                    color: "#0b4aa2",
+                    fontSize: 38,
+                    lineHeight: 1,
+                    fontWeight: 950,
+                  }}
+                >
+                  {item.price}
+                </div>
 
-          <p style={{ color: "#666", marginBottom: "20px" }}>
-            Pago único. Sin suscripciones. Sin compromiso.
-          </p>
+                <div
+                  style={{
+                    marginBottom: 15,
+                    color: "#475569",
+                    fontSize: 14,
+                    fontWeight: 800,
+                  }}
+                >
+                  Revisión Inicial del Expediente
+                </div>
 
-          <ul style={{ lineHeight: "1.9" }}>
-            <li>✔️ Análisis completo de la multa o expediente</li>
-            <li>✔️ Detección de errores, defectos de prueba o problemas de motivación</li>
-            <li>✔️ Preparación del recurso adaptado al caso</li>
-            <li>✔️ Presentación del recurso en tu nombre con autorización previa</li>
-            <li>✔️ Justificante oficial de presentación</li>
-            <li>✔️ Seguimiento del expediente y control de plazos</li>
-          </ul>
+                <p
+                  style={{
+                    margin: "0 0 22px",
+                    color: "#64748b",
+                    lineHeight: 1.55,
+                    flexGrow: 1,
+                  }}
+                >
+                  {item.text}
+                </p>
 
-          <p style={{ marginTop: "20px", fontWeight: "bold" }}>
-            Nos encargamos del proceso completo para que no tengas que preocuparte por plazos ni trámites.
-          </p>
+                <Link
+                  to={item.to}
+                  style={{
+                    minHeight: 48,
+                    padding: "13px 15px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 13,
+                    background: "#2bb673",
+                    color: "#fff",
+                    textDecoration: "none",
+                    textAlign: "center",
+                    fontWeight: 900,
+                  }}
+                >
+                  {item.action}
+                </Link>
+              </article>
+            ))}
+          </section>
 
-          <div style={{ marginTop: "25px", textAlign: "center" }}>
-            <Link to="/" style={{
-              padding: "12px 20px",
-              background: "black",
-              color: "white",
-              textDecoration: "none",
-              borderRadius: "5px"
-            }}>
-              Subir multa ahora
-            </Link>
+          <section
+            style={{
+              marginTop: 22,
+              padding: 27,
+              border: "1px solid #bfdbfe",
+              borderRadius: 24,
+              background: "#eff6ff",
+            }}
+          >
+            <h2
+              style={{
+                margin: "0 0 10px",
+                fontSize: 26,
+                fontWeight: 950,
+              }}
+            >
+              Si decides continuar
+            </h2>
+
+            <p
+              style={{
+                margin: 0,
+                color: "#334155",
+                fontSize: 17,
+                lineHeight: 1.6,
+              }}
+            >
+              El importe abonado por la Revisión Inicial del Expediente se
+              descontará íntegramente del precio de la gestión contratada.
+            </p>
+          </section>
+
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: 18,
+              marginTop: 22,
+            }}
+          >
+            <article
+              style={{
+                padding: 26,
+                border: "1px solid #e2e8f0",
+                borderRadius: 22,
+                background: "#fff",
+              }}
+            >
+              <span style={{ fontSize: 28 }} aria-hidden="true">
+                📄
+              </span>
+              <h2 style={{ margin: "12px 0 9px", fontSize: 23, fontWeight: 950 }}>
+                Recurso administrativo de multa
+              </h2>
+              <div
+                style={{
+                  marginBottom: 12,
+                  color: "#0b4aa2",
+                  fontSize: 34,
+                  fontWeight: 950,
+                }}
+              >
+                39 €
+              </div>
+              <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
+                Tarifa de gestión cuando corresponda esta actuación. Se
+                descontará lo abonado previamente por la revisión inicial.
+              </p>
+            </article>
+
+            <article
+              style={{
+                padding: 26,
+                border: "1px solid #e2e8f0",
+                borderRadius: 22,
+                background: "#fff",
+              }}
+            >
+              <span style={{ fontSize: 28 }} aria-hidden="true">
+                ⚖️
+              </span>
+              <h2 style={{ margin: "12px 0 9px", fontSize: 23, fontWeight: 950 }}>
+                Actuaciones complejas
+              </h2>
+              <div
+                style={{
+                  marginBottom: 12,
+                  color: "#0b4aa2",
+                  fontSize: 27,
+                  fontWeight: 950,
+                }}
+              >
+                Presupuesto
+              </div>
+              <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
+                Los procedimientos judiciales, contenciosos y las actuaciones
+                que requieran un estudio específico se presupuestarán antes de
+                iniciar la gestión.
+              </p>
+            </article>
+          </section>
+
+          <div
+            style={{
+              marginTop: 30,
+              padding: 23,
+              borderRadius: 20,
+              background: "#0f172a",
+              color: "#fff",
+              textAlign: "center",
+            }}
+          >
+            <strong
+              style={{
+                display: "block",
+                marginBottom: 7,
+                fontSize: 21,
+              }}
+            >
+              Antes de pagar sabrás qué servicio estás contratando.
+            </strong>
+            <span style={{ color: "rgba(255,255,255,.76)", lineHeight: 1.5 }}>
+              Cuando sea necesario un presupuesto, podrás revisarlo antes de
+              decidir si continúas.
+            </span>
           </div>
-
         </div>
-
-        <p style={{
-          marginTop: "30px",
-          textAlign: "center",
-          fontWeight: "bold"
-        }}>
-          Antes de pagar la multa, comprueba si realmente es correcta o se puede recurrir.
-        </p>
-
       </main>
     </>
   );
