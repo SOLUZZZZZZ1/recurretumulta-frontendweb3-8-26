@@ -58,13 +58,6 @@ const SERVICE_CONFIG = {
       other_claim: "Otra reclamación",
     },
   },
-  other: {
-    label: "No encuentro mi caso",
-    icon: "📂",
-    defaultCaseType: "other",
-    nextPath: "/otros/documentos",
-    caseTypes: { other: "Estudio inicial del caso" },
-  },
 };
 
 function buildUrl(base, path) {
@@ -128,7 +121,7 @@ export default function IniciarExpedienteRTM() {
     "";
 
   const department = requestedDepartment || "traffic";
-  const config = SERVICE_CONFIG[department] || SERVICE_CONFIG.other;
+  const config = SERVICE_CONFIG[department] || SERVICE_CONFIG.traffic;
   const needsServiceSelection = !requestedDepartment;
   const requestedType = params.caseType || searchParams.get("case_type") || config.defaultCaseType;
   const initialType = config.caseTypes[requestedType] ? requestedType : config.defaultCaseType;
@@ -257,7 +250,7 @@ export default function IniciarExpedienteRTM() {
       fd.append("file", signedAuthorization);
       await fetchJsonFallback(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
       setAuthorizationUploaded(true);
-      setMessage("✅ Autorización firmada recibida. Ya puedes continuar.");
+      setMessage("✅ Autorización firmada recibida. Ya puedes continuar con la documentación del expediente.");
     } catch (error) {
       setMessage(error?.message || "No se pudo subir la autorización.");
     } finally {
@@ -295,12 +288,6 @@ export default function IniciarExpedienteRTM() {
         icon: "✈️",
         title: "Viajes y reclamaciones",
         text: "Vuelos, equipaje, consumo y otras reclamaciones frente a empresas.",
-      },
-      {
-        key: "other",
-        icon: "📂",
-        title: "No encuentro mi caso",
-        text: "Cuéntanos el problema para realizar un estudio inicial y dirigirlo correctamente.",
       },
     ];
 
@@ -360,7 +347,7 @@ export default function IniciarExpedienteRTM() {
                   letterSpacing: "-.04em",
                 }}
               >
-                ¿Qué problema quieres resolver?
+                ¿Qué problema necesitas resolver?
               </h1>
 
               <p
@@ -456,8 +443,11 @@ export default function IniciarExpedienteRTM() {
           <header style={{ marginBottom: 26 }}>
             <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>Inicia tu expediente</h1>
             <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
-              Completa tus datos, descarga la autorización RTM, fírmala y vuelve a subirla.
+              Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación.
             </p>
+            <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
+              Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración
+            </div>
           </header>
 
           <form onSubmit={createDraftAndDownload}>
@@ -506,7 +496,7 @@ export default function IniciarExpedienteRTM() {
             </Section>
 
             {!draftCase && <>
-              <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Deseo generar la autorización limitada a este expediente.</Check>
+              <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Deseo generar la autorización RTM vinculada a este expediente.</Check>
               <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
               <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : "Crear expediente y descargar autorización"}</button>
             </>}
