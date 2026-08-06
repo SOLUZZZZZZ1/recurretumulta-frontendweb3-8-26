@@ -121,8 +121,15 @@ export default function IniciarExpedienteRTM() {
   const params = useParams();
   const [searchParams] = useSearchParams();
 
-  const department = params.department || searchParams.get("department") || searchParams.get("service") || "traffic";
+  const requestedDepartment =
+    params.department ||
+    searchParams.get("department") ||
+    searchParams.get("service") ||
+    "";
+
+  const department = requestedDepartment || "traffic";
   const config = SERVICE_CONFIG[department] || SERVICE_CONFIG.other;
+  const needsServiceSelection = !requestedDepartment;
   const requestedType = params.caseType || searchParams.get("case_type") || config.defaultCaseType;
   const initialType = config.caseTypes[requestedType] ? requestedType : config.defaultCaseType;
 
@@ -263,6 +270,183 @@ export default function IniciarExpedienteRTM() {
     navigate(`${draftCase.nextPath}${separator}case=${encodeURIComponent(draftCase.caseId)}`);
   }
 
+  if (needsServiceSelection) {
+    const services = [
+      {
+        key: "traffic",
+        icon: "🚗",
+        title: "Multas y vehículos",
+        text: "Multas, sanciones, retirada o baja de vehículos y otros trámites de tráfico.",
+      },
+      {
+        key: "debt",
+        icon: "💳",
+        title: "Deudas y morosidad",
+        text: "ASNEF, Equifax, acreedores y otros problemas relacionados con deudas.",
+      },
+      {
+        key: "administration",
+        icon: "🏛️",
+        title: "Administración pública",
+        text: "Hacienda, Seguridad Social, ayuntamientos y otros organismos públicos.",
+      },
+      {
+        key: "claims",
+        icon: "✈️",
+        title: "Viajes y reclamaciones",
+        text: "Vuelos, equipaje, consumo y otras reclamaciones frente a empresas.",
+      },
+      {
+        key: "other",
+        icon: "📂",
+        title: "No encuentro mi caso",
+        text: "Cuéntanos el problema para realizar un estudio inicial y dirigirlo correctamente.",
+      },
+    ];
+
+    return (
+      <>
+        <Seo
+          title="Iniciar expediente · RTM"
+          description="Selecciona el área correspondiente e inicia tu expediente RTM."
+          canonical="https://www.recurretumulta.eu/iniciar-expediente"
+        />
+
+        <main
+          style={{
+            minHeight: "calc(100vh - 120px)",
+            padding: "54px 16px 76px",
+            background:
+              "linear-gradient(135deg,#0f172a 0%,#1e3a8a 56%,#0f766e 100%)",
+          }}
+        >
+          <section
+            style={{
+              maxWidth: 1080,
+              margin: "0 auto",
+              padding: "36px 24px",
+              borderRadius: 28,
+              background: "rgba(255,255,255,.98)",
+              boxShadow: "0 24px 70px rgba(15,23,42,.34)",
+            }}
+          >
+            <header
+              style={{
+                maxWidth: 760,
+                margin: "0 auto 30px",
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  marginBottom: 14,
+                  padding: "7px 12px",
+                  borderRadius: 999,
+                  background: "#dbeafe",
+                  color: "#1d4ed8",
+                  fontWeight: 900,
+                }}
+              >
+                Revisión Inicial del Expediente
+              </div>
+
+              <h1
+                style={{
+                  margin: "0 0 14px",
+                  color: "#0f172a",
+                  fontSize: "clamp(36px,5vw,54px)",
+                  lineHeight: 1.04,
+                  letterSpacing: "-.04em",
+                }}
+              >
+                ¿Qué problema quieres resolver?
+              </h1>
+
+              <p
+                style={{
+                  margin: 0,
+                  color: "#64748b",
+                  fontSize: 18,
+                  lineHeight: 1.65,
+                }}
+              >
+                Selecciona el área correspondiente. Después podrás completar tus
+                datos y abrir el expediente.
+              </p>
+            </header>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
+                gap: 17,
+              }}
+            >
+              {services.map((service) => (
+                <button
+                  key={service.key}
+                  type="button"
+                  onClick={() =>
+                    navigate(`/iniciar-expediente/${service.key}`)
+                  }
+                  style={{
+                    minHeight: 205,
+                    padding: 24,
+                    border: "1px solid #dbeafe",
+                    borderRadius: 22,
+                    background: "#fff",
+                    color: "#0f172a",
+                    textAlign: "left",
+                    boxShadow: "0 14px 35px rgba(15,23,42,.07)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "grid",
+                      width: 52,
+                      height: 52,
+                      placeItems: "center",
+                      marginBottom: 17,
+                      borderRadius: 16,
+                      background: "#eff6ff",
+                      fontSize: 27,
+                    }}
+                  >
+                    {service.icon}
+                  </span>
+
+                  <strong
+                    style={{
+                      display: "block",
+                      marginBottom: 9,
+                      color: "#0c2f61",
+                      fontSize: 21,
+                    }}
+                  >
+                    {service.title}
+                  </strong>
+
+                  <span
+                    style={{
+                      display: "block",
+                      color: "#64748b",
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    {service.text}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <Seo title={`Iniciar expediente · ${config.label} · RTM`} description="Crea tu expediente RTM y descarga la autorización." canonical="https://www.recurretumulta.eu/iniciar-expediente" />
@@ -270,9 +454,6 @@ export default function IniciarExpedienteRTM() {
       <main style={{ minHeight: "calc(100vh - 120px)", padding: "42px 16px 68px", background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 56%,#0f766e 100%)" }}>
         <section style={{ maxWidth: 1040, margin: "0 auto", padding: "30px 22px", borderRadius: 26, background: "rgba(255,255,255,.98)", boxShadow: "0 24px 70px rgba(15,23,42,.34)" }}>
           <header style={{ marginBottom: 26 }}>
-            <div style={{ display: "inline-flex", gap: 8, padding: "7px 12px", marginBottom: 14, borderRadius: 999, background: "#dcfce7", color: "#166534", fontWeight: 950 }}>
-              <span>{config.icon}</span><span>{config.label}</span>
-            </div>
             <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>Inicia tu expediente</h1>
             <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
               Completa tus datos, descarga la autorización RTM, fírmala y vuelve a subirla.
@@ -280,7 +461,7 @@ export default function IniciarExpedienteRTM() {
           </header>
 
           <form onSubmit={createDraftAndDownload}>
-            <Section title="1. Servicio">
+            <Section title="1. Tipo de expediente">
               <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
                 {Object.entries(config.caseTypes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
