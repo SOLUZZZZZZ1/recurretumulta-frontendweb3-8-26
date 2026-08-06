@@ -64,20 +64,65 @@ function isAuthorized(data) {
   return false;
 }
 
+function normalizeCode(value = "") {
+  return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, "_");
+}
+
+function getServiceCode(data) {
+  return normalizeCode(
+    data?.department ||
+      data?.service ||
+      data?.service_code ||
+      data?.case_type ||
+      data?.product_code ||
+      data?.interested_data?.department ||
+      data?.interested_data?.service ||
+      data?.interested_data?.case_type ||
+      "review"
+  );
+}
+
+function getReviewInfo(data) {
+  const code = getServiceCode(data);
+  const isAdmin =
+    code === "administration" ||
+    code === "admin" ||
+    code === "administracion" ||
+    code === "administracion_publica" ||
+    code === "aeat" ||
+    code === "social_security" ||
+    code === "town_hall" ||
+    code === "ayuntamiento" ||
+    code === "hacienda" ||
+    code === "seguridad_social" ||
+    code === "catastro" ||
+    code === "general_administration";
+
+  return {
+    product: isAdmin ? "administration" : code || "review",
+    amount: isAdmin ? 25 : 10,
+    label: isAdmin ? "Revisión inicial administrativa" : "Revisión inicial del expediente",
+  };
+}
+
 function statusLabel(data) {
   if (!data) return "Expediente recibido";
-  if (isPaid(data.payment_status)) return "Pago confirmado";
-  if (isAuthorized(data)) return "Expediente recibido";
-  if (data.status === "generated") return "Recurso generado";
+  if (isPaid(data.payment_status)) return "Revisión inicial pagada";
+  if (isAuthorized(data)) return "Autorización recibida";
+  if (data.status === "generated") return "Documentación preparada";
   return "Expediente recibido";
 }
 
 function messageFor(data, loading) {
-  if (loading && !data) return "Revisando documentación…";
-  if (!data) return "Hemos recibido tu documentación. Estamos actualizando el expediente.";
-  if (isPaid(data.payment_status)) return "Hemos recibido tu solicitud. Continuamos con la preparación y gestión del expediente.";
-  if (isAuthorized(data)) return "Ya tenemos tu autorización. Puedes continuar para iniciar la gestión.";
-  return "Hemos analizado tu multa. Para continuar, necesitamos tus datos y autorización.";
+  if (loading && !data) return "Revisando la información del expediente…";
+  if (!data) return "Hemos recibido la información. Estamos actualizando el expediente.";
+  if (isPaid(data.payment_status)) {
+    return "La revisión inicial está confirmada. El expediente pasa ahora a valoración por RTM.";
+  }
+  if (isAuthorized(data)) {
+    return "Ya tenemos tu autorización. Antes de continuar te explicamos el coste y el alcance de la revisión inicial.";
+  }
+  return "Hemos recibido tu solicitud. Para continuar necesitamos tus datos y la autorización firmada.";
 }
 
 export default function Resumen() {
@@ -153,7 +198,12 @@ export default function Resumen() {
       const checkout = await fetchJsonFallback("/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ case_id: caseId, product: "dgt", email }),
+        body: JSON.stringify({
+          case_id: caseId,
+          product: getReviewInfo(current).product,
+          payment_stage: "review",
+          email,
+        }),
       });
 
       if (checkout?.redirect) {
@@ -175,6 +225,7 @@ export default function Resumen() {
 
   const paid = isPaid(data?.payment_status);
   const authorized = isAuthorized(data);
+  const reviewInfo = getReviewInfo(data);
   const showPayButton = authorized && !paid;
   const showAuthNeeded = !authorized && !paid;
 
@@ -228,20 +279,51 @@ export default function Resumen() {
         {showPayButton ? (
           <>
             <div className="sr-card" style={{ marginTop: 16 }}>
-              <h2 className="sr-h2">Tu caso está listo para continuar</h2>
+              <h2 className="sr-h2">Antes de iniciar la revisión</h2>
               <p className="sr-p">
-                Hemos analizado tu multa. Podemos preparar el recurso y gestionar el caso por ti.
+                RTM revisará la documentación y la situación del expediente para determinar
+                qué opciones existen y cuál es la mejor forma de continuar.
               </p>
             </div>
 
             <div className="sr-card" style={{ marginTop: 0 }}>
-              <h2 className="sr-h2">Continuar con la gestión</h2>
+              <h2 className="sr-h2">{reviewInfo.label}</h2>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                  gap: 12,
+                  margin: "16px 0",
+                }}
+              >
+                <div style={{ padding: 16, borderRadius: 16, background: "#eff6ff" }}>
+                  <div style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
+                    Importe ahora
+                  </div>
+                  <div style={{ marginTop: 4, color: "#0f172a", fontSize: 30, fontWeight: 950 }}>
+                    {reviewInfo.amount} €
+                  </div>
+                </div>
+
+                <div style={{ padding: 16, borderRadius: 16, background: "#f8fafc" }}>
+                  <div style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
+                    Después de la revisión
+                  </div>
+                  <div style={{ marginTop: 6, color: "#0f172a", fontWeight: 900 }}>
+                    Recibirás una valoración clara antes de decidir
+                  </div>
+                </div>
+              </div>
+
               <p className="sr-p">
-                Ya tenemos tu autorización. Ahora puedes iniciar la gestión para que preparemos el recurso y tramitemos el caso en tu nombre.
+                Este pago corresponde únicamente a la revisión inicial. Si después decides
+                continuar con una gestión de pago, descontaremos este importe del precio que
+                corresponda. No se realizará ningún cobro posterior sin informarte primero.
               </p>
 
               <button className="sr-btn-primary" onClick={startPayment} disabled={paying || loading}>
-                {paying ? "Abriendo pago…" : "Pagar e iniciar gestión"}
+                {paying ? "Abriendo pago…" : `Pagar revisión inicial · ${reviewInfo.amount} €`}
               </button>
 
               {payError ? (
@@ -255,9 +337,11 @@ export default function Resumen() {
 
         {paid ? (
           <div className="sr-card" style={{ marginTop: 16 }}>
-            <h2 className="sr-h2">Gestión en curso</h2>
+            <h2 className="sr-h2">Revisión inicial en curso</h2>
             <p className="sr-p">
-              El pago y la autorización están recibidos. Estamos preparando y gestionando tu expediente.
+              Hemos recibido el pago y la autorización. RTM revisará el expediente y te
+              explicará el resultado, las opciones disponibles y el coste de cualquier
+              gestión posterior antes de que tengas que decidir.
             </p>
           </div>
         ) : null}
@@ -266,7 +350,7 @@ export default function Resumen() {
           <div className="sr-card" style={{ marginTop: 16 }}>
             <h2 className="sr-h2">Gestión iniciada</h2>
             <p className="sr-p">
-              Hemos recibido tu documentación. Desde aquí podrás seguir el estado del expediente.
+              Hemos recibido la información. Desde aquí podrás seguir el estado del expediente.
             </p>
           </div>
         ) : null}
