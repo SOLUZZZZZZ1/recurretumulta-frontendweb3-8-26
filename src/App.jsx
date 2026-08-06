@@ -28,6 +28,7 @@ import OpsVehicleRemoval from "./pages/OpsVehicleRemoval.jsx";
 import EliminarCoche from "./pages/EliminarCoche.jsx";
 import MorosidadHome from "./pages/MorosidadHome.jsx";
 import AdministracionHome from "./pages/AdministracionHome.jsx";
+import ViajesHome from "./pages/ViajesHome.jsx";
 import IniciarExpedienteRTM from "./pages/IniciarExpedienteRTM.jsx";
 import MultasDocumentos from "./pages/MultasDocumentos.jsx";
 import DeudasDocumentos from "./pages/DeudasDocumentos.jsx";
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/morosidad" element={<MorosidadHome />} />
 
         <Route path="/administracion" element={<AdministracionHome />} />
+        <Route path="/viajes" element={<ViajesHome />} />
 
         
         <Route path="/faq" element={<FAQ />} />
