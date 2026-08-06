@@ -23,6 +23,7 @@ const SERVICE_GROUPS = [
   {
     title: "Viajes",
     icon: "✈️",
+    landing: "/viajes",
     links: [
       { to: "/iniciar-expediente/claims/airline?issue=cancelled_flight", label: "Vuelo cancelado" },
       { to: "/iniciar-expediente/claims/airline?issue=flight_delay", label: "Vuelo retrasado" },
@@ -290,10 +291,34 @@ export default function Navbar() {
                   <div className="rtm-services-grid">
                     {SERVICE_GROUPS.map((group) => (
                       <section className="rtm-service-group" key={group.title}>
-                        <div className="rtm-service-group-title">
-                          <span aria-hidden="true">{group.icon}</span>
-                          <span>{group.title}</span>
-                        </div>
+                        {group.landing ? (
+                          <Link
+                            to={group.landing}
+                            className="rtm-service-group-title"
+                            style={{ textDecoration: "none" }}
+                          >
+                            <span aria-hidden="true">{group.icon}</span>
+                            <span>{group.title}</span>
+                          </Link>
+                        ) : (
+                          <div className="rtm-service-group-title">
+                            <span aria-hidden="true">{group.icon}</span>
+                            <span>{group.title}</span>
+                          </div>
+                        )}
+
+                        {group.landing ? (
+                          <Link
+                            to={group.landing}
+                            role="menuitem"
+                            className={`rtm-service-option ${
+                              pathname === group.landing ? "is-active" : ""
+                            }`}
+                            style={{ marginBottom: 4 }}
+                          >
+                            <strong>Ver todos los servicios de viajes</strong>
+                          </Link>
+                        ) : null}
 
                         {group.links.map(({ to, label }) => {
                           const cleanTo = to.split("?")[0];
