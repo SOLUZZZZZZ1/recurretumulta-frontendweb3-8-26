@@ -5,24 +5,24 @@ const SERVICES = [
   {
     icon: "🚗",
     title: "Recurrir una multa",
-    text: "Suba la multa o notificación. La analizaremos y le diremos con claridad si merece la pena recurrir.",
-    action: "Analizar mi multa",
+    text: "¿Ha recibido una multa o sanción? Envíenos la notificación y revisaremos su caso para explicarle qué opciones tiene.",
+    action: "Revisar mi multa",
     to: "/iniciar-expediente/traffic/fine",
     available: true,
   },
   {
     icon: "♻️",
     title: "Eliminar un vehículo",
-    text: "Gestión de baja o retirada de vehículos parados, sin uso o que siguen generando problemas.",
-    action: "Iniciar la gestión",
+    text: "Si tiene un vehículo que ya no usa, está parado o continúa generándole problemas, le ayudamos a estudiar cómo resolver la situación.",
+    action: "Ver opciones para mi vehículo",
     to: "/eliminar-coche",
     available: true,
   },
   {
     icon: "📄",
     title: "Otros trámites de tráfico",
-    text: "Cambio de titularidad, comunicaciones de la DGT y otros asuntos relacionados con vehículos.",
-    action: "Consultar mi caso",
+    text: "¿Su problema no encaja en los anteriores? Cuéntenos qué ocurre con su vehículo, la DGT o un trámite de tráfico y le orientaremos.",
+    action: "Contarnos qué ocurre",
     to: "/contacto",
     available: true,
   },
@@ -88,7 +88,7 @@ export default function Trafico() {
                   fontWeight: 950,
                 }}
               >
-                ¿Qué necesita gestionar?
+                Cuéntenos qué ocurre. Le ayudamos a encontrar el camino.
               </h1>
 
               <p
@@ -100,8 +100,8 @@ export default function Trafico() {
                   color: "rgba(255,255,255,.88)",
                 }}
               >
-                Elija el servicio relacionado con su multa, vehículo o trámite
-                de tráfico.
+                Una multa, un vehículo que ya no utiliza o un trámite que no sabe cómo resolver.
+                Empiece por elegir la opción que más se parece a su caso.
               </p>
             </div>
 
@@ -177,6 +177,39 @@ export default function Trafico() {
           </div>
         </section>
 
+        <section style={{ padding: "34px 20px 0", background: "#f8fafc" }}>
+          <div
+            className="sr-container"
+            style={{
+              maxWidth: 900,
+              margin: "0 auto",
+              padding: "24px 26px",
+              borderRadius: 22,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 10px 28px rgba(15,23,42,.05)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: 28, marginBottom: 8 }}>🤝</div>
+            <h2 style={{ margin: "0 0 9px", fontSize: 22, color: "#0f172a" }}>
+              No necesita saber qué trámite corresponde
+            </h2>
+            <p
+              style={{
+                margin: "0 auto",
+                maxWidth: 720,
+                color: "#64748b",
+                lineHeight: 1.65,
+                fontSize: 16,
+              }}
+            >
+              Si no tiene claro qué debe hacer, empiece por la opción que más se acerque
+              a su problema. La documentación y los datos del caso nos ayudarán a orientarle.
+            </p>
+          </div>
+        </section>
+
         <section style={{ padding: "42px 20px 62px" }}>
           <div
             className="sr-container"
@@ -190,9 +223,9 @@ export default function Trafico() {
               }}
             >
               {[
-                ["1", "Seleccione el servicio", "Entre en la gestión que corresponde a su caso."],
-                ["2", "Envíe los datos", "Adjunte la documentación necesaria desde el móvil o el ordenador."],
-                ["3", "Siga el expediente", "Consulte el estado y complete autorización o pago cuando corresponda."],
+                ["1", "Cuéntenos el problema", "Elija la opción que más se parece a su situación y facilite los datos básicos."],
+                ["2", "Revisamos su caso", "Adjunte el documento principal y todo lo que tenga relacionado. Nosotros revisaremos qué es importante."],
+                ["3", "Le explicamos los siguientes pasos", "Sabrá qué podemos hacer y podrá continuar con la gestión cuando corresponda."],
               ].map(([number, title, text]) => (
                 <article
                   key={number}
