@@ -58,14 +58,16 @@ export default function ViajesHome() {
                 alt="Aeropuerto con avión y equipaje"
                 style={heroImage}
               />
-              <div style={heroMessage}>
-                <div style={{ fontSize: 34, marginBottom: 4 }}>🛡️</div>
-                <h2 style={{ margin: "0 0 4px", color: "#123b73", fontSize: 24 }}>
-                  Tu viaje se complicó.
-                </h2>
-                <p style={{ margin: 0, color: "#64748b" }}>
-                  Tu reclamación no tiene por qué hacerlo.
-                </p>
+              <div style={heroMessageBelow}>
+                <div style={{ fontSize: 30, marginBottom: 4 }}>🛡️</div>
+                <div>
+                  <h2 style={{ margin: "0 0 4px", color: "#123b73", fontSize: 22 }}>
+                    Tu viaje se complicó.
+                  </h2>
+                  <p style={{ margin: 0, color: "#64748b" }}>
+                    Tu reclamación no tiene por qué hacerlo.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -174,9 +176,9 @@ export default function ViajesHome() {
 const badge = { display: "inline-flex", padding: "8px 13px", borderRadius: 999, background: "#dbeafe", color: "#1456a0", fontWeight: 900 };
 const lead = { maxWidth: 650, fontSize: 19, lineHeight: 1.6, color: "#475569" };
 const pill = { padding: "10px 12px", borderRadius: 12, background: "#fff", border: "1px solid #dbeafe", color: "#24415f", fontWeight: 800, fontSize: 13 };
-const heroVisual = { position: "relative", minHeight: 330, overflow: "hidden", borderRadius: 30, background: "#dceeff", boxShadow: "0 24px 60px rgba(30,64,175,.12)" };
-const heroImage = { width: "100%", height: "100%", minHeight: 330, objectFit: "cover", display: "block" };
-const heroMessage = { position: "absolute", left: 24, right: 24, bottom: 22, maxWidth: 360, marginLeft: "auto", padding: "20px 22px", borderRadius: 22, background: "rgba(255,255,255,.94)", boxShadow: "0 18px 45px rgba(15,23,42,.16)", textAlign: "center", backdropFilter: "blur(8px)" };
+const heroVisual = { minHeight: 330, overflow: "hidden", borderRadius: 30, background: "#dceeff", boxShadow: "0 24px 60px rgba(30,64,175,.12)" };
+const heroImage = { width: "100%", height: 280, objectFit: "cover", display: "block" };
+const heroMessageBelow = { display: "flex", alignItems: "center", justifyContent: "center", gap: 14, padding: "18px 22px", background: "#ffffff", textAlign: "left" };
 const cruiseCta = { position: "relative", maxWidth: 1160, minHeight: 230, margin: "0 auto", overflow: "hidden", borderRadius: 26, background: "#e8f4ff" };
 const cruiseImage = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" };
 const cruiseOverlay = { position: "relative", zIndex: 1, minHeight: 230, padding: "34px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 22, flexWrap: "wrap", background: "linear-gradient(90deg,rgba(245,251,255,.98) 0%,rgba(245,251,255,.94) 38%,rgba(245,251,255,.55) 62%,rgba(245,251,255,.08) 100%)" };
