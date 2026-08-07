@@ -987,6 +987,7 @@ export default function OpsCaseDetail() {
   const [justificante, setJustificante] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [zipLoading, setZipLoading] = useState(false);
   const [freezing, setFreezing] = useState(false);
@@ -1091,6 +1092,29 @@ export default function OpsCaseDetail() {
     } catch (err) {
       setMsg("❌ No se pudo abrir el documento.");
       setDebug(err?.message || "");
+    }
+  }
+
+  async function reanalyzeCaseNow() {
+    setReanalyzing(true);
+    setMsg("");
+    setDebug("");
+
+    try {
+      const result = await fetchJsonFallback(`/ops/cases/${caseId}/reanalyze`, {
+        method: "POST",
+        headers,
+      });
+
+      const pages = result?.pages_analyzed ? ` (${result.pages_analyzed} página${result.pages_analyzed === 1 ? "" : "s"})` : "";
+      const family = result?.familia_resuelta || result?.tipo_infraccion || "";
+      setMsg(`✅ Reanálisis completado${pages}${family ? ` · ${family}` : ""}. Ya puedes generar el recurso.`);
+      await load();
+    } catch (err) {
+      setMsg("❌ No se pudo reanalizar el expediente.");
+      setDebug(err?.message || "");
+    } finally {
+      setReanalyzing(false);
     }
   }
 
@@ -1506,7 +1530,11 @@ export default function OpsCaseDetail() {
           </div>
 
           <div className="flex gap-3 flex-wrap mt-4">
-            <button className="sr-btn-primary" onClick={generateResourceNow} disabled={generating}>
+            <button className="sr-btn-secondary" onClick={reanalyzeCaseNow} disabled={reanalyzing || generating}>
+              {reanalyzing ? "Reanalizando…" : "🔄 Reanalizar documentos"}
+            </button>
+
+            <button className="sr-btn-primary" onClick={generateResourceNow} disabled={generating || reanalyzing}>
               {generating ? "Generando recurso…" : "Generar recurso ahora"}
             </button>
 
