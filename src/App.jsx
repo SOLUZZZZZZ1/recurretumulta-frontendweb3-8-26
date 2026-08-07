@@ -30,11 +30,7 @@ import MorosidadHome from "./pages/MorosidadHome.jsx";
 import AdministracionHome from "./pages/AdministracionHome.jsx";
 import ViajesHome from "./pages/ViajesHome.jsx";
 import IniciarExpedienteRTM from "./pages/IniciarExpedienteRTM.jsx";
-import MultasDocumentos from "./pages/MultasDocumentos.jsx";
-import DeudasDocumentos from "./pages/DeudasDocumentos.jsx";
-import AdministracionDocumentos from "./pages/AdministracionDocumentos.jsx";
-import ReclamacionesDocumentos from "./pages/ReclamacionesDocumentos.jsx";
-import OtrosDocumentos from "./pages/OtrosDocumentos.jsx";
+import DocumentosCore from "./pages/DocumentosCore.jsx";
 
 // Pago (post-pago: datos + autorización)
 import PagoOk from "./pages/PagoOk.jsx";
@@ -78,11 +74,11 @@ export default function App() {
         <Route path="/iniciar-expediente" element={<IniciarExpedienteRTM />} />
         <Route path="/multas" element={<InicioMultas />} />
 
-        <Route path="/multas/documentos" element={<MultasDocumentos />} />
-        <Route path="/deudas/documentos" element={<DeudasDocumentos />} />
-        <Route path="/administracion/documentos" element={<AdministracionDocumentos />} />
-        <Route path="/reclamaciones/documentos" element={<ReclamacionesDocumentos />} />
-        <Route path="/otros/documentos" element={<OtrosDocumentos />} />
+        <Route path="/multas/documentos" element={<DocumentosCore />} />
+        <Route path="/deudas/documentos" element={<DocumentosCore />} />
+        <Route path="/administracion/documentos" element={<DocumentosCore />} />
+        <Route path="/reclamaciones/documentos" element={<DocumentosCore />} />
+        <Route path="/otros/documentos" element={<DocumentosCore />} />
         <Route path="/como-funciona" element={<ComoFunciona />} />
         <Route path="/precios" element={<Precios />} />
         <Route path="/eliminar-coche" element={<EliminarCoche />} />
