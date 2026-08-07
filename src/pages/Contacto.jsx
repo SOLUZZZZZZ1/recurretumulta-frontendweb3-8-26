@@ -1,219 +1,168 @@
-import React, { useState } from "react";
+import React from "react";
 
 export default function Contacto() {
-  const [tipo, setTipo] = useState("");
-  const [nombre, setNombre] = useState("");
-  const [email, setEmail] = useState("");
-  const [mensaje, setMensaje] = useState("");
-  const [sending, setSending] = useState(false);
-  const [status, setStatus] = useState({ type: "", message: "" });
-
-  const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
-  const CONTACT_URL = API_BASE ? `${API_BASE}/contact` : "/contact";
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setStatus({ type: "", message: "" });
-
-    if (!tipo || !nombre || !email || !mensaje) {
-      setStatus({
-        type: "error",
-        message: "Por favor, completa todos los campos.",
-      });
-      return;
-    }
-
-    try {
-      setSending(true);
-
-      const res = await fetch(CONTACT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tipo_consulta: tipo,
-          nombre,
-          email,
-          mensaje,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(
-          data?.detail || data?.message || "No se pudo enviar la consulta."
-        );
-      }
-
-      setStatus({
-        type: "success",
-        message: "Consulta enviada correctamente.",
-      });
-
-      setTipo("");
-      setNombre("");
-      setEmail("");
-      setMensaje("");
-    } catch (err) {
-      setStatus({
-        type: "error",
-        message:
-          err?.message ||
-          "Ha ocurrido un error al enviar la consulta. Inténtalo de nuevo.",
-      });
-    } finally {
-      setSending(false);
-    }
-  }
+  const supportEmail = "soporte@recurretumulta.eu";
+  const subject = encodeURIComponent("Consulta RTM");
+  const mailto = `mailto:${supportEmail}?subject=${subject}`;
 
   return (
-    <div style={{ padding: "40px 20px", maxWidth: "900px", margin: "0 auto" }}>
-      <h1 style={{ fontSize: "32px", marginBottom: "10px" }}>
-        Contacto
-      </h1>
-
-      <p style={{ fontSize: "18px", marginBottom: "20px", color: "#555" }}>
-        Canal de contacto para consultas relacionadas con expedientes, incidencias o colaboraciones.
-      </p>
-
-      <div
-        style={{
-          background: "rgba(255,255,255,0.9)",
-          padding: "25px",
-          borderRadius: "12px",
-          marginBottom: "30px",
-        }}
-      >
-        <h3 style={{ marginBottom: "10px" }}>Email</h3>
-        <p style={{ marginBottom: "20px" }}>
-          soporte@recurretumulta.eu
-        </p>
-
-        <h3 style={{ marginBottom: "10px" }}>Empresa</h3>
-        <p>
-          LA TALAMANQUINA, S.L.
-          <br />
-          Calle Velázquez, 15
-          <br />
-          28001 Madrid (España)
-        </p>
-      </div>
-
-      <div
-        style={{
-          background: "rgba(255,255,255,0.9)",
-          padding: "25px",
-          borderRadius: "12px",
-        }}
-      >
-        <h3 style={{ marginBottom: "15px" }}>Enviar consulta</h3>
-
-        <p style={{ fontSize: "14px", color: "#666", marginBottom: "20px" }}>
-          Este canal no ofrece atención inmediata. Respondemos lo antes posible en consultas justificadas.
-        </p>
-
-        {status.message ? (
+    <main
+      style={{
+        minHeight: "calc(100vh - 120px)",
+        padding: "56px 20px 72px",
+        background: "linear-gradient(135deg,#f8fbff 0%,#ffffff 55%,#eef8f4 100%)",
+        color: "#0f172a",
+      }}
+    >
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <header style={{ marginBottom: 28 }}>
           <div
             style={{
-              marginBottom: "20px",
-              padding: "12px 14px",
-              borderRadius: "8px",
-              backgroundColor:
-                status.type === "success" ? "#ecfdf5" : "#fef2f2",
-              color: status.type === "success" ? "#166534" : "#991b1b",
-              border:
-                status.type === "success"
-                  ? "1px solid #bbf7d0"
-                  : "1px solid #fecaca",
+              display: "inline-flex",
+              padding: "8px 13px",
+              borderRadius: 999,
+              background: "#dbeafe",
+              color: "#1456a0",
+              fontWeight: 900,
             }}
           >
-            {status.message}
+            ✉️ Contacto RTM
           </div>
-        ) : null}
 
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "15px" }}
-        >
-          <select
-            required
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value)}
-            style={{ padding: "12px", fontSize: "16px" }}
-          >
-            <option value="">Tipo de consulta</option>
-            <option value="Incidencia con un expediente">
-              Incidencia con un expediente
-            </option>
-            <option value="Consulta sobre un servicio contratado">
-              Consulta sobre un servicio contratado
-            </option>
-            <option value="Colaboraciones / gestorías">
-              Colaboraciones / gestorías
-            </option>
-            <option value="Otros (justificados)">
-              Otros (justificados)
-            </option>
-          </select>
-
-          <input
-            type="text"
-            placeholder="Nombre"
-            required
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            style={{ padding: "12px", fontSize: "16px" }}
-          />
-
-          <input
-            type="email"
-            placeholder="Email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ padding: "12px", fontSize: "16px" }}
-          />
-
-          <textarea
-            placeholder="Describe tu consulta con detalle..."
-            rows="5"
-            required
-            value={mensaje}
-            onChange={(e) => setMensaje(e.target.value)}
-            style={{ padding: "12px", fontSize: "16px" }}
-          />
-
-          <button
-            type="submit"
-            disabled={sending}
+          <h1
             style={{
-              padding: "14px",
-              backgroundColor: sending ? "#6b7280" : "#0b4aa2",
-              color: "white",
-              border: "none",
-              fontSize: "16px",
-              cursor: sending ? "not-allowed" : "pointer",
-              borderRadius: "8px",
-              opacity: sending ? 0.9 : 1,
+              margin: "16px 0 12px",
+              fontSize: "clamp(38px,5vw,56px)",
+              lineHeight: 1.04,
+              letterSpacing: "-.04em",
+              color: "#123b73",
             }}
           >
-            {sending ? "Enviando..." : "Enviar consulta"}
-          </button>
-        </form>
-      </div>
+            ¿Necesitas contactar con RTM?
+          </h1>
 
-      <p
-        style={{
-          marginTop: "30px",
-          fontSize: "14px",
-          color: "#777",
-          textAlign: "center",
-        }}
-      >
-        Este canal está destinado a consultas serias y justificadas.
-      </p>
-    </div>
+          <p
+            style={{
+              margin: 0,
+              maxWidth: 720,
+              fontSize: 18,
+              lineHeight: 1.65,
+              color: "#475569",
+            }}
+          >
+            Para consultas relacionadas con expedientes, incidencias o colaboraciones,
+            escríbenos directamente por correo electrónico.
+          </p>
+        </header>
+
+        <section
+          style={{
+            padding: 30,
+            borderRadius: 24,
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 16px 40px rgba(15,23,42,.07)",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
+              gap: 20,
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <div style={{ color: "#64748b", fontWeight: 800, marginBottom: 8 }}>
+                Correo de soporte
+              </div>
+
+              <a
+                href={`mailto:${supportEmail}`}
+                style={{
+                  display: "inline-block",
+                  color: "#159455",
+                  fontSize: 24,
+                  fontWeight: 950,
+                  textDecoration: "none",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {supportEmail}
+              </a>
+
+              <p
+                style={{
+                  margin: "16px 0 0",
+                  color: "#64748b",
+                  lineHeight: 1.6,
+                }}
+              >
+                Si tu consulta corresponde a un expediente existente, incluye el
+                número de expediente en el asunto o en el mensaje.
+              </p>
+            </div>
+
+            <div style={{ textAlign: "center" }}>
+              <a
+                href={mailto}
+                style={{
+                  minHeight: 54,
+                  padding: "15px 24px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 14,
+                  background: "#16a34a",
+                  color: "#fff",
+                  textDecoration: "none",
+                  fontSize: 17,
+                  fontWeight: 950,
+                  boxShadow: "0 12px 26px rgba(22,163,74,.22)",
+                }}
+              >
+                ✉️ Escribir a RTM
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section
+          style={{
+            marginTop: 22,
+            padding: 26,
+            borderRadius: 22,
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+          }}
+        >
+          <h2 style={{ margin: "0 0 16px", fontSize: 24, color: "#123b73" }}>
+            Empresa
+          </h2>
+
+          <p style={{ margin: 0, lineHeight: 1.7, color: "#334155" }}>
+            <strong>LA TALAMANQUINA, S.L.</strong>
+            <br />
+            Calle Velázquez, 15
+            <br />
+            28001 Madrid (España)
+          </p>
+        </section>
+
+        <div
+          style={{
+            marginTop: 22,
+            padding: "16px 18px",
+            borderRadius: 16,
+            background: "#e8f2ff",
+            color: "#174b88",
+            lineHeight: 1.55,
+          }}
+        >
+          RTM no ofrece atención inmediata por este canal. Responderemos lo antes posible
+          a las consultas relacionadas con expedientes, incidencias o colaboraciones.
+        </div>
+      </div>
+    </main>
   );
 }
