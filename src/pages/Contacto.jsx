@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
 
 export default function Contacto() {
   const [tipo, setTipo] = useState("");
@@ -81,38 +80,6 @@ export default function Contacto() {
 
       <div
         style={{
-          background: "#f8f9fa",
-          padding: "20px",
-          borderRadius: "10px",
-          marginBottom: "30px",
-          border: "1px solid #e5e7eb",
-        }}
-      >
-        <p style={{ marginBottom: "10px", fontWeight: "600" }}>
-          Antes de contactar
-        </p>
-        <p style={{ marginBottom: "10px", color: "#555" }}>
-          Si desea saber si su multa puede recurrirse, utilice directamente el proceso de análisis.
-        </p>
-
-        <Link
-          to="/"
-          style={{
-            display: "inline-block",
-            padding: "12px 18px",
-            backgroundColor: "#22c55e",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "8px",
-            fontWeight: "600",
-          }}
-        >
-          Subir mi multa ahora
-        </Link>
-      </div>
-
-      <div
-        style={{
           background: "rgba(255,255,255,0.9)",
           padding: "25px",
           borderRadius: "12px",
@@ -121,7 +88,7 @@ export default function Contacto() {
       >
         <h3 style={{ marginBottom: "10px" }}>Email</h3>
         <p style={{ marginBottom: "20px" }}>
-          info@recurretumulta.eu
+          soporte@recurretumulta.eu
         </p>
 
         <h3 style={{ marginBottom: "10px" }}>Empresa</h3>
