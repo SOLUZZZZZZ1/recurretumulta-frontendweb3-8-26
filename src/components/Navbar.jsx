@@ -14,6 +14,8 @@ const SERVICE_GROUPS = [
   {
     title: "Tráfico y vehículos",
     icon: "🚗",
+    landing: "/trafico",
+    landingLabel: "Ver todos los servicios de tráfico",
     links: [
       { to: "/trafico", label: "Multas y sanciones" },
       { to: "/iniciar-expediente/traffic/vehicle_removal", label: "Eliminación de vehículos" },
@@ -23,6 +25,8 @@ const SERVICE_GROUPS = [
   {
     title: "Viajes",
     icon: "✈️",
+    landing: "/viajes",
+    landingLabel: "Ver todos los servicios de viajes",
     landing: "/viajes",
     links: [
       { to: "/iniciar-expediente/claims/airline?issue=cancelled_flight", label: "Vuelo cancelado" },
@@ -37,6 +41,8 @@ const SERVICE_GROUPS = [
   {
     title: "Deudas y morosidad",
     icon: "💳",
+    landing: "/morosidad",
+    landingLabel: "Ver todos los servicios de deudas",
     links: [
       { to: "/morosidad", label: "ASNEF / Equifax" },
       { to: "/iniciar-expediente/debt/asnef_equifax", label: "Salir de ficheros de morosidad" },
@@ -46,6 +52,8 @@ const SERVICE_GROUPS = [
   {
     title: "Administración pública",
     icon: "🏛️",
+    landing: "/administracion",
+    landingLabel: "Ver todos los servicios de Administración",
     links: [
       { to: "/iniciar-expediente/administration/aeat", label: "Hacienda / AEAT" },
       { to: "/iniciar-expediente/administration/social_security", label: "Seguridad Social" },
@@ -55,7 +63,10 @@ const SERVICE_GROUPS = [
   },
 ];
 
-const SERVICE_LINKS = SERVICE_GROUPS.flatMap((group) => group.links);
+const SERVICE_LINKS = SERVICE_GROUPS.flatMap((group) => [
+  ...(group.landing ? [{ to: group.landing }] : []),
+  ...group.links,
+]);
 
 
 export default function Navbar() {
@@ -316,7 +327,7 @@ export default function Navbar() {
                             }`}
                             style={{ marginBottom: 4 }}
                           >
-                            <strong>Ver todos los servicios de viajes</strong>
+                            <strong>{group.landingLabel}</strong>
                           </Link>
                         ) : null}
 
