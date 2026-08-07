@@ -125,11 +125,11 @@ const SERVICES = [
     to: "/administracion",
   },
   {
-    icon: "📂",
-    title: "No encuentro mi caso",
-    text: "Envíenos la documentación y revisaremos si podemos ayudarle.",
-    action: "Consultar mi caso",
-    to: "/otros-procedimientos",
+    icon: "✈️",
+    title: "Viajes y reclamaciones",
+    text: "Vuelos cancelados o retrasados, equipaje, overbooking, cruceros y agencias de viajes.",
+    action: "Ver servicios de viajes",
+    to: "/viajes",
   },
 ];
 
@@ -265,8 +265,8 @@ export default function InicioRTM() {
                   color: "rgba(255,255,255,.88)",
                 }}
               >
-                Seleccione el servicio que necesita o envíenos la documentación.
-                Estudiaremos su caso y le indicaremos la forma más adecuada de actuar.
+                Seleccione el área relacionada con su problema. RTM le guiará paso a paso
+                para abrir el expediente y valorar la forma más adecuada de actuar.
               </p>
             </div>
 
