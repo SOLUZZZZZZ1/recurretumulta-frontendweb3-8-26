@@ -16,7 +16,7 @@ const STEPS = [
   ["1", "Nos cuentas qué ha ocurrido", "Nos envías la información y la documentación disponible."],
   ["2", "Analizamos tu caso", "Revisamos la situación y las posibles vías de actuación."],
   ["3", "Te informamos con claridad", "Te explicamos las opciones, la viabilidad y el siguiente paso."],
-  ["4", "Presupuesto previo si procede", "Conocerás el coste antes de iniciar cualquier actuación posterior."],
+  ["4", "Presupuesto previo sin compromiso", "Conocerás el coste antes de iniciar cualquier actuación posterior."],
   ["5", "Actuamos por ti", "Si decides continuar, gestionamos la reclamación y te mantenemos informado."],
 ];
 
@@ -52,11 +52,21 @@ export default function ViajesHome() {
               </div>
             </div>
 
-            <div style={visualCard}>
-              <div style={{ fontSize: 92 }}>✈️</div>
-              <div style={{ fontSize: 58 }}>🧳</div>
-              <h2 style={{ margin: "8px 0 4px", color: "#123b73" }}>Tu viaje se complicó.</h2>
-              <p style={{ margin: 0, color: "#64748b" }}>Tu reclamación no tiene por qué hacerlo.</p>
+            <div style={heroVisual}>
+              <img
+                src="/viajes-hero.png"
+                alt="Aeropuerto con avión y equipaje"
+                style={heroImage}
+              />
+              <div style={heroMessage}>
+                <div style={{ fontSize: 34, marginBottom: 4 }}>🛡️</div>
+                <h2 style={{ margin: "0 0 4px", color: "#123b73", fontSize: 24 }}>
+                  Tu viaje se complicó.
+                </h2>
+                <p style={{ margin: 0, color: "#64748b" }}>
+                  Tu reclamación no tiene por qué hacerlo.
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -82,8 +92,14 @@ export default function ViajesHome() {
           <div style={{ maxWidth: 1160, margin: "0 auto", padding: "34px", borderRadius: 28, background: "linear-gradient(135deg,#edf6ff,#f8fbff)", border: "1px solid #dbeafe" }}>
             <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr)", gap: 30, alignItems: "center" }} className="rtm-viajes-process">
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 92 }}>🧳</div>
-                <strong style={{ color: "#123b73", fontSize: 20 }}>Así trabajamos para ti</strong>
+                <img
+                  src="/viajes-proceso.png"
+                  alt="Maleta, pasaporte y documentación de viaje"
+                  style={{ width: "100%", maxWidth: 210, borderRadius: 20, display: "block", margin: "0 auto 14px" }}
+                />
+                <strong style={{ color: "#123b73", fontSize: 25, lineHeight: 1.15, display: "block" }}>
+                  Así trabajamos para ti
+                </strong>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 14 }}>
                 {STEPS.map(([n,t,d]) => (
@@ -117,21 +133,37 @@ export default function ViajesHome() {
         </section>
 
         <section style={{ padding: "0 20px 64px" }}>
-          <div style={{ maxWidth: 1160, margin: "0 auto", padding: "32px", borderRadius: 26, background: "linear-gradient(110deg,#e8f4ff,#f5fbff 58%,#e5f7ef)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 22, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 42 }}>🛳️</div>
-              <h2 style={{ margin: "5px 0 7px", fontSize: 30 }}>Da el primer paso</h2>
-              <p style={{ margin: 0, color: "#475569" }}>Cuéntanos qué ha ocurrido y te diremos cómo podemos ayudarte.</p>
+          <div style={cruiseCta}>
+            <img
+              src="/viajes-crucero.png"
+              alt="Crucero navegando junto a la costa"
+              style={cruiseImage}
+            />
+            <div style={cruiseOverlay}>
+              <div>
+                <h2 style={{ margin: "0 0 7px", fontSize: 32, color: "#123b73" }}>
+                  Da el primer paso
+                </h2>
+                <p style={{ margin: 0, color: "#475569", maxWidth: 520 }}>
+                  Cuéntanos qué ha ocurrido y te diremos cómo podemos ayudarte.
+                </p>
+              </div>
+              <button
+                style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }}
+                onClick={() => navigate("/iniciar-expediente/claims")}
+              >
+                Iniciar una revisión inicial
+              </button>
             </div>
-            <button style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }} onClick={() => navigate("/iniciar-expediente/claims")}>
-              Iniciar una revisión inicial
-            </button>
           </div>
         </section>
 
         <style>{`
           @media(max-width:720px){
             .rtm-viajes-process{grid-template-columns:1fr !important}
+          }
+          @media(max-width:640px){
+            .rtm-viajes-process img{max-width:170px !important}
           }
         `}</style>
       </main>
@@ -142,7 +174,12 @@ export default function ViajesHome() {
 const badge = { display: "inline-flex", padding: "8px 13px", borderRadius: 999, background: "#dbeafe", color: "#1456a0", fontWeight: 900 };
 const lead = { maxWidth: 650, fontSize: 19, lineHeight: 1.6, color: "#475569" };
 const pill = { padding: "10px 12px", borderRadius: 12, background: "#fff", border: "1px solid #dbeafe", color: "#24415f", fontWeight: 800, fontSize: 13 };
-const visualCard = { minHeight: 330, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", borderRadius: 30, background: "linear-gradient(145deg,#dceeff,#ffffff)", boxShadow: "0 24px 60px rgba(30,64,175,.12)", textAlign: "center", padding: 28 };
+const heroVisual = { position: "relative", minHeight: 330, overflow: "hidden", borderRadius: 30, background: "#dceeff", boxShadow: "0 24px 60px rgba(30,64,175,.12)" };
+const heroImage = { width: "100%", height: "100%", minHeight: 330, objectFit: "cover", display: "block" };
+const heroMessage = { position: "absolute", left: 24, right: 24, bottom: 22, maxWidth: 360, marginLeft: "auto", padding: "20px 22px", borderRadius: 22, background: "rgba(255,255,255,.94)", boxShadow: "0 18px 45px rgba(15,23,42,.16)", textAlign: "center", backdropFilter: "blur(8px)" };
+const cruiseCta = { position: "relative", maxWidth: 1160, minHeight: 230, margin: "0 auto", overflow: "hidden", borderRadius: 26, background: "#e8f4ff" };
+const cruiseImage = { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" };
+const cruiseOverlay = { position: "relative", zIndex: 1, minHeight: 230, padding: "34px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 22, flexWrap: "wrap", background: "linear-gradient(90deg,rgba(245,251,255,.98) 0%,rgba(245,251,255,.94) 38%,rgba(245,251,255,.55) 62%,rgba(245,251,255,.08) 100%)" };
 const h2 = { margin: 0, fontSize: "clamp(28px,4vw,38px)", color: "#123b73" };
 const sub = { margin: "8px 0 0", color: "#64748b", fontSize: 17 };
 const caseCard = { minHeight: 300, display: "flex", flexDirection: "column", padding: 18, borderRadius: 20, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 10px 28px rgba(15,23,42,.05)" };
