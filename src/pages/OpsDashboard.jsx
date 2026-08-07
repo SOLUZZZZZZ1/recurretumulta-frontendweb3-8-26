@@ -53,7 +53,7 @@ function statusLabel(s){
 }
 function caseLink(x){
   return familyOf(x)==="traffic"&&typeOf(x)==="vehicle_removal"
-    ? `/ops/vehicle-removal/${encodeURIComponent(x.case_id)}`
+    ? "/ops/vehicle-removal"
     : `/ops/case/${encodeURIComponent(x.case_id)}`;
 }
 function Pill({children,tone="default"}){
