@@ -1,0 +1,40 @@
+name: RTM OPS UI CI
+
+on:
+  push:
+    branches:
+      - "rtm-ops-workspace-*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rtm-ops-ui-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  ops-core-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Verify RTM authority containment
+        run: npm run check:ops-core
+
+      - name: Build production bundle
+        run: npm run build
