@@ -22,10 +22,10 @@ const client = read("src/lib/opsCoreApi.js");
 
 requireContains(app, 'import OpsCoreWorkspace from "./pages/OpsCoreWorkspace.jsx"', "la ficha CORE montada");
 for (const route of [
-  '/ops/case/:caseId',
-  '/ops/review/:caseId',
-  '/ops/case/:caseId/review',
-  '/ops/pro/:caseId',
+  "/ops/case/:caseId",
+  "/ops/review/:caseId",
+  "/ops/case/:caseId/review",
+  "/ops/pro/:caseId",
 ]) {
   requireContains(app, `path="${route}" element={<OpsCoreWorkspace />}`, `la ruta protegida ${route}`);
 }
@@ -38,6 +38,7 @@ requireContains(workspace, "workspace?.next_step", "la acción siguiente decidid
 requireContains(workspace, "ValidatedFacts", "la explicación de hechos validados");
 requireContains(workspace, "Previa Jurídica", "la sección de Previa Jurídica");
 requireContains(workspace, "Generate solo transforma", "el límite de Generate");
+requireContains(workspace, "Esta actuación se realiza fuera del automatismo CORE", "la separación de actuaciones externas");
 
 for (const forbidden of [
   "/ai/expediente/run",
@@ -61,6 +62,6 @@ for (const forbidden of [
 requireContains(client, "/ops/core/cases/", "el endpoint único del workspace");
 requireContains(client, "MUTATING_ACTIONS", "la lista cerrada de mutaciones");
 requireContains(client, "READ_ONLY_ACTIONS", "la lista cerrada de lecturas");
-requireContains(client, "Esta actuación se realiza fuera del automatismo", "la separación de actuaciones externas");
+requireContains(client, "ACTIONS_WITH_REASON", "el control de motivos obligatorios");
 
 console.log("RTM OPS CORE UI containment: OK");
