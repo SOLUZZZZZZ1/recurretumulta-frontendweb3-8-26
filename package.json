@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node node_modules/vite/bin/vite.js build",
+    "check:ops-core": "node scripts/check-ops-core-ui.mjs",
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
