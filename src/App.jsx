@@ -38,8 +38,7 @@ import PagoCancel from "./pages/PagoCancel.jsx";
 
 // Operador
 import OpsDashboard from "./pages/OpsDashboard.jsx";
-import OpsCaseDetail from "./pages/OpsCaseDetail.jsx";
-import OpsCaseDetailPro from "./pages/OpsCaseDetailPro.jsx";
+import OpsCoreWorkspace from "./pages/OpsCoreWorkspace.jsx";
 
 // Legal
 import AvisoLegal from "./pages/AvisoLegal.jsx";
@@ -84,11 +83,9 @@ export default function App() {
         <Route path="/eliminar-coche" element={<EliminarCoche />} />
 
         <Route path="/morosidad" element={<MorosidadHome />} />
-
         <Route path="/administracion" element={<AdministracionHome />} />
         <Route path="/viajes" element={<ViajesHome />} />
 
-        
         <Route path="/faq" element={<FAQ />} />
         <Route path="/contacto" element={<Contacto />} />
         <Route path="/gestorias" element={<Gestorias />} />
@@ -106,10 +103,10 @@ export default function App() {
         <Route path="/pago-cancel" element={<PagoCancel />} />
 
         <Route path="/ops" element={<OpsDashboard />} />
-        <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
-        <Route path="/ops/review/:caseId" element={<OpsCaseDetailPro />} />
-        <Route path="/ops/case/:caseId/review" element={<OpsCaseDetailPro />} />
-        <Route path="/ops/pro/:caseId" element={<OpsCaseDetailPro />} />
+        <Route path="/ops/case/:caseId" element={<OpsCoreWorkspace />} />
+        <Route path="/ops/review/:caseId" element={<OpsCoreWorkspace />} />
+        <Route path="/ops/case/:caseId/review" element={<OpsCoreWorkspace />} />
+        <Route path="/ops/pro/:caseId" element={<OpsCoreWorkspace />} />
 
         <Route path="/__reservas-restaurante" element={<ReservasRestaurante />} />
         <Route path="/__admin-restaurantes" element={<AdminRestaurantes />} />
