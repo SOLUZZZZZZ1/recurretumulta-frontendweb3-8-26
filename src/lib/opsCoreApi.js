@@ -141,11 +141,11 @@ function filenameFromDisposition(response, fallback) {
   return plainMatch?.[1] || fallback;
 }
 
-export async function downloadOpsDocument(document, options = {}) {
+export async function downloadOpsDocument(documentRecord, options = {}) {
   const token = options.token ?? getOperatorToken();
   if (!token) throw new Error("Falta token de operador.");
 
-  const endpoint = normalizeEndpoint(document?.download_endpoint);
+  const endpoint = normalizeEndpoint(documentRecord?.download_endpoint);
   if (!endpoint.startsWith("/ops/documents/")) {
     throw new Error("Ruta de descarga no autorizada por el cliente OPS.");
   }
@@ -159,13 +159,13 @@ export async function downloadOpsDocument(document, options = {}) {
   }
 
   const blob = await response.blob();
-  const fallback = `${document?.kind || "documento"}-${document?.id || "rtm"}`;
+  const fallback = `${documentRecord?.kind || "documento"}-${documentRecord?.id || "rtm"}`;
   const filename = filenameFromDisposition(response, fallback);
   const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+  const anchor = window.document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
-  document.body.appendChild(anchor);
+  window.document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   window.URL.revokeObjectURL(url);
