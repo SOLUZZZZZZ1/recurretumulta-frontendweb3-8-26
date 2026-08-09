@@ -98,11 +98,45 @@ export async function requestOpsJson(path, options = {}) {
   return data;
 }
 
-export function loadCoreWorkspace(caseId, options = {}) {
-  return requestOpsJson(
+function normalizeReadiness(readiness) {
+  if (!readiness || typeof readiness !== "object") return readiness;
+  const blocking = Array.isArray(readiness.blocking_issues)
+    ? readiness.blocking_issues.map((issue) => ({ ...issue, severity: "blocking" }))
+    : [];
+  const warnings = Array.isArray(readiness.warnings)
+    ? readiness.warnings.map((issue) => ({ ...issue, severity: "warning" }))
+    : [];
+  const quote = readiness.quote && typeof readiness.quote === "object"
+    ? {
+      ...readiness.quote,
+      amount_eur: Number.isFinite(Number(readiness.quote.amount_cents))
+        ? Number(readiness.quote.amount_cents) / 100
+        : undefined,
+      code: readiness.quote.billing_code || readiness.quote.service_code,
+    }
+    : readiness.quote;
+
+  return {
+    ...readiness,
+    quote,
+    issues: [...blocking, ...warnings],
+  };
+}
+
+function normalizeWorkspacePayload(data) {
+  if (!data || typeof data !== "object") return data;
+  return {
+    ...data,
+    readiness: normalizeReadiness(data.readiness),
+  };
+}
+
+export async function loadCoreWorkspace(caseId, options = {}) {
+  const data = await requestOpsJson(
     `/ops/core/cases/${encodeURIComponent(caseId)}/workspace`,
     options,
   );
+  return normalizeWorkspacePayload(data);
 }
 
 function normalizeEndpoint(endpoint) {
@@ -208,4 +242,4 @@ export async function downloadOpsDocument(documentRecord, options = {}) {
   window.URL.revokeObjectURL(url);
 }
 
-export const OPS_CORE_CLIENT_VERSION = "rtm_ops_core_client_v1_1";
+export const OPS_CORE_CLIENT_VERSION = "rtm_ops_core_client_v1_2";
