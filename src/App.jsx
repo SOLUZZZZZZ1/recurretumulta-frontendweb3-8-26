@@ -23,7 +23,7 @@ import PartnerChangePassword from "./pages/PartnerChangePassword.jsx";
 import PartnerPanelExpedientes from "./pages/PartnerPanelExpedientes.jsx";
 import SolicitarAltaGestoria from "./pages/SolicitarAltaGestoria.jsx";
 import AdminCrearAsesoria from "./pages/AdminCrearAsesoria.jsx";
-import OPSQueueSmart from "./pages/OPSQueueSmart.jsx";
+import OpsCoreQueue from "./pages/OpsCoreQueue.jsx";
 import OpsVehicleRemoval from "./pages/OpsVehicleRemoval.jsx";
 import EliminarCoche from "./pages/EliminarCoche.jsx";
 import MorosidadHome from "./pages/MorosidadHome.jsx";
@@ -96,7 +96,7 @@ export default function App() {
         <Route path="/partner/panel" element={<PartnerPanelExpedientes />} />
         <Route path="/gestorias/alta" element={<SolicitarAltaGestoria />} />
         <Route path="/admin/crear-asesoria" element={<AdminCrearAsesoria />} />
-        <Route path="/ops/queue-smart" element={<OPSQueueSmart />} />
+        <Route path="/ops/queue-smart" element={<OpsCoreQueue />} />
         <Route path="/ops/vehicle-removal" element={<OpsVehicleRemoval />} />
 
         <Route path="/pago-ok" element={<PagoOk />} />
