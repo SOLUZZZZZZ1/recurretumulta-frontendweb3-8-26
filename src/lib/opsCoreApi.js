@@ -98,7 +98,7 @@ export async function requestOpsJson(path, options = {}) {
   return data;
 }
 
-function normalizeReadiness(readiness) {
+export function normalizeReadiness(readiness) {
   if (!readiness || typeof readiness !== "object") return readiness;
   const blocking = Array.isArray(readiness.blocking_issues)
     ? readiness.blocking_issues.map((issue) => ({ ...issue, severity: "blocking" }))
@@ -123,7 +123,7 @@ function normalizeReadiness(readiness) {
   };
 }
 
-function normalizeWorkspacePayload(data) {
+export function normalizeWorkspacePayload(data) {
   if (!data || typeof data !== "object") return data;
   return {
     ...data,
@@ -171,34 +171,53 @@ function assertEndpointForAction(code, endpoint) {
   }
 }
 
-export async function executeCoreWorkspaceAction(action, options = {}) {
+export function validateCoreWorkspaceAction(action) {
   const code = assertActionAllowed(action);
   const endpoint = normalizeEndpoint(action.endpoint);
   assertEndpointForAction(code, endpoint);
 
   const expectedMethod = MUTATING_ACTIONS.has(code) ? "POST" : "GET";
   const declaredMethod = String(action.method || expectedMethod).toUpperCase();
-
   if (declaredMethod !== expectedMethod) {
     throw new Error(`Método inesperado para la acción CORE '${code}'.`);
   }
 
+  return {
+    code,
+    endpoint,
+    method: expectedMethod,
+    mutating: MUTATING_ACTIONS.has(code),
+    requiresReason: ACTIONS_WITH_REASON.has(code),
+  };
+}
+
+export function buildCoreActionRequest(action, options = {}) {
+  const validated = validateCoreWorkspaceAction(action);
   let body;
-  if (ACTIONS_WITH_REASON.has(code)) {
+
+  if (validated.requiresReason) {
     const reason = String(options.reason || "").trim();
     if (reason.length < 3) {
       throw new Error("Indica un motivo de al menos 3 caracteres.");
     }
     body = { reason };
-  } else if (code === "create_validated_facts_draft") {
+  } else if (validated.code === "create_validated_facts_draft") {
     body = { supersedes_id: options.supersedesId || null };
-  } else if (expectedMethod === "POST") {
+  } else if (validated.mutating) {
     body = {};
   }
 
-  return requestOpsJson(endpoint, {
-    method: expectedMethod,
+  return {
+    ...validated,
     body,
+  };
+}
+
+export async function executeCoreWorkspaceAction(action, options = {}) {
+  const request = buildCoreActionRequest(action, options);
+  return requestOpsJson(request.endpoint, {
+    method: request.method,
+    body: request.body,
     token: options.token,
     actor: options.actor,
   });
@@ -242,4 +261,4 @@ export async function downloadOpsDocument(documentRecord, options = {}) {
   window.URL.revokeObjectURL(url);
 }
 
-export const OPS_CORE_CLIENT_VERSION = "rtm_ops_core_client_v1_2";
+export const OPS_CORE_CLIENT_VERSION = "rtm_ops_core_client_v1_3";
