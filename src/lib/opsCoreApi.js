@@ -31,6 +31,28 @@ const READ_ONLY_ACTIONS = new Set([
   "inspect_workspace",
 ]);
 
+const ACTION_ENDPOINT_PATTERNS = {
+  run_reanalysis: /^\/ops\/cases\/[^/]+\/reanalyze$/,
+  preview_reanalysis_facts: /^\/ops\/core\/cases\/[^/]+\/reanalysis\/facts-preview$/,
+  create_validated_facts_draft: /^\/ops\/core\/cases\/[^/]+\/reanalysis\/facts-draft$/,
+  review_validated_facts: /^\/ops\/core\/cases\/[^/]+\/validated-facts\/[^/]+$/,
+  freeze_validated_facts: /^\/ops\/core\/cases\/[^/]+\/validated-facts\/[^/]+\/freeze$/,
+  invalidate_validated_facts: /^\/ops\/core\/cases\/[^/]+\/validated-facts\/[^/]+\/invalidate$/,
+  resolve_family: /^\/ops\/core\/cases\/[^/]+\/resolve-family$/,
+  review_family_conflict: /^\/ops\/core\/cases\/[^/]+\/family-resolutions\/[^/]+$/,
+  invalidate_family_resolution: /^\/ops\/core\/cases\/[^/]+\/family-resolutions\/[^/]+\/invalidate$/,
+  lock_family: /^\/ops\/core\/cases\/[^/]+\/family-resolutions\/[^/]+\/lock$/,
+  build_legal_preview: /^\/ops\/core\/cases\/[^/]+\/build-legal-preview$/,
+  review_legal_preview: /^\/ops\/core\/cases\/[^/]+\/legal-previews\/[^/]+$/,
+  submit_preview_review: /^\/ops\/core\/cases\/[^/]+\/legal-previews\/[^/]+\/submit-review$/,
+  approve_preview: /^\/ops\/core\/cases\/[^/]+\/legal-previews\/[^/]+\/approve$/,
+  request_preview_changes: /^\/ops\/core\/cases\/[^/]+\/legal-previews\/[^/]+\/request-changes$/,
+  freeze_preview: /^\/ops\/core\/cases\/[^/]+\/legal-previews\/[^/]+\/freeze$/,
+  generate_resource: /^\/ops\/core\/cases\/[^/]+\/legal-previews\/[^/]+\/generate$/,
+  approve_resource_submission: /^\/ops\/core\/cases\/[^/]+\/generated-resources\/[^/]+\/approve-submission$/,
+  inspect_workspace: /^\/ops\/core\/cases\/[^/]+\/workspace$/,
+};
+
 function stringifyDetail(detail) {
   if (!detail) return "";
   if (typeof detail === "string") return detail;
@@ -85,7 +107,13 @@ export function loadCoreWorkspace(caseId, options = {}) {
 
 function normalizeEndpoint(endpoint) {
   const value = String(endpoint || "").trim();
-  if (!value.startsWith("/")) {
+  if (
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("..") ||
+    value.includes("?") ||
+    value.includes("#")
+  ) {
     throw new Error("El backend no ha proporcionado una ruta OPS válida.");
   }
   return value;
@@ -102,9 +130,18 @@ function assertActionAllowed(action) {
   return code;
 }
 
+function assertEndpointForAction(code, endpoint) {
+  const pattern = ACTION_ENDPOINT_PATTERNS[code];
+  if (!pattern || !pattern.test(endpoint)) {
+    throw new Error(`La ruta recibida no corresponde a la acción CORE '${code}'.`);
+  }
+}
+
 export async function executeCoreWorkspaceAction(action, options = {}) {
   const code = assertActionAllowed(action);
   const endpoint = normalizeEndpoint(action.endpoint);
+  assertEndpointForAction(code, endpoint);
+
   const expectedMethod = MUTATING_ACTIONS.has(code) ? "POST" : "GET";
   const declaredMethod = String(action.method || expectedMethod).toUpperCase();
 
@@ -146,7 +183,7 @@ export async function downloadOpsDocument(documentRecord, options = {}) {
   if (!token) throw new Error("Falta token de operador.");
 
   const endpoint = normalizeEndpoint(documentRecord?.download_endpoint);
-  if (!endpoint.startsWith("/ops/documents/")) {
+  if (!/^\/ops\/documents\/[^/]+\/download$/.test(endpoint)) {
     throw new Error("Ruta de descarga no autorizada por el cliente OPS.");
   }
 
@@ -171,4 +208,4 @@ export async function downloadOpsDocument(documentRecord, options = {}) {
   window.URL.revokeObjectURL(url);
 }
 
-export const OPS_CORE_CLIENT_VERSION = "rtm_ops_core_client_v1_0";
+export const OPS_CORE_CLIENT_VERSION = "rtm_ops_core_client_v1_1";
