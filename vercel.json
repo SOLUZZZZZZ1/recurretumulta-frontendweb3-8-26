@@ -1,12 +1,12 @@
 {
   "routes": [
-    { "handle": "filesystem" },
-
+    {
+      "handle": "filesystem"
+    },
     {
       "src": "/api/(.*)",
-      "dest": "https://recurretumulta-backend.onrender.com/$1"
+      "dest": "https://recurretumulta-backend-1.onrender.com/$1"
     },
-
     {
       "src": "/(.*)",
       "dest": "/index.html"
