@@ -1,970 +1,652 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
+const API = "/api";
 
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
+const FAMILY_CONFIG = {
+  traffic: {
+    icon: "🚗",
+    label: "Tráfico y vehículos",
+    accent: "#2563eb",
+    soft: "#eff6ff",
+    border: "#bfdbfe",
+    title: "Revisión del expediente de tráfico",
+    text: "Comprueba la notificación, el hecho imputado, el organismo, los plazos, la autorización y las pruebas disponibles.",
+    checklist: [
+      "Identificar la infracción y el acto recurrible.",
+      "Verificar fecha de notificación y plazo vigente.",
+      "Comprobar organismo, matrícula y referencias.",
+      "Revisar pruebas, hechos y estrategia jurídica.",
+    ],
+  },
+  debt: {
+    icon: "💳",
+    label: "Deudas y morosidad",
+    accent: "#7c3aed",
+    soft: "#f5f3ff",
+    border: "#ddd6fe",
+    title: "Revisión de deuda o reclamación frente al acreedor",
+    text: "Comprueba acreedor, origen de la deuda, factura o contrato, vencimiento, pagos, saldo pendiente y reclamaciones previas.",
+    checklist: [
+      "Identificar acreedor, contrato o factura.",
+      "Verificar importe, vencimiento y saldo pendiente.",
+      "Distinguir deuda real, discutida, pagada o prescrita.",
+      "Definir requerimiento, oposición o estrategia de reclamación.",
+    ],
+  },
+  administration: {
+    icon: "🏛️",
+    label: "Administración pública",
+    accent: "#c2410c",
+    soft: "#fff7ed",
+    border: "#fed7aa",
+    title: "Revisión del acto administrativo",
+    text: "Comprueba órgano, tipo de acto, notificación, vía procedente, plazo y documentación acreditativa.",
+    checklist: [
+      "Identificar órgano, acto y número de expediente.",
+      "Verificar notificación y plazo de actuación.",
+      "Determinar recurso, alegación o trámite procedente.",
+      "Preparar control de presentación y seguimiento.",
+    ],
+  },
+  travel: {
+    icon: "✈️",
+    label: "Viajes",
+    accent: "#0891b2",
+    soft: "#ecfeff",
+    border: "#a5f3fc",
+    title: "Revisión de la incidencia de viaje",
+    text: "Comprueba reserva, transportista o proveedor, fechas, incidencia, comunicaciones, alternativa ofrecida y gastos acreditados.",
+    checklist: [
+      "Identificar reserva, vuelo, viaje o alojamiento.",
+      "Verificar incidencia, fecha y aviso recibido.",
+      "Revisar alternativa, gastos y reclamación previa.",
+      "Determinar compensación, reembolso o daños.",
+    ],
+  },
+  claims: {
+    icon: "📣",
+    label: "Reclamaciones y consumo",
+    accent: "#059669",
+    soft: "#ecfdf5",
+    border: "#bbf7d0",
+    title: "Revisión de la reclamación de consumo",
+    text: "Comprueba proveedor, producto o servicio, contrato, factura, reclamación previa, respuesta y solución solicitada.",
+    checklist: [
+      "Identificar empresa, contrato y servicio.",
+      "Ordenar facturas, cobros y comunicaciones.",
+      "Comprobar reclamación previa y respuesta.",
+      "Definir devolución, baja, cumplimiento o indemnización.",
+    ],
+  },
+  other: {
+    icon: "📂",
+    label: "Otros / por clasificar",
+    accent: "#475569",
+    soft: "#f8fafc",
+    border: "#e2e8f0",
+    title: "Revisión inicial del expediente",
+    text: "Ordena la documentación, confirma los datos mínimos y determina la familia jurídica antes de continuar.",
+    checklist: [
+      "Comprobar identidad, autorización y documento principal.",
+      "Identificar relación jurídica y partes.",
+      "Detectar plazos, importes y comunicaciones relevantes.",
+      "Resolver familia y asignar especialista.",
+    ],
+  },
+};
+
+const CASE_TYPE_LABELS = {
+  fine: "Recurrir una multa",
+  vehicle_removal: "Eliminar un vehículo",
+  other_traffic: "Otro trámite de tráfico",
+  asnef_equifax: "ASNEF / Equifax",
+  creditor_claim: "Reclamación frente al acreedor",
+  other_debt: "Otro asunto de deuda",
+  aeat: "Hacienda / AEAT",
+  social_security: "Seguridad Social",
+  town_hall: "Ayuntamiento",
+  general_administration: "Otro organismo público",
+  airline: "Aerolínea",
+  flight_cancelled: "Vuelo cancelado",
+  flight_delayed: "Vuelo retrasado",
+  baggage: "Equipaje",
+  consumer: "Consumo",
+  other_claim: "Otra reclamación",
+};
+
+const STATUS_LABELS = {
+  authorization_pending: "Pendiente de autorización",
+  documents_pending: "Documentación pendiente",
+  pending_documents: "Documentación pendiente",
+  documents_received: "Documentación recibida",
+  uploaded: "Documentación recibida",
+  ready_for_review_payment: "Preparado para pagar la revisión",
+  ready_to_pay: "Pendiente de pago",
+  manual_review: "Revisión manual",
+  analyzed: "Analizado",
+  generated: "Documento generado",
+  final_ready: "Documento final preparado",
+  ready_to_submit: "Listo para presentar",
+  submitted: "Presentado",
+  presentado_manual_ayuntamiento: "Presentado manualmente",
+  presentado_auto_dgt: "Presentado automáticamente",
+  closed: "Cerrado",
+  archived: "Archivado",
+  resolved: "Resuelto",
+  estimado: "Estimado",
+  desestimado: "Desestimado",
+};
+
+const STAGE_LABELS = {
+  intake_incomplete: "Completar entrada del expediente",
+  study_payment_pending: "Pago del estudio pendiente",
+  authorization_required: "Autorización pendiente",
+  reanalysis_required: "Lectura documental pendiente",
+  validated_facts_pending: "Hechos validados pendientes",
+  service_fact_extraction_pending: "Extracción documental pendiente",
+  service_facts_preview_pending: "Revisión de extracción pendiente",
+  validated_facts_review: "Revisión de hechos",
+  family_resolution_pending: "Resolución de familia pendiente",
+  family_operator_review: "Familia pendiente de revisión OPS",
+  family_lock_pending: "Bloqueo de familia pendiente",
+  legal_preview_pending: "Previa Jurídica pendiente",
+  initial_direction_review: "Revisión del primer rumbo",
+  legal_preview_draft: "Previa Jurídica en borrador",
+  legal_preview_ops_review: "Previa Jurídica en revisión OPS",
+  legal_preview_freeze_pending: "Congelación de la Previa pendiente",
+  generate_pending: "Generate preparado",
+  resource_approval_pending: "Aprobación final pendiente",
+  presentation_ready: "Presentación preparada",
+  submitted_followup: "Seguimiento posterior",
+  case_closed: "Expediente cerrado",
+};
 
 const EXTERNAL_KINDS = [
-  { value: "justificante_presentacion", label: "Justificante de presentación" },
-  { value: "instancia_firmada", label: "Instancia firmada" },
-  { value: "csv_registro", label: "CSV / registro" },
-  { value: "resolucion", label: "Resolución" },
-  { value: "requerimiento", label: "Requerimiento" },
-  { value: "contestacion_ayuntamiento", label: "Contestación del Ayuntamiento" },
-  { value: "prueba_externa", label: "Prueba externa" },
-  { value: "recurso_presentado", label: "Recurso presentado" },
-  { value: "multa_presentada", label: "Multa presentada" },
-  { value: "autorizacion_presentada", label: "Autorización presentada" },
-  { value: "documento_externo", label: "Documento externo" },
+  ["documento_externo", "Documento externo"],
+  ["requerimiento", "Requerimiento"],
+  ["resolucion", "Resolución"],
+  ["prueba_externa", "Prueba o justificante"],
+  ["contestacion_ayuntamiento", "Contestación recibida"],
+  ["justificante_presentacion", "Justificante de presentación"],
+  ["instancia_firmada", "Instancia firmada"],
+  ["csv_registro", "CSV / registro"],
 ];
 
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
+const INTERNAL_KEYS =
+  /(^|_)(b2|bucket|storage|secret|token|presign|signed_url|download_url|internal_path|object_key|key)$/i;
 
-function fmt(d) {
-  if (!d) return "";
-  try {
-    return new Date(d).toLocaleString();
-  } catch {
-    return String(d);
+const normalize = (value) => String(value || "").trim().toLowerCase();
+
+function canonicalFamily(data = {}) {
+  const values = [data.department, data.category, data.case_type]
+    .map(normalize)
+    .filter(Boolean);
+
+  for (const code of values) {
+    if (["traffic", "trafico", "fine", "multa", "vehicle_removal"].includes(code)) return "traffic";
+    if (["debt", "deuda", "deudas", "morosidad", "asnef", "creditor_claim"].includes(code)) return "debt";
+    if (["administration", "administracion", "admin", "aeat", "town_hall", "social_security"].includes(code))
+      return "administration";
+    if (["travel", "viajes", "airline", "flight", "flight_cancelled", "flight_delayed", "baggage"].includes(code))
+      return "travel";
+    if (["claims", "claim", "reclamaciones", "consumer", "consumo", "telecommunications"].includes(code))
+      return "claims";
   }
+  return "other";
 }
 
-function prettyBytes(size) {
-  const n = Number(size || 0);
-  if (!n) return "";
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+function apiUrl(path) {
+  const clean = String(path || "").trim();
+  if (clean.startsWith("/api/")) return clean;
+  return `${API}${clean.startsWith("/") ? clean : `/${clean}`}`;
 }
 
-async function readResponse(response) {
+async function readJson(response) {
   const text = await response.text().catch(() => "");
   let data = {};
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    data = {};
+    data = { raw: text };
   }
-
   if (!response.ok) {
-    const detail = data?.detail || data?.message || text || `HTTP ${response.status}`;
+    const detail =
+      data?.detail?.message ||
+      data?.detail ||
+      data?.message ||
+      data?.raw ||
+      `HTTP ${response.status}`;
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
-
   return data;
 }
 
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (e) {
-      errors.push(`${url} → ${e?.message || "Error"}`);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
+async function apiJson(path, options = {}) {
+  return readJson(await fetch(apiUrl(path), options));
 }
 
-async function fetchBlobFallback(path, options = {}) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-    try {
-      const response = await fetch(url, options);
-      if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(text || `HTTP ${response.status}`);
-      }
-      return await response.blob();
-    } catch (e) {
-      errors.push(`${url} → ${e?.message || "Error"}`);
-    }
+async function apiBlob(path, options = {}) {
+  const response = await fetch(apiUrl(path), options);
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `HTTP ${response.status}`);
   }
-
-  throw new Error(errors.join(" | "));
+  return response.blob();
 }
 
-function docLabel(kind = "") {
-  const k = String(kind || "").toLowerCase();
+function fmtDate(value) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString("es-ES");
+  } catch {
+    return String(value);
+  }
+}
 
-  if (k.includes("authorization_signed")) return "Autorización firmada";
-  if (k.includes("authorization") || k.includes("autorizacion")) return "Autorización";
-  if (k.includes("submission_receipt")) return "Justificante de presentación";
-  if (k.includes("justificante")) return "Justificante de presentación";
-  if (k.includes("instancia")) return "Instancia firmada";
-  if (k.includes("resolucion")) return "Resolución";
-  if (k.includes("requerimiento")) return "Requerimiento";
-  if (k.includes("contestacion")) return "Contestación";
-  if (k.includes("prueba")) return "Prueba externa";
-  if (k.includes("original")) return "Documento original";
-  if (k.includes("recurso_pdf")) return "Recurso PDF";
-  if (k.includes("recurso_docx")) return "Recurso Word";
-  if (k.includes("generated") && k.includes("pdf")) return "Recurso PDF";
-  if (k.includes("generated") && k.includes("docx")) return "Recurso Word";
-  if (k.includes("recurso")) return "Recurso";
-  if (k.includes("multa")) return "Multa";
-  if (k.includes("csv")) return "CSV / registro";
-  if (k.includes("pdf")) return "PDF";
-  if (k.includes("docx")) return "Word";
+function prettyBytes(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
+function money(cents, currency = "EUR") {
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: currency || "EUR",
+  }).format(Number(cents || 0) / 100);
+}
+
+const isPaid = (value) =>
+  ["paid", "succeeded", "complete", "completed"].includes(normalize(value));
+
+const statusLabel = (value) =>
+  STATUS_LABELS[normalize(value)] || value || "Sin estado";
+
+const stageLabel = (value) =>
+  STAGE_LABELS[normalize(value)] || value || "Pendiente de determinar";
+
+const caseTypeLabel = (value) =>
+  CASE_TYPE_LABELS[normalize(value)] || value || "Sin clasificar";
+
+function maskIdentity(value) {
+  const text = String(value || "").trim();
+  if (!text) return "—";
+  if (text.length <= 4) return "••••";
+  return `${text.slice(0, 2)}${"•".repeat(Math.max(2, text.length - 4))}${text.slice(-2)}`;
+}
+
+function documentLabel(kind = "") {
+  const key = normalize(kind);
+  if (key === "identity_front") return "Documento de identidad · frontal";
+  if (key === "identity_back") return "Documento de identidad · reverso";
+  if (key.includes("authorization_signed")) return "Autorización firmada";
+  if (key.includes("authorization")) return "Autorización";
+  if (key.includes("original")) return "Documento principal";
+  if (key.includes("justificante")) return "Justificante de presentación";
+  if (key.includes("resolucion")) return "Resolución";
+  if (key.includes("requerimiento")) return "Requerimiento";
+  if (key.includes("contestacion")) return "Contestación recibida";
+  if (key.includes("prueba")) return "Prueba externa";
+  if (key.includes("generated") || key.includes("recurso"))
+    return "Documento jurídico generado";
+  if (key.includes("csv")) return "CSV / registro";
   return kind || "Documento";
 }
 
-function docGroup(kind = "") {
-  const k = String(kind || "").toLowerCase();
-  if (k.includes("recurso") || k.includes("generated")) return "resource";
-  if (
-    k.includes("justificante") ||
-    k.includes("instancia") ||
-    k.includes("csv") ||
-    k.includes("resolucion") ||
-    k.includes("requerimiento") ||
-    k.includes("contestacion") ||
-    k.includes("prueba")
-  ) {
-    return "external";
-  }
-  return "other";
-}
-
-function docIcon(doc = {}) {
-  const kind = String(doc.kind || "").toLowerCase();
-  const mime = String(doc.mime || "").toLowerCase();
-  const key = String(doc.key || doc.b2_key || "").toLowerCase();
-
-  if (kind.includes("justificante")) return "🏛️";
+function documentIcon(doc = {}) {
+  const kind = normalize(doc.kind);
+  const mime = normalize(doc.mime);
+  if (kind.includes("identity")) return "🪪";
+  if (kind.includes("authoriz")) return "✍️";
+  if (kind.includes("original")) return "📄";
   if (kind.includes("resolucion")) return "⚖️";
   if (kind.includes("requerimiento")) return "📨";
-  if (kind.includes("recurso")) return "🧾";
-  if (kind.includes("multa")) return "🚗";
-  if (kind.includes("autoriz")) return "✍️";
-  if (kind.includes("csv")) return "#️⃣";
-  if (mime.includes("pdf") || key.endsWith(".pdf")) return "📄";
-  if (mime.includes("word") || key.endsWith(".docx")) return "📝";
-  if (mime.includes("image") || key.match(/\.(jpg|jpeg|png|webp)$/)) return "🖼️";
+  if (kind.includes("generated") || kind.includes("recurso")) return "🧾";
+  if (mime.includes("image")) return "🖼️";
+  if (mime.includes("word")) return "📝";
   return "📎";
 }
 
-function isResource(kind = "") {
-  return docGroup(kind) === "resource";
+function sanitizePayload(value, depth = 0) {
+  if (depth > 5) return "…";
+  if (Array.isArray(value))
+    return value.map((item) => sanitizePayload(item, depth + 1));
+  if (!value || typeof value !== "object") return value;
+  const result = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (INTERNAL_KEYS.test(key)) continue;
+    result[key] = sanitizePayload(child, depth + 1);
+  }
+  return result;
 }
 
-function isExternal(kind = "") {
-  return docGroup(kind) === "external";
+function collectDocumentNames(events = []) {
+  const names = new Map();
+  function walk(value) {
+    if (Array.isArray(value)) return value.forEach(walk);
+    if (!value || typeof value !== "object") return;
+    const id = value.document_id || value.id;
+    const filename = value.filename || value.name;
+    if (id && filename) names.set(String(id), String(filename));
+    Object.values(value).forEach(walk);
+  }
+  events.forEach((event) => walk(event?.payload));
+  return names;
 }
 
-
-function isSuggestedForZip(doc = {}) {
-  const kind = String(doc.kind || "").toLowerCase();
-  const key = String(doc.key || doc.b2_key || "").toLowerCase();
-
-  if (kind.includes("justificante")) return true;
-  if (kind.includes("authorization") || kind.includes("autoriz")) return true;
-  if (kind.includes("multa") || kind.includes("original")) return true;
-  if (kind.includes("csv")) return true;
-  if (kind.includes("resolucion")) return true;
-  if (kind.includes("final")) return true;
-  if (key.includes("final")) return true;
-
-  return false;
-}
-
-function looksDuplicated(doc = {}) {
-  const kind = String(doc.kind || "").toLowerCase();
-  const key = String(doc.key || doc.b2_key || "").toLowerCase();
-
-
-  async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
-      return;
-    }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
-    setFollowupCreating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setFollowupTitle("");
-      setFollowupDueAt("");
-      setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
-    } finally {
-      setFollowupCreating(false);
-    }
-  }
-
-  async function resolveFollowup(followupId) {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
-  }
-
-
+function suggestedForZip(doc = {}) {
+  const kind = normalize(doc.kind);
   return (
-    key.includes("old") ||
-    key.includes("test") ||
-    key.includes("v1") ||
-    key.includes("tmp") ||
-    key.includes("debug") ||
-    kind.includes("old") ||
-    kind.includes("duplicate")
+    kind.includes("identity") ||
+    kind.includes("authorization") ||
+    kind.includes("original") ||
+    kind.includes("generated") ||
+    kind.includes("recurso") ||
+    kind.includes("justificante") ||
+    kind.includes("resolucion")
   );
 }
 
-function eventMeta(type = "") {
-  const t = String(type || "").toLowerCase();
+const authorityLatest = (workspace, key) =>
+  workspace?.authority?.[key]?.latest_active || null;
 
-  if (t.includes("manual_submission_registered")) {
-    return { icon: "📌", label: "Presentación manual registrada", color: "#16a34a", bg: "#dcfce7" };
-  }
-  if (t.includes("external_document_uploaded")) {
-    return { icon: "📎", label: "Documento externo adjuntado", color: "#2563eb", bg: "#dbeafe" };
-  }
-  if (t.includes("justificante_uploaded")) {
-    return { icon: "🏛️", label: "Justificante subido", color: "#16a34a", bg: "#dcfce7" };
-  }
-  if (t.includes("paid_ok") || t.includes("paid")) {
-    return { icon: "💳", label: "Pago confirmado", color: "#16a34a", bg: "#dcfce7" };
-  }
-  if (t.includes("checkout")) {
-    return { icon: "💳", label: "Pago iniciado", color: "#ca8a04", bg: "#fef9c3" };
-  }
-  if (t.includes("authorized") || t.includes("authorization")) {
-    return { icon: "✍️", label: "Autorización registrada", color: "#7c3aed", bg: "#ede9fe" };
-  }
-  if (t.includes("resource_generated") || t.includes("generated")) {
-    return { icon: "🧾", label: "Recurso generado", color: "#2563eb", bg: "#dbeafe" };
-  }
-  if (t.includes("submitted")) {
-    return { icon: "✅", label: "Expediente presentado", color: "#16a34a", bg: "#dcfce7" };
-  }
-  if (t.includes("review")) {
-    return { icon: "🔎", label: "Revisión", color: "#ca8a04", bg: "#fef9c3" };
-  }
-  if (t.includes("note")) {
-    return { icon: "📝", label: "Nota interna", color: "#64748b", bg: "#f1f5f9" };
-  }
-  if (t.includes("failed") || t.includes("error")) {
-    return { icon: "❌", label: "Error / incidencia", color: "#dc2626", bg: "#fee2e2" };
-  }
-
-  return { icon: "•", label: type || "Evento", color: "#64748b", bg: "#f1f5f9" };
-}
-
-function extractEventSummary(event = {}) {
-  const payload = event.payload || {};
-  if (typeof payload === "string") return payload.slice(0, 160);
-
-  const bits = [];
-  if (payload.organismo) bits.push(payload.organismo);
-  if (payload.registro) bits.push(`Registro: ${payload.registro}`);
-  if (payload.csv) bits.push(`CSV: ${payload.csv}`);
-  if (payload.kind) bits.push(docLabel(payload.kind));
-  if (payload.filename) bits.push(payload.filename);
-  if (payload.channel) bits.push(payload.channel);
-  if (payload.note) bits.push(payload.note);
-  if (payload.status) bits.push(payload.status);
-
-  return bits.join(" · ");
-}
-
-function Card({ children, className = "", style = {} }) {
-
-  async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
-      return;
-    }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
-    setFollowupCreating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setFollowupTitle("");
-      setFollowupDueAt("");
-      setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
-    } finally {
-      setFollowupCreating(false);
-    }
-  }
-
-  async function resolveFollowup(followupId) {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
-  }
-
-
+function Panel({ children, style = {}, className = "" }) {
   return (
-    <div className={`sr-card ${className}`} style={style}>
-      {children}
-    </div>
-  );
-}
-
-function StatusBox({ msg, debug }) {
-  if (!msg && !debug) return null;
-
-
-  async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
-      return;
-    }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
-    setFollowupCreating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setFollowupTitle("");
-      setFollowupDueAt("");
-      setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
-    } finally {
-      setFollowupCreating(false);
-    }
-  }
-
-  async function resolveFollowup(followupId) {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
-  }
-
-
-  return (
-    <>
-      {msg ? (
-        <Card
-          className="mt-4"
-          style={{
-            color: msg.startsWith("✅") ? "#166534" : "#991b1b",
-            background: msg.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
-            border: msg.startsWith("✅") ? "1px solid #bbf7d0" : "1px solid #fecaca",
-            fontWeight: 900,
-          }}
-        >
-          {msg}
-        </Card>
-      ) : null}
-
-      {debug ? (
-        <Card
-          className="mt-4"
-          style={{
-            color: "#475569",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
-            fontSize: 12,
-            wordBreak: "break-word",
-          }}
-        >
-          Detalle: {debug}
-        </Card>
-      ) : null}
-    </>
-  );
-}
-
-function DocumentRow({ doc, onOpen, selectable = false, selected = false, onToggle }) {
-
-  async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
-      return;
-    }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
-    setFollowupCreating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setFollowupTitle("");
-      setFollowupDueAt("");
-      setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
-    } finally {
-      setFollowupCreating(false);
-    }
-  }
-
-  async function resolveFollowup(followupId) {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
-  }
-
-
-  return (
-    <div
-      className="block w-full text-left border rounded-xl p-3 mt-2 text-sm transition"
+    <section
+      className={className}
       style={{
-        background: selected ? "#eff6ff" : "#ffffff",
-        borderColor: selected ? "#60a5fa" : "#e2e8f0",
-        boxShadow: selected ? "0 0 0 2px rgba(37,99,235,0.10)" : "0 1px 2px rgba(15,23,42,0.04)",
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 22,
+        padding: 20,
+        boxShadow: "0 10px 30px rgba(15,23,42,.06)",
+        ...style,
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3" style={{ minWidth: 0 }}>
-          {selectable ? (
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggle?.(doc)}
-              title="Incluir en ZIP"
-              style={{ marginTop: 12, width: 18, height: 18, flexShrink: 0 }}
-            />
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => onOpen(doc)}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 14,
-              background: "#f1f5f9",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 20,
-              flexShrink: 0,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {docIcon(doc)}
-          </button>
-
-          <div style={{ minWidth: 0 }}>
-            <strong>{docLabel(doc.kind)}</strong>
-            <div style={{ color: "#64748b", marginTop: 3 }}>
-              {fmt(doc.created_at)}
-            </div>
-
-            <div className="flex gap-2 flex-wrap mt-2">
-              {isSuggestedForZip(doc) ? (
-                <span
-                  style={{
-                    background: "#dcfce7",
-                    color: "#166534",
-                    border: "1px solid #86efac",
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    fontSize: 11,
-                    fontWeight: 800,
-                  }}
-                >
-                  ⭐ Sugerido ZIP
-                </span>
-              ) : null}
-
-              {looksDuplicated(doc) ? (
-                <span
-                  style={{
-                    background: "#fee2e2",
-                    color: "#991b1b",
-                    border: "1px solid #fecaca",
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    fontSize: 11,
-                    fontWeight: 800,
-                  }}
-                >
-                  Duplicado / antiguo
-                </span>
-              ) : null}
-            </div>
-            <div style={{ color: "#64748b", marginTop: 3, fontSize: 12 }}>
-              {doc.mime || "application/octet-stream"}
-              {doc.size_bytes ? ` · ${prettyBytes(doc.size_bytes)}` : ""}
-            </div>
-            <div
-              style={{
-                color: "#94a3b8",
-                marginTop: 3,
-                wordBreak: "break-word",
-                fontSize: 11,
-              }}
-            >
-              {doc.key || doc.b2_key || doc.id}
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="sr-btn-secondary"
-          style={{ whiteSpace: "nowrap" }}
-          onClick={() => onOpen(doc)}
-        >
-          Descargar
-        </button>
-      </div>
-    </div>
+      {children}
+    </section>
   );
 }
 
-function EmptyBox({ children }) {
+function Badge({ children, tone = "default" }) {
+  const tones = {
+    default: ["#f1f5f9", "#475569", "#e2e8f0"],
+    info: ["#dbeafe", "#1d4ed8", "#bfdbfe"],
+    success: ["#dcfce7", "#166534", "#bbf7d0"],
+    warn: ["#fef3c7", "#92400e", "#fde68a"],
+    danger: ["#fee2e2", "#991b1b", "#fecaca"],
+    purple: ["#ede9fe", "#6d28d9", "#ddd6fe"],
+  };
+  const [background, color, border] = tones[tone] || tones.default;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "6px 10px",
+        borderRadius: 999,
+        border: `1px solid ${border}`,
+        background,
+        color,
+        fontSize: 12,
+        fontWeight: 900,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
-  async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
-      return;
-    }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
-    setFollowupCreating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setFollowupTitle("");
-      setFollowupDueAt("");
-      setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
-    } finally {
-      setFollowupCreating(false);
-    }
-  }
-
-  async function resolveFollowup(followupId) {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
-  }
-
-
+function Metric({ label, value, detail }) {
   return (
     <div
       style={{
-        marginTop: 12,
+        border: "1px solid #e2e8f0",
+        borderRadius: 16,
         padding: 14,
-        border: "1px dashed #cbd5e1",
-        borderRadius: 12,
-        color: "#64748b",
         background: "#f8fafc",
       }}
     >
-      {children}
+      <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>
+        {label}
+      </div>
+      <div
+        style={{
+          color: "#0f172a",
+          fontSize: 23,
+          fontWeight: 950,
+          marginTop: 4,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value}
+      </div>
+      {detail ? (
+        <div style={{ color: "#64748b", fontSize: 12, marginTop: 5 }}>
+          {detail}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function TimelineItem({ event, index }) {
-  const meta = eventMeta(event.type);
-  const summary = extractEventSummary(event);
-
-
-  async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
-      return;
-    }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
-    setFollowupCreating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setFollowupTitle("");
-      setFollowupDueAt("");
-      setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
-    } finally {
-      setFollowupCreating(false);
-    }
-  }
-
-  async function resolveFollowup(followupId) {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
-  }
-
-
+function CheckItem({ ok, label, detail, pending = false }) {
   return (
-    <div className="flex gap-3 mt-3">
-      <div style={{ width: 34, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 999,
-            background: meta.bg,
-            color: meta.color,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 16,
-            fontWeight: 900,
-            border: `1px solid ${meta.color}33`,
-          }}
-        >
-          {meta.icon}
-        </div>
-        {index !== 999 ? (
-          <div style={{ width: 2, flex: 1, background: "#e2e8f0", minHeight: 20, marginTop: 4 }} />
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        padding: 12,
+        borderRadius: 14,
+        border: "1px solid #e2e8f0",
+        background: "#fff",
+      }}
+    >
+      <Badge tone={ok ? "success" : pending ? "warn" : "default"}>
+        {ok ? "✓" : pending ? "…" : "○"}
+      </Badge>
+      <div>
+        <div style={{ fontWeight: 900, color: "#0f172a" }}>{label}</div>
+        {detail ? (
+          <div style={{ marginTop: 3, color: "#64748b", fontSize: 13 }}>
+            {detail}
+          </div>
         ) : null}
       </div>
+    </div>
+  );
+}
 
+function MessageBox({ message, debug }) {
+  if (!message && !debug) return null;
+  const success = String(message || "").startsWith("✅");
+  return (
+    <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
+      {message ? (
+        <div
+          role="alert"
+          style={{
+            padding: 14,
+            borderRadius: 14,
+            border: success
+              ? "1px solid #bbf7d0"
+              : "1px solid #fecaca",
+            background: success ? "#ecfdf5" : "#fef2f2",
+            color: success ? "#166534" : "#991b1b",
+            fontWeight: 850,
+          }}
+        >
+          {message}
+        </div>
+      ) : null}
+      {debug ? (
+        <details style={{ color: "#64748b", fontSize: 12 }}>
+          <summary>Detalle técnico</summary>
+          <div style={{ marginTop: 7, wordBreak: "break-word" }}>{debug}</div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function DocumentRow({
+  doc,
+  filename,
+  selected,
+  onToggle,
+  onDownload,
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: 14,
+        padding: 14,
+        border: selected
+          ? "1px solid #60a5fa"
+          : "1px solid #e2e8f0",
+        borderRadius: 16,
+        background: selected ? "#eff6ff" : "#fff",
+      }}
+    >
       <div
         style={{
-          flex: 1,
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+          minWidth: 0,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggle(doc)}
+          title="Incluir en ZIP"
+          style={{ width: 18, height: 18, marginTop: 8, flexShrink: 0 }}
+        />
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            display: "grid",
+            placeItems: "center",
+            borderRadius: 13,
+            background: "#f1f5f9",
+            fontSize: 21,
+            flexShrink: 0,
+          }}
+        >
+          {documentIcon(doc)}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 900, color: "#0f172a" }}>
+            {documentLabel(doc.kind)}
+          </div>
+          {filename ? (
+            <div
+              style={{
+                marginTop: 3,
+                color: "#334155",
+                fontSize: 13,
+                overflowWrap: "anywhere",
+              }}
+            >
+              {filename}
+            </div>
+          ) : null}
+          <div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>
+            {doc.mime || "application/octet-stream"} ·{" "}
+            {prettyBytes(doc.size_bytes)} · {fmtDate(doc.created_at)}
+          </div>
+          <div style={{ marginTop: 4, color: "#94a3b8", fontSize: 11 }}>
+            Documento {String(doc.id || "").slice(-8) || "sin identificador"}
+          </div>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="sr-btn-secondary"
+        onClick={() => onDownload(doc, filename)}
+      >
+        Descargar
+      </button>
+    </div>
+  );
+}
+
+function TimelineItem({ event }) {
+  const payload = sanitizePayload(event?.payload || {});
+  const hasPayload =
+    payload &&
+    typeof payload === "object" &&
+    Object.keys(payload).length > 0;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "30px 1fr", gap: 10 }}>
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          display: "grid",
+          placeItems: "center",
+          borderRadius: 999,
+          background: "#e2e8f0",
+          color: "#475569",
+          fontWeight: 900,
+        }}
+      >
+        •
+      </div>
+      <div
+        style={{
           border: "1px solid #e2e8f0",
           borderRadius: 14,
           padding: 12,
-          background: "#ffffff",
+          background: "#fff",
         }}
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <strong style={{ color: "#0f172a" }}>{meta.label}</strong>
-            <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>{event.type}</div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontWeight: 900, color: "#0f172a" }}>
+            {event?.type || "Evento"}
           </div>
-          <div style={{ color: "#64748b", fontSize: 12, whiteSpace: "nowrap" }}>
-            {fmt(event.created_at)}
+          <div style={{ color: "#64748b", fontSize: 12 }}>
+            {fmtDate(event?.created_at)}
           </div>
         </div>
-
-        {summary ? (
-          <div style={{ marginTop: 8, color: "#334155", fontSize: 13 }}>
-            {summary}
-          </div>
-        ) : null}
-
-        {event.payload ? (
-          <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: "pointer", color: "#2563eb", fontWeight: 800 }}>
-              Ver detalle
+        {hasPayload ? (
+          <details style={{ marginTop: 7 }}>
+            <summary
+              style={{ cursor: "pointer", color: "#2563eb", fontWeight: 800 }}
+            >
+              Ver detalle seguro
             </summary>
             <pre
               style={{
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
                 marginTop: 8,
-                background: "#f8fafc",
                 padding: 10,
                 borderRadius: 10,
-                fontSize: 11,
+                background: "#f8fafc",
                 color: "#334155",
+                fontSize: 11,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
               }}
             >
-              {typeof event.payload === "string"
-                ? event.payload
-                : JSON.stringify(event.payload, null, 2)}
+              {JSON.stringify(payload, null, 2)}
             </pre>
           </details>
         ) : null}
@@ -976,900 +658,991 @@ function TimelineItem({ event, index }) {
 export default function OpsCaseDetail() {
   const { caseId } = useParams();
   const token = localStorage.getItem("ops_token") || "";
-  const headers = token ? { "X-Operator-Token": token } : {};
 
-  const [docs, setDocs] = useState([]);
-  const [selectedDocIds, setSelectedDocIds] = useState([]);
+  const [workspace, setWorkspace] = useState(null);
+  const [documents, setDocuments] = useState([]);
   const [events, setEvents] = useState([]);
   const [followups, setFollowups] = useState([]);
-  const [registro, setRegistro] = useState("");
-  const [note, setNote] = useState("");
-  const [justificante, setJustificante] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [reanalyzing, setReanalyzing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [zipLoading, setZipLoading] = useState(false);
-  const [freezing, setFreezing] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [selectedDocIds, setSelectedDocIds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
   const [debug, setDebug] = useState("");
+  const [zipLoading, setZipLoading] = useState(false);
+
   const [followupTitle, setFollowupTitle] = useState("");
   const [followupDueAt, setFollowupDueAt] = useState("");
   const [followupDescription, setFollowupDescription] = useState("");
   const [followupCreating, setFollowupCreating] = useState(false);
-
-  const [manualOrganismo, setManualOrganismo] = useState("Ajuntament / organismo");
-  const [manualRegistro, setManualRegistro] = useState("");
-  const [manualCsv, setManualCsv] = useState("");
-  const [manualDate, setManualDate] = useState("");
-  const [manualChannel, setManualChannel] = useState("ayuntamiento_manual");
-  const [manualNote, setManualNote] = useState("");
-  const [manualFile, setManualFile] = useState(null);
-  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   const [externalKind, setExternalKind] = useState("documento_externo");
   const [externalNote, setExternalNote] = useState("");
   const [externalFile, setExternalFile] = useState(null);
   const [externalUploading, setExternalUploading] = useState(false);
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseId]);
-
-  const resourceDocs = useMemo(() => docs.filter((d) => isResource(d.kind)), [docs]);
-  const externalDocs = useMemo(() => docs.filter((d) => isExternal(d.kind)), [docs]);
-  const otherDocs = useMemo(
-    () => docs.filter((d) => !isResource(d.kind) && !isExternal(d.kind)),
-    [docs]
+  const headers = useMemo(
+    () => (token ? { "X-Operator-Token": token } : {}),
+    [token]
   );
 
-  const hasManualSubmission = useMemo(
-    () => events.some((e) => String(e.type || "").includes("manual_submission_registered")),
-    [events]
-  );
+  const load = useCallback(async () => {
+    if (!token || !caseId) {
+      setLoading(false);
+      return;
+    }
 
-  const hasFinalResource = useMemo(
-    () =>
-      events.some((e) => String(e.type || "").includes("final")) ||
-      docs.some((d) => String(d.kind || "").includes("final")),
-    [docs, events]
-  );
-
-  async function load() {
     setLoading(true);
-    setMsg("");
+    setMessage("");
     setDebug("");
 
+    const [ws, ds, es, fs] = await Promise.allSettled([
+      apiJson(`/ops/core/cases/${caseId}/workspace`, { headers }),
+      apiJson(`/ops/cases/${caseId}/documents`, { headers }),
+      apiJson(`/ops/cases/${caseId}/events`, { headers }),
+      apiJson(`/ops/cases/${caseId}/followups`, { headers }),
+    ]);
+
     try {
-      const [d, e, f] = await Promise.all([
-        fetchJsonFallback(`/ops/cases/${caseId}/documents`, { headers }),
-        fetchJsonFallback(`/ops/cases/${caseId}/events`, { headers }),
-        fetchJsonFallback(`/ops/cases/${caseId}/followups`, { headers }).catch(() => ({ followups: [] })),
-      ]);
+      if (ws.status !== "fulfilled") throw ws.reason;
 
-      const loadedDocs = d.documents || d.items || [];
-      setDocs(loadedDocs);
-      setEvents(e.events || e.items || []);
-      setFollowups(f.followups || []);
+      const nextWorkspace = ws.value;
+      const nextDocuments =
+        ds.status === "fulfilled"
+          ? ds.value?.documents || ds.value?.items || []
+          : nextWorkspace?.documents || [];
+      const nextEvents =
+        es.status === "fulfilled"
+          ? es.value?.events || es.value?.items || []
+          : nextWorkspace?.timeline || [];
+      const nextFollowups =
+        fs.status === "fulfilled"
+          ? fs.value?.followups || fs.value?.items || []
+          : [];
 
-      const suggestedIds = loadedDocs
-        .filter((doc) => isSuggestedForZip(doc) && doc.id)
-        .map((doc) => String(doc.id));
+      setWorkspace(nextWorkspace);
+      setDocuments(nextDocuments);
+      setEvents(nextEvents);
+      setFollowups(nextFollowups);
+      setSelectedDocIds((current) => {
+        const valid = current.filter((id) =>
+          nextDocuments.some((doc) => String(doc.id) === id)
+        );
+        if (valid.length) return valid;
+        return nextDocuments
+          .filter((doc) => doc.id && suggestedForZip(doc))
+          .map((doc) => String(doc.id));
+      });
 
-      setSelectedDocIds(suggestedIds);
-    } catch (err) {
-      setMsg("❌ No se pudieron cargar documentos o timeline.");
-      setDebug(err?.message || "");
+      const partial = [ds, es, fs]
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason?.message || "Error parcial");
+      if (partial.length) setDebug(partial.join(" | "));
+    } catch (error) {
+      setWorkspace(null);
+      setDocuments([]);
+      setEvents([]);
+      setFollowups([]);
+      setMessage("❌ No se pudo cargar el espacio jurídico del expediente.");
+      setDebug(error?.message || "");
     } finally {
       setLoading(false);
     }
-  }
+  }, [caseId, headers, token]);
 
-  async function openDocument(doc) {
-    setMsg("");
-    setDebug("");
+  useEffect(() => {
+    load();
+  }, [load]);
 
-    try {
-      if (doc.id) {
-        const blob = await fetchBlobFallback(`/ops/documents/${doc.id}/download`, { headers });
-        const objectUrl = URL.createObjectURL(blob);
-        window.open(objectUrl, "_blank", "noopener,noreferrer");
-        return;
-      }
+  const caseData = workspace?.case || {};
+  const identity = caseData.identity || {};
+  const readiness = workspace?.readiness || {};
+  const quote = readiness.quote || {};
+  const nextStep = workspace?.next_step || {};
+  const familyKey = canonicalFamily(caseData);
+  const family = FAMILY_CONFIG[familyKey] || FAMILY_CONFIG.other;
+  const stagingHost =
+    typeof window !== "undefined" &&
+    window.location.hostname.includes("frontend-staging");
 
-      const bucket = doc.bucket || doc.b2_bucket;
-      const key = doc.key || doc.b2_key;
+  const latestFacts = authorityLatest(workspace, "validated_facts");
+  const latestFamily = authorityLatest(workspace, "family_resolution");
+  const latestPreview = authorityLatest(workspace, "legal_preview");
+  const latestResource = authorityLatest(workspace, "generated_resource");
+  const resolution = latestFamily?.resolution || {};
 
-      if (!bucket || !key) throw new Error("Documento sin bucket/key.");
+  const documentKinds = useMemo(
+    () => new Set(documents.map((doc) => normalize(doc.kind))),
+    [documents]
+  );
+  const filenameMap = useMemo(() => collectDocumentNames(events), [events]);
 
-      const data = await fetchJsonFallback(
-        `/files/presign?case_id=${encodeURIComponent(caseId)}&bucket=${encodeURIComponent(bucket)}&key=${encodeURIComponent(key)}`
-      );
+  const paid = isPaid(caseData.payment_status);
+  const factsFrozen = Boolean(latestFacts?.frozen);
+  const familyResolved = normalize(resolution.status) === "resolved";
+  const familyLocked = Boolean(latestFamily?.locked);
+  const previewStatus = normalize(latestPreview?.status);
+  const resourceStatus = normalize(latestResource?.status);
+  const previewFrozen = previewStatus === "frozen";
+  const presentationReady =
+    resourceStatus === "final_ready" && Boolean(latestResource?.approved_at);
 
-      if (!data?.url) throw new Error("No se recibió URL de descarga.");
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setMsg("❌ No se pudo abrir el documento.");
-      setDebug(err?.message || "");
-    }
-  }
+  const progress = {
+    identity:
+      documentKinds.has("identity_front") &&
+      documentKinds.has("identity_back"),
+    authorization:
+      Boolean(caseData.authorized) &&
+      [...documentKinds].some((kind) =>
+        kind.includes("authorization_signed")
+      ),
+    mainDocument: [...documentKinds].some((kind) =>
+      kind.includes("original")
+    ),
+  };
 
-  async function reanalyzeCaseNow() {
-    setReanalyzing(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const result = await fetchJsonFallback(`/ops/cases/${caseId}/reanalyze`, {
-        method: "POST",
-        headers,
-      });
-
-      const pages = result?.pages_analyzed ? ` (${result.pages_analyzed} página${result.pages_analyzed === 1 ? "" : "s"})` : "";
-      const family = result?.familia_resuelta || result?.tipo_infraccion || "";
-      setMsg(`✅ Reanálisis completado${pages}${family ? ` · ${family}` : ""}. Ya puedes generar el recurso.`);
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo reanalizar el expediente.");
-      setDebug(err?.message || "");
-    } finally {
-      setReanalyzing(false);
-    }
-  }
-
-  async function generateResourceNow() {
-    setGenerating(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      await fetchJsonFallback("/generate/dgt", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          case_id: caseId,
-          interesado: {},
-        }),
-      });
-
-      setMsg("✅ Recurso generado. Actualizando documentos…");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo generar el recurso.");
-      setDebug(err?.message || "");
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function markSubmitted() {
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      if (registro) fd.append("registro", registro);
-      if (note) fd.append("note", note);
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/mark-submitted`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Caso marcado como presentado automático.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo marcar como presentado automático.");
-      setDebug(err?.message || "");
-    }
-  }
-
-  async function uploadJustificante() {
-    if (!justificante) {
-      setMsg("❌ Selecciona un archivo.");
-      return;
-    }
-
-    setUploading(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("file", justificante);
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/upload-justificante`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setJustificante(null);
-      setMsg("✅ Justificante subido.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo subir el justificante.");
-      setDebug(err?.message || "");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function registerManualSubmission() {
-    if (!manualOrganismo.trim()) {
-      setMsg("❌ Indica el organismo.");
-      return;
-    }
-    if (!manualRegistro.trim()) {
-      setMsg("❌ Indica el número de registro.");
-      return;
-    }
-
-    setManualSubmitting(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("organismo", manualOrganismo.trim());
-      fd.append("registro", manualRegistro.trim());
-      if (manualCsv.trim()) fd.append("csv", manualCsv.trim());
-      if (manualDate.trim()) fd.append("submitted_at", manualDate.trim());
-      if (manualChannel.trim()) fd.append("channel", manualChannel.trim());
-      if (manualNote.trim()) fd.append("note", manualNote.trim());
-      if (manualFile) fd.append("file", manualFile);
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/register-manual-submission`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setMsg("✅ Presentación manual registrada en el expediente.");
-      setManualRegistro("");
-      setManualCsv("");
-      setManualDate("");
-      setManualNote("");
-      setManualFile(null);
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo registrar la presentación manual.");
-      setDebug(err?.message || "");
-    } finally {
-      setManualSubmitting(false);
-    }
-  }
-
-  async function uploadExternalDocument() {
-    if (!externalFile) {
-      setMsg("❌ Selecciona un archivo externo.");
-      return;
-    }
-
-    setExternalUploading(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      const fd = new FormData();
-      fd.append("file", externalFile);
-      fd.append("kind", externalKind);
-      if (externalNote.trim()) fd.append("note", externalNote.trim());
-
-      await fetchJsonFallback(`/ops/cases/${caseId}/upload-external-document`, {
-        method: "POST",
-        headers,
-        body: fd,
-      });
-
-      setExternalFile(null);
-      setExternalNote("");
-      setMsg("✅ Documento externo adjuntado al expediente.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo adjuntar el documento externo.");
-      setDebug(err?.message || "");
-    } finally {
-      setExternalUploading(false);
-    }
-  }
-
-  async function freezeFinalResource() {
-    setFreezing(true);
-    setMsg("");
-    setDebug("");
-
-    try {
-      await fetchJsonFallback(`/ops/cases/${caseId}/finalize-resource`, {
-        method: "POST",
-        headers: {
-          ...headers,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          note: "Versión final bloqueada desde OPS",
-        }),
-      });
-
-      setMsg("✅ Recurso marcado como versión final.");
-      await load();
-    } catch (err) {
-      setMsg("❌ No se pudo marcar versión final. Puede faltar el endpoint backend.");
-      setDebug(err?.message || "");
-    } finally {
-      setFreezing(false);
-    }
-  }
-
-
-  function isDocSelected(doc) {
-    return selectedDocIds.includes(String(doc.id));
-  }
-
-  function toggleDocSelection(doc) {
-    const id = String(doc.id || "");
+  function toggleDocument(doc) {
+    const id = String(doc?.id || "");
     if (!id) return;
-
-    setSelectedDocIds((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
+    setSelectedDocIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
     );
   }
 
-  function selectAllVisibleDocs() {
-    setSelectedDocIds(docs.filter((d) => d.id).map((d) => String(d.id)));
-  }
-
-  function clearSelectedDocs() {
-    setSelectedDocIds([]);
+  async function downloadDocument(doc, filename) {
+    setMessage("");
+    setDebug("");
+    try {
+      if (!doc?.id)
+        throw new Error("Documento sin identificador de descarga.");
+      const blob = await apiBlob(`/ops/documents/${doc.id}/download`, {
+        headers,
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download =
+        filename || documentLabel(doc.kind).replace(/\s+/g, "_");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch (error) {
+      setMessage("❌ No se pudo descargar el documento.");
+      setDebug(error?.message || "");
+    }
   }
 
   async function downloadZip() {
     setZipLoading(true);
-    setMsg("");
+    setMessage("");
     setDebug("");
-
     try {
-      let blob;
-
-      if (selectedDocIds.length > 0) {
-        blob = await fetchBlobFallback(`/ops/cases/${caseId}/zip-selected`, {
-          method: "POST",
-          headers: {
-            ...headers,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ document_ids: selectedDocIds }),
-        });
-      } else {
-        blob = await fetchBlobFallback(`/ops/cases/${caseId}/zip`, { headers });
-      }
-
+      const path = selectedDocIds.length
+        ? `/ops/cases/${caseId}/zip-selected`
+        : `/ops/cases/${caseId}/zip`;
+      const options = selectedDocIds.length
+        ? {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ document_ids: selectedDocIds }),
+          }
+        : { headers };
+      const blob = await apiBlob(path, options);
       const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download =
-        selectedDocIds.length > 0
-          ? `expediente_${caseId}_seleccionado.zip`
-          : `expediente_${caseId}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      setMsg("❌ No se pudo descargar el ZIP.");
-      setDebug(err?.message || "");
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `expediente_${caseId}${
+        selectedDocIds.length ? "_seleccion" : ""
+      }.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch (error) {
+      setMessage("❌ No se pudo preparar el ZIP.");
+      setDebug(error?.message || "");
     } finally {
       setZipLoading(false);
     }
   }
 
-
   async function createFollowup() {
-    if (!followupTitle.trim()) {
-      setMsg("❌ Indica un título para el seguimiento.");
+    if (!followupTitle.trim() || !followupDueAt.trim()) {
+      setMessage("❌ Indica título y fecha del seguimiento.");
       return;
     }
-    if (!followupDueAt.trim()) {
-      setMsg("❌ Indica una fecha límite.");
-      return;
-    }
-
     setFollowupCreating(true);
-    setMsg("");
+    setMessage("");
     setDebug("");
-
     try {
-      const fd = new FormData();
-      fd.append("kind", "seguimiento_manual");
-      fd.append("title", followupTitle.trim());
-      fd.append("due_at", followupDueAt.trim());
-      if (followupDescription.trim()) fd.append("description", followupDescription.trim());
+      const formData = new FormData();
+      formData.append("kind", "seguimiento_manual");
+      formData.append("title", followupTitle.trim());
+      formData.append("due_at", followupDueAt.trim());
+      if (followupDescription.trim())
+        formData.append("description", followupDescription.trim());
 
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups`, {
+      await apiJson(`/ops/cases/${caseId}/followups`, {
         method: "POST",
         headers,
-        body: fd,
+        body: formData,
       });
-
       setFollowupTitle("");
       setFollowupDueAt("");
       setFollowupDescription("");
-      setMsg("✅ Seguimiento creado.");
+      setMessage("✅ Seguimiento creado.");
       await load();
-    } catch (err) {
-      setMsg("❌ No se pudo crear el seguimiento.");
-      setDebug(err?.message || "");
+    } catch (error) {
+      setMessage("❌ No se pudo crear el seguimiento.");
+      setDebug(error?.message || "");
     } finally {
       setFollowupCreating(false);
     }
   }
 
   async function resolveFollowup(followupId) {
-    setMsg("");
+    setMessage("");
     setDebug("");
-
     try {
-      const fd = new FormData();
-      fd.append("note", "Resuelto desde OPS");
+      const formData = new FormData();
+      formData.append("note", "Resuelto desde OPS CORE");
+      await apiJson(
+        `/ops/cases/${caseId}/followups/${followupId}/resolve`,
+        { method: "POST", headers, body: formData }
+      );
+      setMessage("✅ Seguimiento resuelto.");
+      await load();
+    } catch (error) {
+      setMessage("❌ No se pudo resolver el seguimiento.");
+      setDebug(error?.message || "");
+    }
+  }
 
-      await fetchJsonFallback(`/ops/cases/${caseId}/followups/${followupId}/resolve`, {
+  async function uploadExternalDocument() {
+    if (!externalFile) {
+      setMessage("❌ Selecciona un documento externo.");
+      return;
+    }
+    setExternalUploading(true);
+    setMessage("");
+    setDebug("");
+    try {
+      const formData = new FormData();
+      formData.append("file", externalFile);
+      formData.append("kind", externalKind);
+      if (externalNote.trim())
+        formData.append("note", externalNote.trim());
+
+      await apiJson(`/ops/cases/${caseId}/upload-external-document`, {
         method: "POST",
         headers,
-        body: fd,
+        body: formData,
       });
-
-      setMsg("✅ Seguimiento marcado como resuelto.");
+      setExternalFile(null);
+      setExternalNote("");
+      setMessage("✅ Documento externo incorporado.");
       await load();
-    } catch (err) {
-      setMsg("❌ No se pudo resolver el seguimiento.");
-      setDebug(err?.message || "");
+    } catch (error) {
+      setMessage("❌ No se pudo incorporar el documento externo.");
+      setDebug(error?.message || "");
+    } finally {
+      setExternalUploading(false);
     }
   }
 
-  function followupBadge(fu) {
-    if (fu.status === "resolved") {
-      return { text: "Resuelto", bg: "#dcfce7", color: "#166534" };
-    }
-    if (fu.overdue) {
-      return { text: "Vencido", bg: "#fee2e2", color: "#991b1b" };
-    }
-    if (typeof fu.days_left === "number" && fu.days_left <= 7) {
-      return { text: "Próximo", bg: "#fef9c3", color: "#854d0e" };
-    }
-    return { text: "Pendiente", bg: "#dbeafe", color: "#1d4ed8" };
+  if (!token) {
+    return (
+      <main className="sr-container py-10">
+        <Panel>
+          <h1 className="sr-h2">Acceso de operador necesario</h1>
+          <p className="sr-p">Entra primero en OPS.</p>
+          <Link to="/ops" className="sr-btn-primary">
+            Ir al acceso OPS
+          </Link>
+        </Panel>
+      </main>
+    );
   }
 
+  if (loading && !workspace) {
+    return (
+      <main className="sr-container py-10">
+        <Panel>Cargando espacio jurídico del expediente…</Panel>
+      </main>
+    );
+  }
 
   return (
-    <div className="sr-container py-8">
-      <div className="flex gap-2 flex-wrap">
+    <main className="sr-container py-8">
+      <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
         <Link to="/ops" className="sr-btn-secondary">
           ← Volver al panel
         </Link>
-        <Link to="/ops" className="sr-btn-secondary">
-          ⚖️ Dashboard jurídico
+        <Link to="/ops/queue-smart" className="sr-btn-secondary">
+          Cola técnica
         </Link>
-
-        <Link to="/ops" className="sr-btn-secondary">
-          🟢 Presentados / histórico
-        </Link>
+        <button
+          type="button"
+          className="sr-btn-secondary"
+          onClick={load}
+          disabled={loading}
+        >
+          {loading ? "Actualizando…" : "↻ Actualizar"}
+        </button>
       </div>
 
-      <div className="flex items-start justify-between gap-4 flex-wrap mt-4">
-        <div>
-          <h1 className="sr-h2">Expediente {caseId}</h1>
-          <p className="sr-p" style={{ marginTop: 4 }}>
-            Gestión jurídica completa: recurso, documentos, presentación y trazabilidad.
-          </p>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <span
-            style={{
-              padding: "8px 12px",
-              borderRadius: 999,
-              fontWeight: 900,
-              background: hasManualSubmission ? "#dcfce7" : "#fef9c3",
-              color: hasManualSubmission ? "#166534" : "#854d0e",
-              border: hasManualSubmission ? "1px solid #86efac" : "1px solid #fde68a",
-            }}
-          >
-            {hasManualSubmission ? "🟢 Presentado manualmente" : "🟡 Pendiente / revisión"}
-          </span>
-          <span
-            style={{
-              padding: "8px 12px",
-              borderRadius: 999,
-              fontWeight: 900,
-              background: hasFinalResource ? "#ede9fe" : "#f1f5f9",
-              color: hasFinalResource ? "#5b21b6" : "#475569",
-              border: hasFinalResource ? "1px solid #c4b5fd" : "1px solid #e2e8f0",
-            }}
-          >
-            {hasFinalResource ? "Versión final" : "Editable"}
-          </span>
-        </div>
-      </div>
-
-      <Card
-        className="mt-4"
-        style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
+      <header
+        style={{
+          marginTop: 16,
+          padding: 22,
+          borderRadius: 24,
+          background: "#020617",
+          color: "#fff",
+          boxShadow: "0 18px 45px rgba(15,23,42,.22)",
+        }}
       >
-        <h3 className="sr-h3" style={{ marginTop: 0 }}>
-          🟡 Revisión manual obligatoria
-        </h3>
-        <p className="sr-p" style={{ marginBottom: 0 }}>
-          Para ayuntamientos, revisa el recurso y registra aquí la presentación manual con justificante,
-          CSV y documentos externos. DGT podrá ir por submitter automático cuando esté cerrado.
-        </p>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-4 mt-4">
-        <Card>
-          <h3 className="sr-h3">⚙️ Acciones rápidas</h3>
-
-          <div className="grid md:grid-cols-2 gap-3 mt-3">
-            <input
-              placeholder="Número de registro automático/manual (opcional)"
-              value={registro}
-              onChange={(e) => setRegistro(e.target.value)}
-              className="border rounded px-3 py-2 text-sm"
-            />
-            <input
-              placeholder="Nota interna (opcional)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="border rounded px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="flex gap-3 flex-wrap mt-4">
-            <button className="sr-btn-secondary" onClick={reanalyzeCaseNow} disabled={reanalyzing || generating}>
-              {reanalyzing ? "Reanalizando…" : "🔄 Reanalizar documentos"}
-            </button>
-
-            <button className="sr-btn-primary" onClick={generateResourceNow} disabled={generating || reanalyzing}>
-              {generating ? "Generando recurso…" : "Generar recurso ahora"}
-            </button>
-
-            <button className="sr-btn-secondary" onClick={markSubmitted}>
-              Marcar automático
-            </button>
-
-            <button className="sr-btn-secondary" onClick={freezeFinalResource} disabled={freezing}>
-              {freezing ? "Bloqueando…" : "🔒 Versión final"}
-            </button>
-
-            <button className="sr-btn-secondary" onClick={downloadZip} disabled={zipLoading}>
-              {zipLoading ? "Preparando ZIP…" : selectedDocIds.length > 0 ? `⬇ ZIP selección (${selectedDocIds.length})` : "⬇ ZIP expediente"}
-            </button>
-          </div>
-
-          <div className="flex gap-3 flex-wrap items-center mt-4">
-            <input
-              type="file"
-              onChange={(e) => setJustificante(e.target.files?.[0] || null)}
-            />
-
-            <button
-              className="sr-btn-primary"
-              onClick={uploadJustificante}
-              disabled={uploading}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 18,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                color: "#94a3b8",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: ".24em",
+              }}
             >
-              {uploading ? "Subiendo…" : "Subir justificante"}
-            </button>
+              RTM · ESPACIO JURÍDICO CORE
+            </div>
+            <h1
+              style={{
+                margin: "9px 0 4px",
+                fontSize: "clamp(25px,4vw,37px)",
+                overflowWrap: "anywhere",
+              }}
+            >
+              Expediente {caseId}
+            </h1>
+            <div style={{ color: "#cbd5e1", lineHeight: 1.6 }}>
+              {family.icon} {family.label} ·{" "}
+              {caseTypeLabel(caseData.case_type)}
+            </div>
           </div>
-        </Card>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignContent: "flex-start",
+            }}
+          >
+            {stagingHost ? (
+              <Badge tone="purple">STAGING AISLADO</Badge>
+            ) : null}
+            <Badge tone={paid ? "success" : "warn"}>
+              {paid ? "Pago confirmado" : "Pago pendiente"}
+            </Badge>
+            <Badge tone="info">{statusLabel(caseData.status)}</Badge>
+            <Badge tone="purple">{stageLabel(nextStep.stage)}</Badge>
+          </div>
+        </div>
+      </header>
 
-        <Card style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-          <h3 className="sr-h3">📊 Resumen del expediente</h3>
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div style={{ background: "#fff", borderRadius: 14, padding: 12, border: "1px solid #e2e8f0" }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Documentos</div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{docs.length}</div>
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: 12, border: "1px solid #e2e8f0" }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Eventos</div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{events.length}</div>
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: 12, border: "1px solid #e2e8f0" }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Recursos</div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{resourceDocs.length}</div>
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: 12, border: "1px solid #e2e8f0" }}>
-              <div style={{ color: "#64748b", fontSize: 12 }}>Externos</div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{externalDocs.length}</div>
+      <MessageBox message={message} debug={debug} />
+
+      <Panel
+        className="mt-4"
+        style={{ background: family.soft, borderColor: family.border }}
+      >
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 34 }}>{family.icon}</div>
+          <div>
+            <h2 className="sr-h3" style={{ margin: 0 }}>
+              {family.title}
+            </h2>
+            <p className="sr-p" style={{ margin: "7px 0 0" }}>
+              {family.text}
+            </p>
+            <div style={{ display: "grid", gap: 7, marginTop: 13 }}>
+              {family.checklist.map((item) => (
+                <div
+                  key={item}
+                  style={{ display: "flex", gap: 8, color: "#334155" }}
+                >
+                  <span style={{ color: family.accent, fontWeight: 950 }}>
+                    •
+                  </span>
+                  <span>{item}</span>
+                </div>
+              ))}
             </div>
           </div>
-        </Card>
+        </div>
+      </Panel>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+          gap: 12,
+          marginTop: 16,
+        }}
+      >
+        <Metric
+          label="Documentos"
+          value={documents.length}
+          detail="Sin rutas internas de almacenamiento"
+        />
+        <Metric label="Eventos" value={events.length} />
+        <Metric
+          label="Hechos"
+          value={
+            latestFacts
+              ? factsFrozen
+                ? "Congelados"
+                : "Borrador"
+              : "Pendientes"
+          }
+        />
+        <Metric
+          label="Familia jurídica"
+          value={resolution.family || "Pendiente"}
+          detail={resolution.specialist || "Sin especialista"}
+        />
+        <Metric
+          label="Previa Jurídica"
+          value={latestPreview?.status || "Pendiente"}
+        />
+        <Metric
+          label="Documento final"
+          value={latestResource?.status || "Pendiente"}
+        />
       </div>
 
-      <StatusBox msg={msg} debug={debug} />
-
-      <Card className="mt-4" style={{ border: "1px solid #fde68a", background: "#fffbeb" }}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h3 className="sr-h3" style={{ marginTop: 0 }}>⏰ Control de plazos y seguimiento</h3>
-            <p className="sr-p" style={{ marginBottom: 0 }}>
-              Alertas operativas tras la presentación: revisar respuesta, silencio, requerimientos o siguiente acción.
-            </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))",
+          gap: 16,
+          marginTop: 16,
+        }}
+      >
+        <Panel>
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Cadena de control
+          </h2>
+          <div style={{ display: "grid", gap: 9, marginTop: 12 }}>
+            <CheckItem
+              ok={Boolean(readiness.ready)}
+              label="Entrada documental completa"
+              detail={
+                readiness.ready
+                  ? "Datos, identidad, autorización y documento principal disponibles."
+                  : "Existen bloqueos en la entrada."
+              }
+            />
+            <CheckItem
+              ok={progress.identity}
+              label="Documento de identidad"
+              detail="Frontal y reverso registrados."
+            />
+            <CheckItem
+              ok={progress.authorization}
+              label="Autorización firmada"
+              detail={
+                caseData.authorized
+                  ? "Autorización registrada."
+                  : "Autorización pendiente."
+              }
+            />
+            <CheckItem
+              ok={progress.mainDocument}
+              label="Documento principal"
+              detail="Documento original almacenado."
+            />
+            <CheckItem
+              ok={paid}
+              pending={!paid}
+              label="Pago del estudio inicial"
+              detail={
+                paid
+                  ? "Pago confirmado por el backend."
+                  : `Pendiente · ${money(
+                      quote.amount_cents,
+                      quote.currency
+                    )}`
+              }
+            />
+            <CheckItem
+              ok={Boolean(latestFacts)}
+              pending={paid && !latestFacts}
+              label="Hechos validados"
+              detail={
+                latestFacts
+                  ? factsFrozen
+                    ? "Versión congelada."
+                    : "Pendiente de congelar."
+                  : "No existen todavía."
+              }
+            />
+            <CheckItem
+              ok={familyResolved && familyLocked}
+              pending={Boolean(latestFamily) && !familyLocked}
+              label="Familia y especialista"
+              detail={
+                familyResolved
+                  ? `${resolution.family || "Familia"} · ${
+                      resolution.specialist || "Especialista pendiente"
+                    }`
+                  : "Pendiente de resolver."
+              }
+            />
+            <CheckItem
+              ok={previewFrozen}
+              pending={Boolean(latestPreview) && !previewFrozen}
+              label="Previa Jurídica"
+              detail={
+                latestPreview
+                  ? `Estado: ${latestPreview.status}`
+                  : "Pendiente de crear y revisar."
+              }
+            />
+            <CheckItem
+              ok={resourceStatus === "final_ready"}
+              pending={previewFrozen && !latestResource}
+              label="Generate"
+              detail={
+                latestResource
+                  ? `Estado: ${latestResource.status}`
+                  : "No se ha generado documento final."
+              }
+            />
           </div>
-          <button className="sr-btn-secondary" onClick={load} type="button">
-            Refrescar
-          </button>
-        </div>
+        </Panel>
 
-        <div className="grid md:grid-cols-3 gap-3 mt-4">
-          <input
-            placeholder="Título: Revisar respuesta del Ayuntamiento"
-            value={followupTitle}
-            onChange={(e) => setFollowupTitle(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Fecha: 2026-06-07 o 2026-06-07 10:00"
-            value={followupDueAt}
-            onChange={(e) => setFollowupDueAt(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Descripción / nota"
-            value={followupDescription}
-            onChange={(e) => setFollowupDescription(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="mt-3">
-          <button
-            className="sr-btn-primary"
-            onClick={createFollowup}
-            disabled={followupCreating}
-            type="button"
+        <Panel>
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Siguiente paso autorizado
+          </h2>
+          <div
+            style={{
+              marginTop: 10,
+              padding: 15,
+              borderRadius: 16,
+              background: family.soft,
+              border: `1px solid ${family.border}`,
+            }}
           >
-            {followupCreating ? "Creando…" : "Crear seguimiento"}
-          </button>
-        </div>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                color: "#64748b",
+                textTransform: "uppercase",
+              }}
+            >
+              Etapa CORE
+            </div>
+            <div
+              style={{
+                marginTop: 5,
+                color: "#0f172a",
+                fontSize: 19,
+                fontWeight: 950,
+              }}
+            >
+              {stageLabel(nextStep.stage)}
+            </div>
+          </div>
 
-        <div className="mt-4 space-y-2">
-          {followups.length ? (
-            followups.map((fu) => {
-              const badge = followupBadge(fu);
-              return (
+          {!paid ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 14,
+                borderRadius: 14,
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                color: "#92400e",
+                lineHeight: 1.55,
+              }}
+            >
+              El estudio no está pagado. OPS no debe ejecutar extracción
+              jurídica, resolver familia, crear Previa ni generar documentos.
+            </div>
+          ) : null}
+
+          <div style={{ display: "grid", gap: 9, marginTop: 13 }}>
+            {(nextStep.actions || []).length ? (
+              nextStep.actions.map((action) => (
                 <div
-                  key={fu.id}
-                  className="border rounded-xl p-3"
-                  style={{ background: "#fff", borderColor: "#e2e8f0" }}
+                  key={`${action.code}-${action.endpoint || "none"}`}
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    border: "1px solid #e2e8f0",
+                    background: "#fff",
+                  }}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <strong>{fu.title}</strong>
-                      <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
-                        Vence: {fmt(fu.due_at)}
-                        {typeof fu.days_left === "number" ? ` · ${fu.days_left} días` : ""}
-                      </div>
-                      {fu.description ? (
-                        <div style={{ color: "#334155", fontSize: 13, marginTop: 6 }}>
-                          {fu.description}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="flex gap-2 items-center flex-wrap justify-end">
-                      <span
-                        style={{
-                          background: badge.bg,
-                          color: badge.color,
-                          borderRadius: 999,
-                          padding: "4px 10px",
-                          fontWeight: 900,
-                          fontSize: 12,
-                        }}
-                      >
-                        {badge.text}
-                      </span>
-
-                      {fu.status !== "resolved" ? (
-                        <button
-                          className="sr-btn-secondary"
-                          onClick={() => resolveFollowup(fu.id)}
-                          type="button"
-                        >
-                          Marcar resuelto
-                        </button>
-                      ) : null}
-                    </div>
+                  <div style={{ fontWeight: 900, color: "#0f172a" }}>
+                    {action.label || action.code}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 7,
+                      flexWrap: "wrap",
+                      marginTop: 8,
+                    }}
+                  >
+                    {action.method ? (
+                      <Badge tone="info">{action.method}</Badge>
+                    ) : null}
+                    {action.requires_confirmation ? (
+                      <Badge tone="warn">Requiere confirmación</Badge>
+                    ) : null}
+                    {action.requires_reason ? (
+                      <Badge tone="warn">Requiere motivo</Badge>
+                    ) : null}
                   </div>
                 </div>
-              );
-            })
-          ) : (
-            <EmptyBox>No hay seguimientos todavía. Al registrar una presentación manual se crearán alertas de 30/60/90 días.</EmptyBox>
-          )}
-        </div>
-      </Card>
-
-
-      <Card className="mt-4" style={{ border: "1px solid #bbf7d0", background: "#f0fdf4" }}>
-        <h3 className="sr-h3" style={{ marginTop: 0 }}>📌 Registrar presentación manual</h3>
-        <p className="sr-p">
-          Para ayuntamientos o presentaciones hechas fuera de OPS. Guarda el registro, CSV y justificante sin pasar por submitters.
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-3 mt-3">
-          <input
-            placeholder="Organismo: Ajuntament de Terrassa"
-            value={manualOrganismo}
-            onChange={(e) => setManualOrganismo(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Número registro: E-AJT-..."
-            value={manualRegistro}
-            onChange={(e) => setManualRegistro(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="CSV / código verificación"
-            value={manualCsv}
-            onChange={(e) => setManualCsv(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Fecha/hora presentación: 2026-05-07 10:43"
-            value={manualDate}
-            onChange={(e) => setManualDate(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Canal"
-            value={manualChannel}
-            onChange={(e) => setManualChannel(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Nota interna"
-            value={manualNote}
-            onChange={(e) => setManualNote(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="flex gap-3 flex-wrap items-center mt-4">
-          <input
-            type="file"
-            onChange={(e) => setManualFile(e.target.files?.[0] || null)}
-          />
-          <button
-            className="sr-btn-primary"
-            onClick={registerManualSubmission}
-            disabled={manualSubmitting}
-          >
-            {manualSubmitting ? "Registrando…" : "Registrar presentación manual"}
-          </button>
-        </div>
-      </Card>
-
-      <Card className="mt-4" style={{ border: "1px solid #bfdbfe", background: "#eff6ff" }}>
-        <h3 className="sr-h3" style={{ marginTop: 0 }}>📎 Adjuntar documentación externa</h3>
-        <p className="sr-p">
-          Añade resoluciones, requerimientos, instancias, justificantes, contestaciones o pruebas externas al expediente.
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-3 mt-3">
-          <select
-            value={externalKind}
-            onChange={(e) => setExternalKind(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          >
-            {EXTERNAL_KINDS.map((k) => (
-              <option key={k.value} value={k.value}>{k.label}</option>
-            ))}
-          </select>
-          <input
-            placeholder="Nota del documento (opcional)"
-            value={externalNote}
-            onChange={(e) => setExternalNote(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="flex gap-3 flex-wrap items-center mt-4">
-          <input
-            type="file"
-            onChange={(e) => setExternalFile(e.target.files?.[0] || null)}
-          />
-          <button
-            className="sr-btn-primary"
-            onClick={uploadExternalDocument}
-            disabled={externalUploading}
-          >
-            {externalUploading ? "Adjuntando…" : "Adjuntar documento externo"}
-          </button>
-        </div>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-4 mt-6">
-        <Card>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h3 className="sr-h3">📂 Documentos del expediente</h3>
-              <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
-                Seleccionados para ZIP: <strong>{selectedDocIds.length}</strong>
+              ))
+            ) : (
+              <div style={{ color: "#64748b" }}>
+                El backend no propone ninguna actuación adicional.
               </div>
-            </div>
-
-            <div className="flex gap-2 flex-wrap">
-              <button className="sr-btn-secondary" onClick={selectAllVisibleDocs} type="button">
-                Seleccionar todos
-              </button>
-              <button className="sr-btn-secondary" onClick={clearSelectedDocs} type="button">
-                Limpiar
-              </button>
-              <button className="sr-btn-secondary" onClick={downloadZip} disabled={zipLoading} type="button">
-                {zipLoading
-                  ? "Preparando ZIP…"
-                  : selectedDocIds.length > 0
-                    ? `⬇ ZIP selección (${selectedDocIds.length})`
-                    : "⬇ ZIP todo"}
-              </button>
-              <button className="sr-btn-secondary" onClick={load} disabled={loading} type="button">
-                {loading ? "Cargando…" : "Refrescar"}
-              </button>
-            </div>
+            )}
           </div>
 
-          <h4 className="font-bold mt-4">🧾 Recursos generados</h4>
-          {resourceDocs.length ? (
-            resourceDocs.map((d, i) => (
-              <DocumentRow key={`${d.id || d.kind}-${i}`} doc={d} onOpen={openDocument} selectable selected={isDocSelected(d)} onToggle={toggleDocSelection} />
-            ))
-          ) : (
-            <EmptyBox>Todavía no hay recurso visible. Pulsa “Generar recurso ahora”.</EmptyBox>
-          )}
+          {paid ? (
+            <div style={{ marginTop: 14 }}>
+              <Link
+                to={`/ops/review/${encodeURIComponent(caseId)}`}
+                className="sr-btn-primary"
+              >
+                Abrir revisión jurídica CORE
+              </Link>
+            </div>
+          ) : null}
+        </Panel>
+      </div>
 
-          <h4 className="font-bold mt-5">🏛️ Documentación externa / presentación</h4>
-          {externalDocs.length ? (
-            externalDocs.map((d, i) => (
-              <DocumentRow key={`${d.id || d.kind}-external-${i}`} doc={d} onOpen={openDocument} selectable selected={isDocSelected(d)} onToggle={toggleDocSelection} />
-            ))
-          ) : (
-            <EmptyBox>No hay documentación externa todavía.</EmptyBox>
-          )}
-
-          <h4 className="font-bold mt-5">📎 Otros documentos</h4>
-          {otherDocs.length ? (
-            otherDocs.map((d, i) => (
-              <DocumentRow key={`${d.id || d.kind}-other-${i}`} doc={d} onOpen={openDocument} selectable selected={isDocSelected(d)} onToggle={toggleDocSelection} />
-            ))
-          ) : (
-            <EmptyBox>No hay otros documentos visibles.</EmptyBox>
-          )}
-        </Card>
-
-        <Card>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className="sr-h3">🕒 Timeline jurídico</h3>
-            <button className="sr-btn-secondary" onClick={load} disabled={loading}>
-              Refrescar
+      <Panel className="mt-4">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h2 className="sr-h3" style={{ margin: 0 }}>
+              Documentos del expediente
+            </h2>
+            <p className="sr-p" style={{ margin: "5px 0 0" }}>
+              Descarga protegida; no se muestran bucket, claves ni rutas.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="sr-btn-secondary"
+              onClick={() =>
+                setSelectedDocIds(
+                  documents
+                    .filter((doc) => doc.id)
+                    .map((doc) => String(doc.id))
+                )
+              }
+            >
+              Seleccionar todos
+            </button>
+            <button
+              type="button"
+              className="sr-btn-secondary"
+              onClick={() => setSelectedDocIds([])}
+            >
+              Limpiar
+            </button>
+            <button
+              type="button"
+              className="sr-btn-primary"
+              onClick={downloadZip}
+              disabled={zipLoading}
+            >
+              {zipLoading
+                ? "Preparando ZIP…"
+                : selectedDocIds.length
+                ? `ZIP selección (${selectedDocIds.length})`
+                : "ZIP expediente"}
             </button>
           </div>
+        </div>
 
-          {events.length ? (
-            events.map((e, i) => (
-              <TimelineItem key={`${e.type}-${e.created_at}-${i}`} event={e} index={i === events.length - 1 ? 999 : i} />
+        <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+          {documents.length ? (
+            documents.map((doc) => (
+              <DocumentRow
+                key={doc.id || `${doc.kind}-${doc.created_at}`}
+                doc={doc}
+                filename={filenameMap.get(String(doc.id)) || ""}
+                selected={selectedDocIds.includes(String(doc.id))}
+                onToggle={toggleDocument}
+                onDownload={downloadDocument}
+              />
             ))
           ) : (
-            <EmptyBox>Todavía no hay eventos visibles.</EmptyBox>
+            <div
+              style={{
+                padding: 18,
+                borderRadius: 14,
+                border: "1px dashed #cbd5e1",
+                color: "#64748b",
+              }}
+            >
+              No hay documentos registrados.
+            </div>
           )}
-        </Card>
+        </div>
+      </Panel>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(340px,1fr))",
+          gap: 16,
+          marginTop: 16,
+        }}
+      >
+        <Panel>
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Datos del expediente
+          </h2>
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {[
+              ["Interesado", identity.full_name || "—"],
+              ["Documento", maskIdentity(identity.dni_nie)],
+              ["Email", identity.email || "—"],
+              ["Teléfono", identity.phone || "—"],
+              ["Organismo / contraparte", caseData.organismo || "Pendiente"],
+              ["Referencia externa", caseData.expediente_ref || "Pendiente"],
+              ["Estado", statusLabel(caseData.status)],
+              ["Pago", paid ? "Confirmado" : "Pendiente"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(130px,.6fr) 1fr",
+                  gap: 12,
+                  paddingBottom: 9,
+                  borderBottom: "1px solid #e2e8f0",
+                }}
+              >
+                <strong style={{ color: "#334155" }}>{label}</strong>
+                <span
+                  style={{ color: "#64748b", overflowWrap: "anywhere" }}
+                >
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Añadir documentación externa
+          </h2>
+          <p className="sr-p">
+            Incorpora resoluciones, respuestas, requerimientos o pruebas
+            recibidas posteriormente.
+          </p>
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            <select
+              value={externalKind}
+              onChange={(event) => setExternalKind(event.target.value)}
+              className="border rounded px-3 py-2 text-sm"
+            >
+              {EXTERNAL_KINDS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <input
+              value={externalNote}
+              onChange={(event) => setExternalNote(event.target.value)}
+              placeholder="Nota del documento (opcional)"
+              className="border rounded px-3 py-2 text-sm"
+            />
+            <input
+              type="file"
+              onChange={(event) =>
+                setExternalFile(event.target.files?.[0] || null)
+              }
+            />
+            <button
+              type="button"
+              className="sr-btn-primary"
+              onClick={uploadExternalDocument}
+              disabled={externalUploading}
+            >
+              {externalUploading ? "Subiendo…" : "Adjuntar documento"}
+            </button>
+          </div>
+        </Panel>
       </div>
-    </div>
+
+      <Panel className="mt-4">
+        <h2 className="sr-h3" style={{ marginTop: 0 }}>
+          Seguimientos
+        </h2>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+            gap: 10,
+            marginTop: 12,
+          }}
+        >
+          <input
+            value={followupTitle}
+            onChange={(event) => setFollowupTitle(event.target.value)}
+            placeholder="Título del seguimiento"
+            className="border rounded px-3 py-2 text-sm"
+          />
+          <input
+            type="datetime-local"
+            value={followupDueAt}
+            onChange={(event) => setFollowupDueAt(event.target.value)}
+            className="border rounded px-3 py-2 text-sm"
+          />
+          <input
+            value={followupDescription}
+            onChange={(event) =>
+              setFollowupDescription(event.target.value)
+            }
+            placeholder="Descripción / nota"
+            className="border rounded px-3 py-2 text-sm"
+          />
+        </div>
+        <button
+          type="button"
+          className="sr-btn-primary"
+          style={{ marginTop: 10 }}
+          onClick={createFollowup}
+          disabled={followupCreating}
+        >
+          {followupCreating ? "Creando…" : "Crear seguimiento"}
+        </button>
+
+        <div style={{ display: "grid", gap: 9, marginTop: 14 }}>
+          {followups.length ? (
+            followups.map((followup) => (
+              <div
+                key={followup.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  padding: 13,
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 14,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900 }}>{followup.title}</div>
+                  <div
+                    style={{
+                      marginTop: 3,
+                      color: "#64748b",
+                      fontSize: 13,
+                    }}
+                  >
+                    Vence: {fmtDate(followup.due_at)}
+                  </div>
+                  {followup.description ? (
+                    <div style={{ marginTop: 5, color: "#334155" }}>
+                      {followup.description}
+                    </div>
+                  ) : null}
+                </div>
+                {normalize(followup.status) !== "resolved" ? (
+                  <button
+                    type="button"
+                    className="sr-btn-secondary"
+                    onClick={() => resolveFollowup(followup.id)}
+                  >
+                    Marcar resuelto
+                  </button>
+                ) : (
+                  <Badge tone="success">Resuelto</Badge>
+                )}
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                padding: 15,
+                border: "1px dashed #cbd5e1",
+                borderRadius: 14,
+                color: "#64748b",
+              }}
+            >
+              No hay seguimientos registrados.
+            </div>
+          )}
+        </div>
+      </Panel>
+
+      <Panel className="mt-4">
+        <h2 className="sr-h3" style={{ marginTop: 0 }}>
+          Timeline jurídico
+        </h2>
+        <p className="sr-p">
+          Detalles filtrados para no exponer rutas internas de Backblaze.
+        </p>
+        <div style={{ display: "grid", gap: 10, marginTop: 13 }}>
+          {events.length ? (
+            events.map((event, index) => (
+              <TimelineItem
+                key={`${event.type}-${event.created_at}-${index}`}
+                event={event}
+              />
+            ))
+          ) : (
+            <div style={{ color: "#64748b" }}>
+              No hay eventos registrados.
+            </div>
+          )}
+        </div>
+      </Panel>
+
+      {presentationReady ? (
+        <Panel
+          className="mt-4"
+          style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}
+        >
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Presentación autorizada
+          </h2>
+          <p className="sr-p" style={{ marginBottom: 0 }}>
+            El documento final está aprobado. El canal concreto debe
+            ejecutarse o registrarse desde el módulo especializado.
+          </p>
+        </Panel>
+      ) : null}
+    </main>
   );
 }
