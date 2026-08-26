@@ -1,6 +1,7 @@
 // src/App.jsx — RecurreTuMulta
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import ResumenExpediente from "./pages/ResumenExpediente.jsx";
 import Autorizar from "./pages/Autorizar.jsx";
 
@@ -45,13 +46,47 @@ import OpsCaseDetailPro from "./pages/OpsCaseDetailPro.jsx";
 import AvisoLegal from "./pages/AvisoLegal.jsx";
 import Privacidad from "./pages/Privacidad.jsx";
 import Cookies from "./pages/Cookies.jsx";
+import a1sF2RouteEnabled, {
+  a1sF2PrivateRoute,
+} from "./lib/rtmConnectA1SF2Contract.js";
+
+const OpsA1SSyntheticReadOnly = lazy(
+  () => import("./pages/OpsA1SSyntheticReadOnly.jsx")
+);
+
+function PrivateA1SFallback() {
+  return (
+    <main className="min-h-screen bg-slate-100 text-slate-950">
+      <Helmet>
+        <title>RTM CONNECT A1-S · Staging sintético</title>
+        <meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
+      </Helmet>
+      <div className="border-b border-amber-300 bg-amber-50 px-4 py-3">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap gap-2">
+          <span className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-950">
+            STAGING · SOLO CASOS SINTÉTICOS
+          </span>
+          <span className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-950">
+            PRODUCCIÓN NO AUTORIZADA
+          </span>
+        </div>
+      </div>
+      <div className="mx-auto max-w-[1500px] p-6">
+        <p role="status">Abriendo la vista privada de lectura sintética…</p>
+      </div>
+    </main>
+  );
+}
 
 export default function App() {
   const location = useLocation();
+  const privateA1SEnabled = a1sF2RouteEnabled();
+  const isA1SF2Route = location.pathname === a1sF2PrivateRoute;
 
   const hideChrome =
     location.pathname === "/__reservas-restaurante" ||
-    location.pathname === "/__admin-restaurantes";
+    location.pathname === "/__admin-restaurantes" ||
+    (privateA1SEnabled && isA1SF2Route);
 
   return (
     <div
@@ -117,6 +152,22 @@ export default function App() {
         <Route path="/aviso-legal" element={<AvisoLegal />} />
         <Route path="/privacidad" element={<Privacidad />} />
         <Route path="/cookies" element={<Cookies />} />
+
+        {privateA1SEnabled ? (
+          <Route
+            path={a1sF2PrivateRoute}
+            caseSensitive
+            element={
+              isA1SF2Route ? (
+                <Suspense fallback={<PrivateA1SFallback />}>
+                  <OpsA1SSyntheticReadOnly />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+        ) : null}
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
