@@ -1,8 +1,8 @@
 import { Helmet } from "react-helmet-async";
 
 export default function Seo({
-  title = "RecurreTuMulta | Asistencia administrativa para recurrir sanciones",
-  description = "Recurrimos sanciones administrativas de forma clara y eficiente. Tráfico, ayuntamientos, hacienda y más. Análisis rápido y tramitación completa.",
+  title = "RTM · Resuelve tus movidas",
+  description = "RTM ayuda a comprender y gestionar problemas de tráfico, viajes, deudas y trámites con la Administración.",
   canonical = "https://www.recurretumulta.eu/",
   image = "https://www.recurretumulta.eu/og-recurretumulta.png?v=2",
   noindex = false,
@@ -19,7 +19,7 @@ export default function Seo({
 
       {/* Open Graph */}
       <meta property="og:type" content="website" />
-      <meta property="og:site_name" content="RecurreTuMulta" />
+      <meta property="og:site_name" content="RTM · Resuelve tus movidas" />
       <meta property="og:title" content={title} />
       <meta property="og:description" content={description} />
       <meta property="og:url" content={canonical} />

@@ -27,7 +27,6 @@ const SERVICE_GROUPS = [
     icon: "✈️",
     landing: "/viajes",
     landingLabel: "Ver todos los servicios de viajes",
-    landing: "/viajes",
     links: [
       { to: "/iniciar-expediente/claims/airline?issue=cancelled_flight", label: "Vuelo cancelado" },
       { to: "/iniciar-expediente/claims/airline?issue=flight_delay", label: "Vuelo retrasado" },
@@ -242,12 +241,15 @@ export default function Navbar() {
 
       <header className="rtm-navbar">
         <div className="rtm-navbar-inner">
-          <Link to="/" className="rtm-navbar-brand" aria-label="Ir al inicio">
-            <img
-              src={logo}
-              alt="RecurreTuMulta"
-              className="rtm-navbar-logo"
-            />
+          <Link
+            to="/"
+            className="rtm-navbar-brand"
+            aria-label="RTM — Resuelve tus movidas. Ir al inicio"
+          >
+            <span className="rtm-navbar-logo-frame" aria-hidden="true">
+              <img src={logo} alt="" className="rtm-navbar-logo" />
+            </span>
+            <span className="rtm-navbar-tagline">Resuelve tus movidas</span>
           </Link>
 
           <button
@@ -272,6 +274,7 @@ export default function Navbar() {
             <Link
               to="/"
               className={`rtm-navbar-link ${pathname === "/" ? "is-active" : ""}`}
+              aria-current={pathname === "/" ? "page" : undefined}
             >
               Inicio
             </Link>
@@ -284,6 +287,7 @@ export default function Navbar() {
                 }`}
                 aria-haspopup="true"
                 aria-expanded={servicesOpen}
+                aria-current={servicesActive ? "true" : undefined}
                 onClick={() => setServicesOpen((value) => !value)}
               >
                 Servicios
@@ -306,6 +310,9 @@ export default function Navbar() {
                           <Link
                             to={group.landing}
                             className="rtm-service-group-title"
+                            aria-current={
+                              pathname === group.landing ? "page" : undefined
+                            }
                             style={{ textDecoration: "none" }}
                           >
                             <span aria-hidden="true">{group.icon}</span>
@@ -325,6 +332,9 @@ export default function Navbar() {
                             className={`rtm-service-option ${
                               pathname === group.landing ? "is-active" : ""
                             }`}
+                            aria-current={
+                              pathname === group.landing ? "page" : undefined
+                            }
                             style={{ marginBottom: 4 }}
                           >
                             <strong>{group.landingLabel}</strong>
@@ -342,6 +352,7 @@ export default function Navbar() {
                               to={to}
                               role="menuitem"
                               className={`rtm-service-option ${active ? "is-active" : ""}`}
+                              aria-current={active ? "page" : undefined}
                             >
                               <strong>{label}</strong>
                             </Link>
@@ -365,6 +376,7 @@ export default function Navbar() {
                   className={`rtm-navbar-link ${
                     active ? "is-active" : ""
                   }`}
+                  aria-current={active ? "page" : undefined}
                 >
                   {label}
                 </Link>

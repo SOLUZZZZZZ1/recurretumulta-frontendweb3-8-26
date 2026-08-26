@@ -29,11 +29,12 @@ export default function Footer() {
           gridTemplateColumns: "repeat(3, minmax(0,1fr))",
         }}
       >
-        {/* RECURRE TU MULTA */}
+        {/* MARCA RTM */}
         <div>
-          <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
-            RecurreTuMulta
-          </h4>
+          <div className="rtm-footer-brand">
+            <span className="rtm-footer-brand-name">RTM</span>
+            <span className="rtm-footer-brand-tagline">Resuelve tus movidas</span>
+          </div>
           <ul style={{ listStyle: "none", padding: 0, lineHeight: 1.9 }}>
             <li>
               <Link to="/" style={{ color: "#e5e7eb" }}>
@@ -84,7 +85,7 @@ export default function Footer() {
             </a>
           </p>
           <p style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.6 }}>
-            ofrecemos también asesoramiento jurídico. Este canal es exclusivamente
+            RTM ofrece también asesoramiento jurídico. Este canal es exclusivamente
             para consultas técnicas o de funcionamiento del servicio.
           </p>
         </div>
@@ -124,10 +125,12 @@ export default function Footer() {
           lineHeight: 1.7,
         }}
       >
-        © {new Date().getFullYear()} RecurreTuMulta · Asistencia automatizada en
-        trámites administrativos
+        © {new Date().getFullYear()} RTM · Resuelve tus movidas
         <br />
-        Este sitio presta asesoramiento jurídico pero no garantiza resultados.
+        Asistencia automatizada en trámites administrativos
+        <br />
+        RTM presta servicios de asistencia y, cuando corresponde, asesoramiento
+        jurídico; no garantiza un resultado favorable.
         <br />
         www.recurretumulta.eu
       </div>

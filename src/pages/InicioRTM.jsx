@@ -206,8 +206,8 @@ export default function InicioRTM() {
   return (
     <>
       <Seo
-        title="RTM · Procedimientos jurídicos y administrativos"
-        description="RTM le ayuda a gestionar multas, deudas, reclamaciones y procedimientos frente a administraciones y organismos."
+        title="RTM · Resuelve tus movidas"
+        description="RTM ayuda a comprender y gestionar problemas de tráfico, viajes, deudas y trámites con la Administración."
         canonical="https://www.recurretumulta.eu/"
       />
 
@@ -241,7 +241,7 @@ export default function InicioRTM() {
                   fontWeight: 850,
                 }}
               >
-                Plataforma RTM
+                RTM · Resuelve tus movidas
               </div>
 
               <h1
@@ -253,7 +253,7 @@ export default function InicioRTM() {
                   fontWeight: 950,
                 }}
               >
-                ¿Qué problema necesita resolver?
+                ¿En qué asunto necesita ayuda?
               </h1>
 
               <p
