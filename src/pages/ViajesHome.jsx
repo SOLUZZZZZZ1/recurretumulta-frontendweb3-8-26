@@ -3,13 +3,13 @@ import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 
 const CASES = [
-  { icon: "✈️", title: "Vuelo cancelado", text: "Cancelaron tu vuelo y necesitas saber qué puedes reclamar.", to: "/iniciar-expediente/claims/airline?issue=cancelled_flight" },
-  { icon: "🕐", title: "Vuelo retrasado", text: "Tu vuelo llegó con retraso y quieres conocer tus derechos.", to: "/iniciar-expediente/claims/airline?issue=flight_delay" },
-  { icon: "🧳", title: "Equipaje perdido", text: "Tu equipaje no llegó, se extravió o sigue sin aparecer.", to: "/iniciar-expediente/claims/airline?issue=lost_baggage" },
-  { icon: "🧳", title: "Equipaje dañado", text: "Tu equipaje llegó dañado y necesitas reclamar.", to: "/iniciar-expediente/claims/airline?issue=damaged_baggage" },
-  { icon: "💺", title: "Overbooking", text: "No te permitieron embarcar pese a tener una reserva.", to: "/iniciar-expediente/claims/airline?issue=overbooking" },
-  { icon: "🛳️", title: "Problemas con cruceros", text: "Cancelaciones, cambios, incidencias o reembolsos relacionados con tu crucero.", to: "/iniciar-expediente/claims/consumer?issue=cruise" },
-  { icon: "🏨", title: "Agencias de viajes", text: "Problemas con paquetes, reservas, cambios, servicios o reembolsos.", to: "/iniciar-expediente/claims/consumer?issue=travel_agency" },
+  { icon: "✈️", title: "Vuelo cancelado", text: "Cancelaron tu vuelo y necesitas saber qué puedes reclamar.", to: "/iniciar-expediente/claims/airline?family=viajes" },
+  { icon: "🕐", title: "Vuelo retrasado", text: "Tu vuelo llegó con retraso y quieres conocer tus derechos.", to: "/iniciar-expediente/claims/airline?family=viajes" },
+  { icon: "🧳", title: "Equipaje perdido", text: "Tu equipaje no llegó, se extravió o sigue sin aparecer.", to: "/iniciar-expediente/claims/airline?family=viajes" },
+  { icon: "🧳", title: "Equipaje dañado", text: "Tu equipaje llegó dañado y necesitas reclamar.", to: "/iniciar-expediente/claims/airline?family=viajes" },
+  { icon: "💺", title: "Overbooking", text: "No te permitieron embarcar pese a tener una reserva.", to: "/iniciar-expediente/claims/airline?family=viajes" },
+  { icon: "🛳️", title: "Problemas con cruceros", text: "Cancelaciones, cambios, incidencias o reembolsos relacionados con tu crucero.", to: "/iniciar-expediente/claims/consumer?family=viajes" },
+  { icon: "🏨", title: "Agencias de viajes", text: "Problemas con paquetes, reservas, cambios, servicios o reembolsos.", to: "/iniciar-expediente/claims/consumer?family=viajes" },
 ];
 
 const STEPS = [
@@ -77,6 +77,10 @@ export default function ViajesHome() {
           <div style={{ maxWidth: 1160, margin: "0 auto" }}>
             <h2 style={h2}>¿Qué ha ocurrido?</h2>
             <p style={sub}>Selecciona tu situación y abriremos el expediente por el camino correcto.</p>
+            <p style={{ ...sub, fontSize: 14, maxWidth: 760 }}>
+              El formulario conserva el área Viajes y el tipo real disponible
+              (aerolínea o consumo); el detalle se explica dentro del expediente.
+            </p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 14, marginTop: 24 }}>
               {CASES.map(item => (
                 <article key={item.title} style={caseCard}>
@@ -152,7 +156,7 @@ export default function ViajesHome() {
               </div>
               <button
                 style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }}
-                onClick={() => navigate("/iniciar-expediente/claims")}
+                onClick={() => navigate("/iniciar-expediente/claims?family=viajes")}
               >
                 Iniciar una revisión inicial
               </button>

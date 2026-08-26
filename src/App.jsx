@@ -30,6 +30,12 @@ import EliminarCoche from "./pages/EliminarCoche.jsx";
 import MorosidadHome from "./pages/MorosidadHome.jsx";
 import AdministracionHome from "./pages/AdministracionHome.jsx";
 import ViajesHome from "./pages/ViajesHome.jsx";
+import Asnef from "./pages/Asnef.jsx";
+import BancosHome from "./pages/BancosHome.jsx";
+import EnergiaHome from "./pages/EnergiaHome.jsx";
+import TelecomunicacionesHome from "./pages/TelecomunicacionesHome.jsx";
+import SegurosHome from "./pages/SegurosHome.jsx";
+import ViviendaHome from "./pages/ViviendaHome.jsx";
 import IniciarExpedienteRTM from "./pages/IniciarExpedienteRTM.jsx";
 import DocumentosCore from "./pages/DocumentosCore.jsx";
 
@@ -80,6 +86,7 @@ function PrivateA1SFallback() {
 
 export default function App() {
   const location = useLocation();
+  const intakeRouteKey = `${location.pathname}${location.search}`;
   const privateA1SEnabled = a1sF2RouteEnabled();
   const isA1SF2Route = location.pathname === a1sF2PrivateRoute;
 
@@ -104,9 +111,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<InicioRTM />} />
         <Route path="/trafico" element={<Trafico />} />
-        <Route path="/iniciar-expediente/:department/:caseType" element={<IniciarExpedienteRTM />} />
-        <Route path="/iniciar-expediente/:department" element={<IniciarExpedienteRTM />} />
-        <Route path="/iniciar-expediente" element={<IniciarExpedienteRTM />} />
+        <Route path="/iniciar-expediente/:department/:caseType" element={<IniciarExpedienteRTM key={intakeRouteKey} />} />
+        <Route path="/iniciar-expediente/:department" element={<IniciarExpedienteRTM key={intakeRouteKey} />} />
+        <Route path="/iniciar-expediente" element={<IniciarExpedienteRTM key={intakeRouteKey} />} />
         <Route path="/multas" element={<InicioMultas />} />
 
         <Route path="/multas/documentos" element={<DocumentosCore />} />
@@ -119,9 +126,23 @@ export default function App() {
         <Route path="/eliminar-coche" element={<EliminarCoche />} />
 
         <Route path="/morosidad" element={<MorosidadHome />} />
+        <Route path="/asnef" element={<Asnef />} />
+        <Route path="/deudas" element={<Navigate to="/morosidad" replace />} />
+        <Route path="/deudas/asnef" element={<Navigate to="/asnef" replace />} />
+        <Route path="/morosidad/asnef" element={<Navigate to="/asnef" replace />} />
+        <Route
+          path="/deudas/iniciar"
+          element={<Navigate to="/iniciar-expediente/debt/asnef_equifax?family=morosidad" replace />}
+        />
+        <Route path="/otros-procedimientos" element={<Navigate to="/administracion" replace />} />
 
         <Route path="/administracion" element={<AdministracionHome />} />
         <Route path="/viajes" element={<ViajesHome />} />
+        <Route path="/bancos" element={<BancosHome />} />
+        <Route path="/energia" element={<EnergiaHome />} />
+        <Route path="/telecomunicaciones" element={<TelecomunicacionesHome />} />
+        <Route path="/seguros" element={<SegurosHome />} />
+        <Route path="/vivienda" element={<ViviendaHome />} />
 
         
         <Route path="/faq" element={<FAQ />} />

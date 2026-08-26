@@ -2,7 +2,7 @@ import { Helmet } from "react-helmet-async";
 
 export default function Seo({
   title = "RTM · Resuelve tus movidas",
-  description = "RTM ayuda a comprender y gestionar problemas de tráfico, viajes, deudas y trámites con la Administración.",
+  description = "RTM ayuda a comprender y gestionar problemas de tráfico, viajes, deudas y trámites con la Administración. También cubre bancos, energía, telecomunicaciones, seguros y consultas de vivienda.",
   canonical = "https://www.recurretumulta.eu/",
   image = "https://www.recurretumulta.eu/og-recurretumulta.png?v=2",
   noindex = false,

@@ -7,37 +7,37 @@ const CASES = [
     icon: "🏦",
     title: "Hacienda / AEAT",
     text: "Liquidaciones, sanciones, requerimientos, embargos y otros procedimientos tributarios.",
-    to: "/iniciar-expediente/administration/aeat",
+    to: "/iniciar-expediente/administration/aeat?family=administracion",
   },
   {
     icon: "🧾",
     title: "Seguridad Social",
     text: "Deudas, reclamaciones, notificaciones y procedimientos de la Seguridad Social.",
-    to: "/iniciar-expediente/administration/social_security",
+    to: "/iniciar-expediente/administration/social_security?family=administracion",
   },
   {
     icon: "🏛️",
     title: "Ayuntamientos",
     text: "Sanciones, tributos, tasas, licencias y otros expedientes municipales.",
-    to: "/iniciar-expediente/administration/town_hall",
+    to: "/iniciar-expediente/administration/town_hall?family=administracion",
   },
   {
     icon: "🗺️",
     title: "Catastro",
     text: "Discrepancias, datos catastrales, valoraciones y procedimientos relacionados con inmuebles.",
-    to: "/iniciar-expediente/administration/general_administration?issue=catastro",
+    to: "/iniciar-expediente/administration/general_administration?family=administracion",
   },
   {
     icon: "📑",
     title: "Comunidades Autónomas",
     text: "Notificaciones, sanciones y procedimientos ante organismos autonómicos.",
-    to: "/iniciar-expediente/administration/general_administration?issue=comunidad_autonoma",
+    to: "/iniciar-expediente/administration/general_administration?family=administracion",
   },
   {
     icon: "⚖️",
     title: "Otros organismos públicos",
     text: "Si tu expediente procede de otra Administración, lo revisamos y te indicamos cómo continuar.",
-    to: "/iniciar-expediente/administration/general_administration",
+    to: "/iniciar-expediente/administration/general_administration?family=administracion",
   },
 ];
 
@@ -173,7 +173,7 @@ export default function AdministracionHome() {
 
             <button
               style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }}
-              onClick={() => navigate("/iniciar-expediente/administration/general_administration")}
+              onClick={() => navigate("/iniciar-expediente/administration/general_administration?family=administracion")}
             >
               Iniciar revisión inicial · 25 €
             </button>

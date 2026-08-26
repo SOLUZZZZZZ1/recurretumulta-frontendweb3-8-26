@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import logo from "/rtm-logo-transparente-recortado.png";
+import {
+  PUBLIC_SERVICE_FAMILIES,
+  PUBLIC_SERVICE_PATHS,
+} from "../data/publicServices.js";
 
 const MAIN_LINKS = [
   { to: "/", label: "Inicio" },
@@ -10,73 +14,35 @@ const MAIN_LINKS = [
   { to: "/contacto", label: "Contacto" },
 ];
 
-const SERVICE_GROUPS = [
-  {
-    title: "Tráfico y vehículos",
-    icon: "🚗",
-    landing: "/trafico",
-    landingLabel: "Ver todos los servicios de tráfico",
-    links: [
-      { to: "/trafico", label: "Multas y sanciones" },
-      { to: "/iniciar-expediente/traffic/vehicle_removal", label: "Eliminación de vehículos" },
-      { to: "/iniciar-expediente/traffic/other_traffic", label: "Otros trámites de tráfico" },
-    ],
-  },
-  {
-    title: "Viajes",
-    icon: "✈️",
-    landing: "/viajes",
-    landingLabel: "Ver todos los servicios de viajes",
-    links: [
-      { to: "/iniciar-expediente/claims/airline?issue=cancelled_flight", label: "Vuelo cancelado" },
-      { to: "/iniciar-expediente/claims/airline?issue=flight_delay", label: "Vuelo retrasado" },
-      { to: "/iniciar-expediente/claims/airline?issue=lost_baggage", label: "Equipaje perdido" },
-      { to: "/iniciar-expediente/claims/airline?issue=damaged_baggage", label: "Equipaje dañado" },
-      { to: "/iniciar-expediente/claims/airline?issue=overbooking", label: "Overbooking" },
-      { to: "/iniciar-expediente/claims/consumer?issue=cruise", label: "Problemas con cruceros" },
-      { to: "/iniciar-expediente/claims/consumer?issue=travel_agency", label: "Agencias de viajes" },
-    ],
-  },
-  {
-    title: "Deudas y morosidad",
-    icon: "💳",
-    landing: "/morosidad",
-    landingLabel: "Ver todos los servicios de deudas",
-    links: [
-      { to: "/morosidad", label: "ASNEF / Equifax" },
-      { to: "/iniciar-expediente/debt/asnef_equifax", label: "Salir de ficheros de morosidad" },
-      { to: "/iniciar-expediente/debt/creditor_claim", label: "Reclamación frente al acreedor" },
-    ],
-  },
-  {
-    title: "Administración pública",
-    icon: "🏛️",
-    landing: "/administracion",
-    landingLabel: "Ver todos los servicios de Administración",
-    links: [
-      { to: "/iniciar-expediente/administration/aeat", label: "Hacienda / AEAT" },
-      { to: "/iniciar-expediente/administration/social_security", label: "Seguridad Social" },
-      { to: "/iniciar-expediente/administration/town_hall", label: "Ayuntamientos" },
-      { to: "/administracion", label: "Otros organismos públicos" },
-    ],
-  },
-];
+const SERVICE_GROUPS = PUBLIC_SERVICE_FAMILIES.map((family) => ({
+  id: family.id,
+  title: family.menuTitle,
+  icon: family.icon,
+  landing: family.path,
+  landingLabel: family.action,
+  links: family.menuLinks,
+}));
 
-const SERVICE_LINKS = SERVICE_GROUPS.flatMap((group) => [
-  ...(group.landing ? [{ to: group.landing }] : []),
-  ...group.links,
-]);
+const SERVICE_LINK_COUNTS = SERVICE_GROUPS.flatMap((group) => group.links).reduce(
+  (counts, { to }) => counts.set(to, (counts.get(to) || 0) + 1),
+  new Map()
+);
 
 
 export default function Navbar() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const currentLocation = `${pathname}${search}`;
   const [open, setOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesRef = useRef(null);
 
-  const servicesActive = SERVICE_LINKS.some(
-    ({ to }) => pathname === to || pathname.startsWith(`${to}/`)
-  );
+  const servicesActive =
+    PUBLIC_SERVICE_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    ) ||
+    pathname.startsWith("/iniciar-expediente") ||
+    pathname === "/asnef" ||
+    pathname === "/eliminar-coche";
 
   useEffect(() => {
     setOpen(false);
@@ -125,7 +91,9 @@ export default function Navbar() {
           top: calc(100% + 10px);
           left: 50%;
           z-index: 1200;
-          width: min(920px, calc(100vw - 28px));
+          width: min(1120px, calc(100vw - 28px));
+          max-height: min(72vh, 720px);
+          overflow-y: auto;
           padding: 18px;
           border: 1px solid #dbeafe;
           border-radius: 18px;
@@ -151,15 +119,35 @@ export default function Navbar() {
           position: relative;
           z-index: 1;
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 12px;
         }
 
         .rtm-service-group {
           min-width: 0;
           padding: 10px;
+          border: 1px solid #e2e8f0;
           border-radius: 14px;
           background: #f8fafc;
+          transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        }
+
+        .rtm-service-group:nth-child(3n + 1) {
+          background: linear-gradient(145deg, #f8fafc, #eff6ff);
+        }
+
+        .rtm-service-group:nth-child(3n + 2) {
+          background: linear-gradient(145deg, #f8fafc, #f0fdf4);
+        }
+
+        .rtm-service-group:nth-child(3n) {
+          background: linear-gradient(145deg, #f8fafc, #fff7ed);
+        }
+
+        .rtm-service-group:hover {
+          transform: translateY(-2px);
+          border-color: #bfdbfe;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
         }
 
         .rtm-service-group-title {
@@ -188,6 +176,18 @@ export default function Navbar() {
         .rtm-service-option:hover,
         .rtm-service-option.is-active {
           background: #eff6ff;
+        }
+
+        @media (max-width: 1180px) and (min-width: 981px) {
+          .rtm-services-dropdown {
+            left: auto;
+            right: -310px;
+            transform: none;
+          }
+
+          .rtm-services-dropdown::before {
+            left: calc(50% - 16px);
+          }
         }
 
         .rtm-service-option-icon { display: none; }
@@ -305,7 +305,7 @@ export default function Navbar() {
                 <div className="rtm-services-dropdown" role="menu">
                   <div className="rtm-services-grid">
                     {SERVICE_GROUPS.map((group) => (
-                      <section className="rtm-service-group" key={group.title}>
+                      <section className="rtm-service-group" key={group.id}>
                         {group.landing ? (
                           <Link
                             to={group.landing}
@@ -343,8 +343,12 @@ export default function Navbar() {
 
                         {group.links.map(({ to, label }) => {
                           const cleanTo = to.split("?")[0];
+                          const uniqueDestination = SERVICE_LINK_COUNTS.get(to) === 1;
                           const active =
-                            pathname === cleanTo || pathname.startsWith(`${cleanTo}/`);
+                            uniqueDestination &&
+                            (to.includes("?")
+                              ? currentLocation === to
+                              : pathname === cleanTo || pathname.startsWith(`${cleanTo}/`));
 
                           return (
                             <Link

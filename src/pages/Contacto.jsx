@@ -1,12 +1,38 @@
 import React from "react";
+import { useSearchParams } from "react-router-dom";
+import Seo from "../components/Seo.jsx";
 
 export default function Contacto() {
+  const [searchParams] = useSearchParams();
+  const isHousingConsultation = searchParams.get("area") === "vivienda";
   const supportEmail = "soporte@recurretumulta.eu";
-  const subject = encodeURIComponent("Consulta RTM");
-  const mailto = `mailto:${supportEmail}?subject=${subject}`;
+  const subjectText = isHousingConsultation
+    ? "Consulta de encaje · Vivienda · RTM"
+    : "Consulta RTM";
+  const subject = encodeURIComponent(subjectText);
+  const body = encodeURIComponent(
+    isHousingConsultation
+      ? "Hola, quiero solicitar una consulta de encaje sobre vivienda.\n\nResumen del caso:\n\nDocumentos disponibles:\n"
+      : "Hola, quiero realizar una consulta a RTM.\n\n"
+  );
+  const mailto = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 
   return (
-    <main
+    <>
+      <Seo
+        title={
+          isHousingConsultation
+            ? "Consulta de encaje de vivienda · RTM"
+            : "Contacto · RTM"
+        }
+        description={
+          isHousingConsultation
+            ? "Solicita una consulta previa para comprobar si RTM puede ayudarte con un asunto de vivienda."
+            : "Contacta con RTM para consultas sobre expedientes, incidencias o colaboraciones."
+        }
+        canonical="https://www.recurretumulta.eu/contacto"
+      />
+      <main
       style={{
         minHeight: "calc(100vh - 120px)",
         padding: "56px 20px 72px",
@@ -26,7 +52,7 @@ export default function Contacto() {
               fontWeight: 900,
             }}
           >
-            ✉️ Contacto RTM
+            {isHousingConsultation ? "🏠 Consulta de encaje · Vivienda" : "✉️ Contacto RTM"}
           </div>
 
           <h1
@@ -38,7 +64,9 @@ export default function Contacto() {
               color: "#123b73",
             }}
           >
-            ¿Necesitas contactar con RTM?
+            {isHousingConsultation
+              ? "Cuéntanos primero tu caso de vivienda"
+              : "¿Necesitas contactar con RTM?"}
           </h1>
 
           <p
@@ -50,10 +78,24 @@ export default function Contacto() {
               color: "#475569",
             }}
           >
-            Para consultas relacionadas con expedientes, incidencias o colaboraciones,
-            escríbenos directamente por correo electrónico.
+            {isHousingConsultation
+              ? "Antes de crear ninguna gestión, revisaremos si el asunto encaja, qué información falta o si conviene otro profesional o canal."
+              : "Para consultas relacionadas con expedientes, incidencias o colaboraciones, escríbenos directamente por correo electrónico."}
           </p>
         </header>
+
+        {isHousingConsultation ? (
+          <div className="rtm-contact-housing-notice" role="note">
+            <span aria-hidden="true">🧭</span>
+            <div>
+              <strong>Esta consulta no crea un expediente automático</strong>
+              <p>
+                Vivienda todavía no dispone de un especialista backend específico.
+                Te responderemos sobre el posible encaje sin prometer una actuación.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         <section
           style={{
@@ -121,7 +163,9 @@ export default function Contacto() {
                   boxShadow: "0 12px 26px rgba(22,163,74,.22)",
                 }}
               >
-                ✉️ Escribir a RTM
+                {isHousingConsultation
+                  ? "🏠 Solicitar consulta de encaje"
+                  : "✉️ Escribir a RTM"}
               </a>
             </div>
           </div>
@@ -163,6 +207,7 @@ export default function Contacto() {
           a las consultas relacionadas con expedientes, incidencias o colaboraciones.
         </div>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

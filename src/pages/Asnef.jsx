@@ -1,11 +1,18 @@
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 
+const SITUATIONS = [
+  ["✅", "Deuda pagada", "La deuda se abonó, pero la inclusión continúa apareciendo."],
+  ["👤", "Datos incorrectos", "El titular, el importe u otros datos no coinciden con la realidad."],
+  ["✉️", "Comunicación discutida", "No consta el aviso previo o necesitas revisar cómo se comunicó la deuda."],
+  ["❓", "Deuda no reconocida", "No reconoces el origen o mantienes una discrepancia con el acreedor."],
+];
+
 export default function Asnef() {
   return (
     <>
       <Seo
-        title="Salir de ASNEF y ficheros de morosidad · RecurreTuMulta"
+        title="ASNEF y ficheros de morosidad · RTM"
         description="Revisamos la anotación, comprobamos si procede y preparamos la solicitud de rectificación o supresión frente al acreedor y al fichero."
         canonical="https://www.recurretumulta.eu/asnef"
       />
@@ -22,11 +29,11 @@ export default function Asnef() {
               </p>
 
               <div className="rtm-asnef-actions">
-                <Link to="/deudas/iniciar" className="rtm-asnef-primary">
+                <Link to="/iniciar-expediente/debt/asnef_equifax?family=morosidad" className="rtm-asnef-primary">
                   Comprobar mi situación
                 </Link>
-                <Link to="/contacto" className="rtm-asnef-secondary">
-                  Resolver una duda
+                <Link to="/morosidad" className="rtm-asnef-secondary">
+                  Ver deudas y morosidad
                 </Link>
               </div>
             </div>
@@ -44,6 +51,26 @@ export default function Asnef() {
                 exigibilidad y comunicación de la deuda.
               </p>
             </aside>
+          </div>
+        </section>
+
+        <section className="rtm-asnef-content rtm-asnef-content--situations">
+          <div className="sr-container">
+            <span className="rtm-asnef-section-kicker">Situaciones habituales</span>
+            <h2>¿Qué necesitas comprobar?</h2>
+            <p className="rtm-asnef-section-lead">
+              La causa concreta se explicará dentro del expediente. El tipo técnico se
+              mantiene como ASNEF / Equifax para que el backend lo reciba correctamente.
+            </p>
+            <div className="rtm-asnef-situations">
+              {SITUATIONS.map(([icon, title, text]) => (
+                <article key={title}>
+                  <span aria-hidden="true">{icon}</span>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -66,6 +93,20 @@ export default function Asnef() {
                 <h3>Preparamos la solicitud</h3>
                 <p>Generamos la reclamación y la autorización para actuar en representación del cliente.</p>
               </article>
+            </div>
+
+            <div className="rtm-asnef-final">
+              <div>
+                <span>Primer paso</span>
+                <h2>Comprueba la inclusión con la documentación delante</h2>
+                <p>
+                  Abriremos el expediente ASNEF / Equifax y conservaremos el área
+                  Deudas y ASNEF de forma explícita.
+                </p>
+              </div>
+              <Link to="/iniciar-expediente/debt/asnef_equifax?family=morosidad">
+                Iniciar revisión
+              </Link>
             </div>
           </div>
         </section>

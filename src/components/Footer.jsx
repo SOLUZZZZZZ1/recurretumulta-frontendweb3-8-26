@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
+import { PUBLIC_SERVICE_FAMILIES } from "../data/publicServices.js";
 
 export default function Footer() {
   const { search, hash } = useLocation();
@@ -22,11 +23,11 @@ export default function Footer() {
       }}
     >
       <div
-        className="sr-container"
+        className="sr-container rtm-footer-grid"
         style={{
           display: "grid",
           gap: 20,
-          gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+          gridTemplateColumns: "1fr 1.45fr 1fr 1fr",
         }}
       >
         {/* MARCA RTM */}
@@ -68,6 +69,22 @@ export default function Footer() {
           </ul>
         </div>
 
+        {/* SERVICIOS PÚBLICOS */}
+        <div>
+          <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
+            Servicios públicos
+          </h4>
+          <ul className="rtm-footer-service-list">
+            {PUBLIC_SERVICE_FAMILIES.map((family) => (
+              <li key={family.id}>
+                <Link to={family.path}>
+                  <span aria-hidden="true">{family.icon}</span> {family.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         {/* CONTACTO */}
         <div>
           <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
@@ -85,8 +102,8 @@ export default function Footer() {
             </a>
           </p>
           <p style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.6 }}>
-            RTM ofrece también asesoramiento jurídico. Este canal es exclusivamente
-            para consultas técnicas o de funcionamiento del servicio.
+            RTM ofrece también asesoramiento jurídico. Este canal sirve para consultas
+            sobre expedientes, funcionamiento del servicio y solicitudes de encaje.
           </p>
         </div>
 

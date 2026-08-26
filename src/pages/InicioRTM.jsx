@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import { PUBLIC_SERVICE_FAMILIES } from "../data/publicServices.js";
 
 const API = "/api";
 const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
@@ -102,36 +103,7 @@ function getCasePhase(data) {
   return "summary";
 }
 
-const SERVICES = [
-  {
-    icon: "🚗",
-    title: "Tráfico",
-    text: "Multas, sanciones, vehículos y otros trámites relacionados.",
-    action: "Ver servicios de tráfico",
-    to: "/trafico",
-  },
-  {
-    icon: "💳",
-    title: "Deudas y morosidad",
-    text: "ASNEF, ficheros de morosidad e incidencias relacionadas con crédito.",
-    action: "Comprobar mi situación",
-    to: "/morosidad",
-  },
-  {
-    icon: "🏛️",
-    title: "Administración y organismos públicos",
-    text: "Hacienda, Seguridad Social, ayuntamientos, comunidades autónomas y otros organismos.",
-    action: "Enviar mi caso",
-    to: "/administracion",
-  },
-  {
-    icon: "✈️",
-    title: "Viajes y reclamaciones",
-    text: "Vuelos cancelados o retrasados, equipaje, overbooking, cruceros y agencias de viajes.",
-    action: "Ver servicios de viajes",
-    to: "/viajes",
-  },
-];
+const SERVICES = PUBLIC_SERVICE_FAMILIES;
 
 const BENEFITS = [
   "Expediente digital y documentación organizada.",
@@ -207,7 +179,7 @@ export default function InicioRTM() {
     <>
       <Seo
         title="RTM · Resuelve tus movidas"
-        description="RTM ayuda a comprender y gestionar problemas de tráfico, viajes, deudas y trámites con la Administración."
+        description="RTM ayuda a comprender y gestionar problemas de tráfico, viajes, deudas y trámites con la Administración. También cubre bancos, energía, telecomunicaciones, seguros y consultas de vivienda."
         canonical="https://www.recurretumulta.eu/"
       />
 
@@ -219,121 +191,63 @@ export default function InicioRTM() {
           color: "#0f172a",
         }}
       >
-        <section
-          className="rtm-home-hero"
-          style={{
-            padding: "72px 20px 64px",
-            color: "#fff",
-            background:
-              "linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #0f766e 100%)",
-          }}
-        >
-          <div className="sr-container" style={{ maxWidth: 1120, margin: "0 auto" }}>
-            <div style={{ maxWidth: 850, margin: "0 auto 38px", textAlign: "center" }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  padding: "7px 13px",
-                  marginBottom: 18,
-                  borderRadius: 999,
-                  background: "rgba(255,255,255,.14)",
-                  border: "1px solid rgba(255,255,255,.24)",
-                  fontWeight: 850,
-                }}
-              >
-                RTM · Resuelve tus movidas
-              </div>
-
-              <h1
-                style={{
-                  margin: "0 0 18px",
-                  fontSize: "clamp(38px, 6vw, 66px)",
-                  lineHeight: 1.03,
-                  letterSpacing: "-.045em",
-                  fontWeight: 950,
-                }}
-              >
-                ¿En qué asunto necesita ayuda?
-              </h1>
-
-              <p
-                style={{
-                  maxWidth: 760,
-                  margin: "0 auto",
-                  fontSize: "clamp(18px, 2vw, 21px)",
-                  lineHeight: 1.55,
-                  color: "rgba(255,255,255,.88)",
-                }}
-              >
-                Seleccione el área relacionada con su problema. RTM le guiará paso a paso
-                para abrir el expediente y valorar la forma más adecuada de actuar.
-              </p>
+        <section className="rtm-home-hero rtm-home-hero--catalog">
+          <span className="rtm-home-hero-glow rtm-home-hero-glow--one" aria-hidden="true" />
+          <span className="rtm-home-hero-glow rtm-home-hero-glow--two" aria-hidden="true" />
+          <div className="sr-container rtm-home-hero-content">
+            <div className="rtm-home-hero-badge">RTM · Resuelve tus movidas</div>
+            <h1>Tu problema tiene un primer paso más claro.</h1>
+            <p>
+              Elige el área que mejor se parece a tu caso. Ordenamos la información,
+              explicamos la vía disponible y evitamos prometer una gestión que todavía
+              no existe.
+            </p>
+            <div className="rtm-home-hero-actions">
+              <a href="#servicios-publicos">Explorar las 9 áreas</a>
+              <Link to="/iniciar-expediente">Iniciar una revisión</Link>
             </div>
+            <div className="rtm-home-hero-trust" aria-label="Cómo trabaja RTM">
+              <span>✓ Expediente digital</span>
+              <span>✓ Información clara</span>
+              <span>✓ Decides cómo continuar</span>
+            </div>
+          </div>
+        </section>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(235px, 1fr))",
-                gap: 18,
-              }}
-            >
-              {SERVICES.map((service) => (
+        <section id="servicios-publicos" className="rtm-home-catalog-section">
+          <div className="sr-container rtm-home-catalog-container">
+            <header className="rtm-home-catalog-heading">
+              <span>Nueve familias públicas</span>
+              <h2>¿En qué asunto necesita ayuda?</h2>
+              <p>
+                Seleccione el área relacionada con su problema. Todas parten del mismo
+                catálogo: si el backend admite un expediente, abrimos el tipo real; si
+                no, le llevamos primero a una consulta de encaje.
+              </p>
+            </header>
+
+            <div className="rtm-home-family-grid">
+              {SERVICES.map((service, index) => (
                 <article
-                  key={service.title}
-                  style={{
-                    display: "flex",
-                    minHeight: 270,
-                    padding: 24,
-                    flexDirection: "column",
-                    borderRadius: 24,
-                    background: "#fff",
-                    color: "#0f172a",
-                    boxShadow: "0 20px 55px rgba(15,23,42,.25)",
-                  }}
+                  className="rtm-home-family-card"
+                  key={service.id}
+                  style={{ "--family-delay": `${index * 40}ms` }}
                 >
-                  <div style={{ fontSize: 39, marginBottom: 16 }}>{service.icon}</div>
-
-                  <h2
-                    style={{
-                      margin: "0 0 10px",
-                      fontSize: 25,
-                      lineHeight: 1.15,
-                      fontWeight: 950,
-                    }}
-                  >
-                    {service.title}
-                  </h2>
-
-                  <p
-                    style={{
-                      margin: "0 0 22px",
-                      color: "#64748b",
-                      lineHeight: 1.55,
-                      flexGrow: 1,
-                    }}
-                  >
-                    {service.text}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => navigate(service.to)}
-                    style={{
-                      width: "100%",
-                      minHeight: 48,
-                      padding: "13px 16px",
-                      border: 0,
-                      borderRadius: 13,
-                      background: "#16a34a",
-                      color: "#fff",
-                      fontSize: 16,
-                      fontWeight: 950,
-                      cursor: "pointer",
-                      boxShadow: "0 12px 24px rgba(22,163,74,.22)",
-                    }}
-                  >
-                    {service.action}
-                  </button>
+                  <div className="rtm-home-family-icon" aria-hidden="true">
+                    {service.icon}
+                  </div>
+                  <div className="rtm-home-family-meta">
+                    <span>
+                      {service.entryMode === "consultation"
+                        ? "Consulta de encaje"
+                        : "Servicio público"}
+                    </span>
+                  </div>
+                  <h3>{service.title}</h3>
+                  <p>{service.summary}</p>
+                  <Link to={service.path}>
+                    {service.action} <span aria-hidden="true">→</span>
+                  </Link>
                 </article>
               ))}
             </div>

@@ -7,7 +7,7 @@ const SERVICES = [
     title: "Recurrir una multa",
     text: "¿Ha recibido una multa o sanción? Envíenos la notificación y revisaremos su caso para explicarle qué opciones tiene.",
     action: "Revisar mi multa",
-    to: "/iniciar-expediente/traffic/fine",
+    to: "/iniciar-expediente/traffic/fine?family=trafico",
     available: true,
   },
   {

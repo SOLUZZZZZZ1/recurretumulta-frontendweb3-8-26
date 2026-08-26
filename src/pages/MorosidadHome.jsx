@@ -7,37 +7,37 @@ const CASES = [
     icon: "📋",
     title: "ASNEF / Equifax",
     text: "Revisamos la inclusión, la deuda, las comunicaciones recibidas y la documentación disponible.",
-    to: "/iniciar-expediente/debt/asnef_equifax",
+    to: "/asnef",
   },
   {
     icon: "✅",
     title: "Deuda ya pagada",
     text: "Si la deuda se pagó pero la anotación continúa apareciendo, estudiamos la situación.",
-    to: "/iniciar-expediente/debt/asnef_equifax?issue=paid_debt",
+    to: "/iniciar-expediente/debt/asnef_equifax?family=morosidad",
   },
   {
     icon: "👤",
     title: "Datos incorrectos",
     text: "Errores de identidad, importes o información que no coincide con tu situación.",
-    to: "/iniciar-expediente/debt/asnef_equifax?issue=incorrect_data",
+    to: "/iniciar-expediente/debt/asnef_equifax?family=morosidad",
   },
   {
     icon: "✉️",
     title: "Falta de comunicación",
     text: "Revisamos las comunicaciones y requerimientos relacionados con la inclusión.",
-    to: "/iniciar-expediente/debt/asnef_equifax?issue=notice",
+    to: "/iniciar-expediente/debt/asnef_equifax?family=morosidad",
   },
   {
     icon: "❓",
     title: "Deuda discutida",
     text: "Importes que no reconoces o sobre los que existe una discrepancia con el acreedor.",
-    to: "/iniciar-expediente/debt/creditor_claim?issue=disputed_debt",
+    to: "/iniciar-expediente/debt/creditor_claim?family=morosidad",
   },
   {
     icon: "⚖️",
     title: "Reclamación al acreedor",
     text: "Estudiamos reclamaciones frente a acreedores o entidades relacionadas con la deuda.",
-    to: "/iniciar-expediente/debt/creditor_claim",
+    to: "/iniciar-expediente/debt/creditor_claim?family=morosidad",
   },
 ];
 
@@ -183,7 +183,7 @@ export default function MorosidadHome() {
 
             <button
               style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }}
-              onClick={() => navigate("/iniciar-expediente/debt/asnef_equifax")}
+              onClick={() => navigate("/iniciar-expediente/debt/asnef_equifax?family=morosidad")}
             >
               Iniciar revisión inicial · 10 €
             </button>

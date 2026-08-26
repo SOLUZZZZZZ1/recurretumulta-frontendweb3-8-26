@@ -1,6 +1,10 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import {
+  PUBLIC_SERVICE_FAMILIES,
+  getPublicService,
+} from "../data/publicServices.js";
 
 const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
 const API_CANDIDATES = [
@@ -117,14 +121,44 @@ export default function IniciarExpedienteRTM() {
   const requestedDepartment =
     params.department ||
     searchParams.get("department") ||
-    searchParams.get("service") ||
     "";
-
-  const department = requestedDepartment || "traffic";
-  const config = SERVICE_CONFIG[department] || SERVICE_CONFIG.traffic;
-  const needsServiceSelection = !requestedDepartment;
-  const requestedType = params.caseType || searchParams.get("case_type") || config.defaultCaseType;
-  const initialType = config.caseTypes[requestedType] ? requestedType : config.defaultCaseType;
+  const requestedType = params.caseType || searchParams.get("case_type") || "";
+  const requestedFamilyId = searchParams.get("family") || "";
+  const ambiguousLegacyService = searchParams.get("service") || "";
+  const department = requestedDepartment;
+  const config = requestedDepartment ? SERVICE_CONFIG[requestedDepartment] : null;
+  const selectedFamily = requestedFamilyId
+    ? getPublicService(requestedFamilyId)
+    : null;
+  const invalidDepartment = Boolean(requestedDepartment && !config);
+  const invalidType = Boolean(
+    requestedType && (!config || !config.caseTypes[requestedType])
+  );
+  const invalidFamily = Boolean(
+    requestedFamilyId && (!selectedFamily || !selectedFamily.intake)
+  );
+  const familyMismatch = Boolean(
+    selectedFamily?.intake &&
+      config &&
+      (selectedFamily.intake.department !== department ||
+        (requestedType && !selectedFamily.intake.caseTypes.includes(requestedType)))
+  );
+  const familyWithoutDepartment = Boolean(selectedFamily && !requestedDepartment);
+  const invalidSelection =
+    Boolean(ambiguousLegacyService) ||
+    invalidDepartment ||
+    invalidType ||
+    invalidFamily ||
+    familyMismatch ||
+    familyWithoutDepartment;
+  const needsServiceSelection = !requestedDepartment && !invalidSelection;
+  const initialType =
+    !invalidSelection && config
+      ? requestedType || config.defaultCaseType
+      : "";
+  const availableCaseTypes = config
+    ? selectedFamily?.intake?.caseTypes || Object.keys(config.caseTypes)
+    : [];
 
   const [form, setForm] = useState({
     full_name: "",
@@ -170,6 +204,10 @@ export default function IniciarExpedienteRTM() {
   }
 
   function validateDraft() {
+    if (!config || invalidSelection) return "La ruta del expediente no es válida.";
+    if (!availableCaseTypes.includes(form.case_type)) {
+      return "El tipo de expediente no corresponde al área elegida.";
+    }
     if (form.full_name.trim().length < 3) return "Indica el nombre y apellidos.";
     if (normalizeDni(form.dni_nie).length < 5) return "Indica el DNI, NIE o pasaporte.";
     if (!validEmail(form.email)) return "Indica un email válido.";
@@ -215,7 +253,9 @@ export default function IniciarExpedienteRTM() {
         city: form.city.trim(),
         province: form.province.trim(),
         preferred_contact: form.preferred_contact,
-        customer_comment: form.customer_comment.trim(),
+        customer_comment: selectedFamily
+          ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
+          : form.customer_comment.trim(),
         representation_confirmed: String(form.representation_confirmed),
         privacy_accepted: String(form.privacy_accepted),
       }).forEach(([key, value]) => fd.append(key, value));
@@ -263,33 +303,35 @@ export default function IniciarExpedienteRTM() {
     navigate(`${draftCase.nextPath}${separator}case=${encodeURIComponent(draftCase.caseId)}`);
   }
 
+  if (invalidSelection) {
+    return (
+      <>
+        <Seo
+          title="Ruta de expediente no válida · RTM"
+          description="La combinación solicitada no corresponde a un tipo de expediente RTM."
+          canonical="https://www.recurretumulta.eu/iniciar-expediente"
+          noindex
+        />
+        <main className="rtm-intake-invalid">
+          <section>
+            <span aria-hidden="true">🧭</span>
+            <div className="rtm-intake-invalid-badge">Selección no reconocida</div>
+            <h1>No hemos abierto un expediente equivocado</h1>
+            <p>
+              La dirección contiene un área o un tipo que RTM no reconoce. Por
+              seguridad, no lo convertimos automáticamente en un expediente de tráfico.
+            </p>
+            <button type="button" onClick={() => navigate("/iniciar-expediente")}>
+              Elegir una de las 9 áreas
+            </button>
+          </section>
+        </main>
+      </>
+    );
+  }
+
   if (needsServiceSelection) {
-    const services = [
-      {
-        key: "traffic",
-        icon: "🚗",
-        title: "Multas y vehículos",
-        text: "Multas, sanciones, retirada o baja de vehículos y otros trámites de tráfico.",
-      },
-      {
-        key: "debt",
-        icon: "💳",
-        title: "Deudas y morosidad",
-        text: "ASNEF, Equifax, acreedores y otros problemas relacionados con deudas.",
-      },
-      {
-        key: "administration",
-        icon: "🏛️",
-        title: "Administración pública",
-        text: "Hacienda, Seguridad Social, ayuntamientos y otros organismos públicos.",
-      },
-      {
-        key: "claims",
-        icon: "✈️",
-        title: "Viajes y reclamaciones",
-        text: "Vuelos, equipaje, consumo y otras reclamaciones frente a empresas.",
-      },
-    ];
+    const services = PUBLIC_SERVICE_FAMILIES;
 
     return (
       <>
@@ -358,12 +400,13 @@ export default function IniciarExpedienteRTM() {
                   lineHeight: 1.65,
                 }}
               >
-                Selecciona el área correspondiente. Después podrás completar tus
-                datos y abrir el expediente.
+                Selecciona el área correspondiente. Te llevaremos al expediente
+                disponible o, en Vivienda, a una consulta previa de encaje.
               </p>
             </header>
 
             <div
+              className="rtm-intake-family-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
@@ -372,11 +415,10 @@ export default function IniciarExpedienteRTM() {
             >
               {services.map((service) => (
                 <button
-                  key={service.key}
+                  className="rtm-intake-family-card"
+                  key={service.id}
                   type="button"
-                  onClick={() =>
-                    navigate(`/iniciar-expediente/${service.key}`)
-                  }
+                  onClick={() => navigate(service.startPath)}
                   style={{
                     minHeight: 205,
                     padding: 24,
@@ -423,7 +465,25 @@ export default function IniciarExpedienteRTM() {
                       lineHeight: 1.55,
                     }}
                   >
-                    {service.text}
+                    {service.summary}
+                  </span>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      marginTop: 14,
+                      padding: "6px 9px",
+                      borderRadius: 999,
+                      background:
+                        service.entryMode === "consultation" ? "#fff7ed" : "#ecfdf5",
+                      color:
+                        service.entryMode === "consultation" ? "#9a3412" : "#166534",
+                      fontSize: 12,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {service.entryMode === "consultation"
+                      ? "Consulta de encaje"
+                      : "Expediente disponible"}
                   </span>
                 </button>
               ))}
@@ -448,12 +508,19 @@ export default function IniciarExpedienteRTM() {
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
               Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración
             </div>
+            {selectedFamily ? (
+              <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 14, background: "#ecfdf5", color: "#166534", fontWeight: 900, lineHeight: 1.5 }}>
+                {selectedFamily.icon} Área pública elegida: {selectedFamily.title}
+              </div>
+            ) : null}
           </header>
 
           <form onSubmit={createDraftAndDownload}>
             <Section title="1. Tipo de expediente">
               <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
-                {Object.entries(config.caseTypes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {availableCaseTypes.map((value) => (
+                  <option key={value} value={value}>{config.caseTypes[value]}</option>
+                ))}
               </select>
             </Section>
 
