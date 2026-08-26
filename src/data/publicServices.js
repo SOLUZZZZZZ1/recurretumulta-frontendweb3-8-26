@@ -119,7 +119,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
       ],
       documents: ["Contrato, extracto o recibo relacionado", "Comunicaciones con la entidad", "Reclamación previa y respuesta, si existen", "Justificantes de pago o movimientos relevantes"],
       closingTitle: "Empieza por ordenar el problema",
-      closingText: "El sistema abrirá una reclamación de consumo, que es el tipo de expediente disponible para esta familia. Después revisaremos el encaje concreto.",
+      closingText: "Cuéntanos qué ha ocurrido y reúne la documentación disponible. Revisaremos el caso concreto y te explicaremos los siguientes pasos.",
     },
   },
   {
@@ -157,7 +157,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
       ],
       documents: ["Facturas y contrato o condiciones", "Lecturas o fotografías del contador, si son relevantes", "Comunicaciones con la compañía", "Justificantes de pago, baja, alta o cambio"],
       closingTitle: "Revisamos el suministro con contexto",
-      closingText: "Abriremos una reclamación de consumo, el tipo de expediente que el backend reconoce actualmente, y ordenaremos dentro de ella el problema energético.",
+      closingText: "Cuéntanos qué ha ocurrido con el suministro y aporta la documentación disponible. Revisaremos el caso y te explicaremos los siguientes pasos.",
     },
   },
   {
@@ -195,7 +195,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
       ],
       documents: ["Contrato, oferta o resumen de condiciones", "Facturas relacionadas", "Números de incidencia o reclamación", "Correos, mensajes o justificantes de baja y portabilidad"],
       closingTitle: "Convierte llamadas sueltas en un expediente ordenado",
-      closingText: "La entrada disponible es una reclamación de consumo. No presentamos cada subasunto como un tipo técnico distinto porque el backend todavía no los conserva por separado.",
+      closingText: "Reúne facturas, contratos y comunicaciones. Ordenaremos la información y revisaremos contigo la vía más adecuada.",
     },
   },
   {
@@ -233,7 +233,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
       ],
       documents: ["Póliza y condiciones particulares", "Parte o comunicación del siniestro", "Respuesta, informe o valoración de la aseguradora", "Facturas, presupuestos y justificantes relacionados"],
       closingTitle: "Primero, póliza y hechos en el mismo sitio",
-      closingText: "El sistema abrirá una reclamación de consumo. La revisión posterior determinará el encaje concreto del asunto asegurador.",
+      closingText: "Reúne la póliza, las comunicaciones y la documentación del siniestro. Revisaremos el conjunto y te explicaremos las opciones disponibles.",
     },
   },
   {
@@ -255,7 +255,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
       eyebrow: "Vivienda",
       headline: "Antes de abrir un expediente, comprobamos",
       highlight: "si podemos ayudarte.",
-      lead: "La vivienda reúne situaciones muy distintas. Esta página te ayuda a identificar el problema y pedir una consulta de encaje sin prometer una operativa backend que aún no existe.",
+      lead: "La vivienda reúne situaciones muy distintas. Esta página te ayuda a identificar el problema y solicitar una primera revisión para orientarte sobre el paso adecuado.",
       image: "/servicios-hogar-suministros.webp",
       imageAlt: "Vivienda, llaves y documentación para una consulta de encaje",
       imagePosition: "left center",
@@ -270,7 +270,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
         ["🏢", "Inmobiliaria o intermediario", "Servicios, honorarios, publicidad, reservas o gestión de la operación."],
       ],
       documents: ["Contrato, reserva o documento principal", "Comunicaciones entre las partes", "Facturas, recibos, fotografías o presupuestos", "Cronología breve de lo ocurrido"],
-      notice: "Vivienda todavía no dispone de un especialista backend específico. El siguiente paso es una consulta de encaje; no se crea automáticamente un expediente ni se promete una actuación.",
+      notice: "Cada asunto de vivienda requiere una valoración previa. Revisaremos la información y te indicaremos si podemos ayudarte y cuál sería el siguiente paso; en esta consulta no se crea automáticamente un expediente.",
       closingTitle: "Cuéntanos el caso antes de abrir ninguna gestión",
       closingText: "Revisaremos si RTM puede asumirlo, si falta información o si conviene orientarte hacia otro profesional o canal.",
     },

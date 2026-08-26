@@ -72,7 +72,7 @@ export default function Footer() {
         {/* SERVICIOS PÚBLICOS */}
         <div>
           <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
-            Servicios públicos
+            Áreas de ayuda
           </h4>
           <ul className="rtm-footer-service-list">
             {PUBLIC_SERVICE_FAMILIES.map((family) => (

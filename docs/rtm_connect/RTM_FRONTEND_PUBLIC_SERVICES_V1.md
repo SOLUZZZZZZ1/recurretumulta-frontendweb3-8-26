@@ -12,6 +12,12 @@ Telecomunicaciones y Seguros abren el tipo real `claims/consumer`; Vivienda llev
 a una consulta de encaje y declara expresamente que todavía no crea un expediente automático.
 RTM Connect permanece separado y equivalente a la base.
 
+La revisión pública de Bancos, Energía, Telecomunicaciones, Seguros, Vivienda,
+Viajes y ASNEF utiliza lenguaje dirigido al usuario, sin exponer detalles de
+implementación. La página de precios incorpora el estudio inicial de asuntos de
+consumo por 10 €, que se descuenta íntegramente del precio o presupuesto de la
+gestión aceptada si el usuario decide continuar.
+
 ## Identidad congelada
 
 | Elemento | Identidad exacta |
@@ -70,8 +76,9 @@ Rutas base reemplazadas:
 12. `src/pages/IniciarExpedienteRTM.jsx`
 13. `src/pages/InicioRTM.jsx`
 14. `src/pages/MorosidadHome.jsx`
-15. `src/pages/Trafico.jsx`
-16. `src/pages/ViajesHome.jsx`
+15. `src/pages/Precios.jsx`
+16. `src/pages/Trafico.jsx`
+17. `src/pages/ViajesHome.jsx`
 
 Rutas nuevas:
 
@@ -115,7 +122,7 @@ horizontal ni errores de consola; Vivienda debe terminar en
 
 ## Verificación realizada
 
-- contrato específico: 29 pruebas superadas al congelar la evidencia;
+- contrato específico: 31 pruebas superadas al congelar la evidencia;
 - build Vite de producción: correcto, 89 módulos transformados;
 - navegación real: rutas limpias, enlaces heredados, selector y consulta de
   Vivienda comprobados en escritorio y móvil;

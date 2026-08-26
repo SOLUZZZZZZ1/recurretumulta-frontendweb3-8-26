@@ -27,6 +27,15 @@ const REVIEW_PRICES = [
     to: "/administracion",
     action: "Ver Administración",
   },
+  {
+    icon: "🛒",
+    title: "Reclamaciones de consumo",
+    price: "10 €",
+    label: "Estudio inicial del caso",
+    text: "Estudiamos la documentación y el encaje de asuntos relacionados con bancos, energía, telecomunicaciones, seguros, viajes y otros servicios de consumo.",
+    to: "/iniciar-expediente",
+    action: "Elegir área de consumo",
+  },
 ];
 
 export default function Precios() {
@@ -34,7 +43,7 @@ export default function Precios() {
     <>
       <Seo
         title="Precios · RTM"
-        description="Consulta las tarifas de revisión inicial y el funcionamiento de los presupuestos de gestión de RTM."
+        description="Consulta las tarifas de revisión inicial, incluido el estudio de reclamaciones de consumo por 10 €, y cómo se descuentan del precio o presupuesto posterior."
       />
 
       <main
@@ -162,7 +171,7 @@ export default function Precios() {
                     fontWeight: 800,
                   }}
                 >
-                  Revisión Inicial del Expediente
+                  {item.label || "Revisión Inicial del Expediente"}
                 </div>
 
                 <p
@@ -225,8 +234,8 @@ export default function Precios() {
                 lineHeight: 1.6,
               }}
             >
-              El importe abonado por la Revisión Inicial del Expediente se
-              descontará íntegramente del precio de la gestión contratada.
+              El importe abonado por la revisión o el estudio inicial se descontará íntegramente del precio o presupuesto
+              de la gestión que aceptes si decides continuar.
             </p>
           </section>
 

@@ -59,8 +59,8 @@ export default function Asnef() {
             <span className="rtm-asnef-section-kicker">Situaciones habituales</span>
             <h2>¿Qué necesitas comprobar?</h2>
             <p className="rtm-asnef-section-lead">
-              La causa concreta se explicará dentro del expediente. El tipo técnico se
-              mantiene como ASNEF / Equifax para que el backend lo reciba correctamente.
+              Revisaremos el origen de la inclusión, la documentación disponible y las
+              comunicaciones recibidas para explicarte los siguientes pasos.
             </p>
             <div className="rtm-asnef-situations">
               {SITUATIONS.map(([icon, title, text]) => (

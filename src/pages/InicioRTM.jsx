@@ -217,12 +217,12 @@ export default function InicioRTM() {
         <section id="servicios-publicos" className="rtm-home-catalog-section">
           <div className="sr-container rtm-home-catalog-container">
             <header className="rtm-home-catalog-heading">
-              <span>Nueve familias públicas</span>
+              <span>Nueve áreas de ayuda</span>
               <h2>¿En qué asunto necesita ayuda?</h2>
               <p>
-                Seleccione el área relacionada con su problema. Todas parten del mismo
-                catálogo: si el backend admite un expediente, abrimos el tipo real; si
-                no, le llevamos primero a una consulta de encaje.
+                Seleccione el área relacionada con su problema. Empezaremos por la vía
+                adecuada y, cuando sea necesario, revisaremos primero si podemos ayudarle
+                antes de abrir ninguna gestión.
               </p>
             </header>
 

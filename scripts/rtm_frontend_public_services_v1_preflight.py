@@ -33,7 +33,7 @@ BASE_SNAPSHOT_SHA256 = (
 )
 EXPECTED_ARCHIVE_ENTRIES = 120
 EXPECTED_BASE_FILES = 111
-EXPECTED_UNCHANGED_BASE_FILES = 95
+EXPECTED_UNCHANGED_BASE_FILES = 94
 EXPECTED_UNCOMPRESSED_BYTES = 11_266_823
 MAX_ARCHIVE_MEMBER_BYTES = 4_000_000
 
@@ -78,6 +78,7 @@ REPLACED_BASE_PATHS = (
     "src/pages/IniciarExpedienteRTM.jsx",
     "src/pages/InicioRTM.jsx",
     "src/pages/MorosidadHome.jsx",
+    "src/pages/Precios.jsx",
     "src/pages/Trafico.jsx",
     "src/pages/ViajesHome.jsx",
 )
@@ -360,6 +361,9 @@ def _audit_contract() -> dict[str, Any]:
     intake = _read_text("src/pages/IniciarExpedienteRTM.jsx")
     landing = _read_text("src/components/PublicServiceLanding.jsx")
     contact = _read_text("src/pages/Contacto.jsx")
+    asnef = _read_text("src/pages/Asnef.jsx")
+    viajes = _read_text("src/pages/ViajesHome.jsx")
+    prices = _read_text("src/pages/Precios.jsx")
     main = _read_text("src/main.jsx")
 
     ids = tuple(re.findall(r'^\s{4}id: "([a-z]+)",$', catalog, re.M))
@@ -433,11 +437,43 @@ def _audit_contract() -> dict[str, Any]:
         landing,
         (
             "Imagen ilustrativa generada con IA",
-            "Entrada real por reclamación de consumo",
+            "Tu caso empieza con una revisión ordenada",
             "Consulta de encaje antes de crear un expediente",
             "alt={landing.imageAlt}",
         ),
         "public_landing",
+    )
+    public_copy = f"{landing}\n{catalog}".casefold()
+    forbidden_public_copy = (
+        "backend",
+        "tipo técnico",
+        "tipos técnicos",
+        "reconoce actualmente",
+    )
+    if any(marker in public_copy for marker in forbidden_public_copy):
+        raise PreflightBlocked("internal_implementation_copy_present")
+
+    public_surfaces = "\n".join((home, contact, asnef, viajes))
+    forbidden_surface_copy = (
+        "si el backend admite un expediente",
+        "especialista backend específico",
+        "el tipo técnico se mantiene",
+        "el tipo real disponible",
+    )
+    if any(marker in public_surfaces for marker in forbidden_surface_copy):
+        raise PreflightBlocked("internal_surface_copy_present")
+
+    _require_markers(
+        prices,
+        (
+            'title: "Reclamaciones de consumo"',
+            'price: "10 €"',
+            'label: "Estudio inicial del caso"',
+            "bancos, energía, telecomunicaciones, seguros, viajes",
+            "se descontará íntegramente del precio o presupuesto",
+            'to: "/iniciar-expediente"',
+        ),
+        "consumer_pricing",
     )
     _require_markers(
         contact,

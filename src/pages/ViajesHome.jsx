@@ -78,8 +78,8 @@ export default function ViajesHome() {
             <h2 style={h2}>¿Qué ha ocurrido?</h2>
             <p style={sub}>Selecciona tu situación y abriremos el expediente por el camino correcto.</p>
             <p style={{ ...sub, fontSize: 14, maxWidth: 760 }}>
-              El formulario conserva el área Viajes y el tipo real disponible
-              (aerolínea o consumo); el detalle se explica dentro del expediente.
+              Cuéntanos qué ha ocurrido; conservaremos el contexto de tu viaje durante
+              toda la revisión.
             </p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 14, marginTop: 24 }}>
               {CASES.map(item => (

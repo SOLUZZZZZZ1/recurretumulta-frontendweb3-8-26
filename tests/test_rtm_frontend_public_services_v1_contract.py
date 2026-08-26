@@ -18,6 +18,7 @@ LANDING = SRC / "components" / "PublicServiceLanding.jsx"
 HOME = SRC / "pages" / "InicioRTM.jsx"
 INTAKE = SRC / "pages" / "IniciarExpedienteRTM.jsx"
 CONTACT = SRC / "pages" / "Contacto.jsx"
+PRICES = SRC / "pages" / "Precios.jsx"
 MAIN = SRC / "main.jsx"
 SITEMAP = ROOT / "public" / "sitemap.xml"
 PREFLIGHT = ROOT / "scripts" / "rtm_frontend_public_services_v1_preflight.py"
@@ -182,7 +183,7 @@ class PublicServicesSurfaceTests(unittest.TestCase):
     def test_home_renders_nine_family_catalog(self):
         self.assertIn("const SERVICES = PUBLIC_SERVICE_FAMILIES", self.home)
         self.assertIn("SERVICES.map", self.home)
-        self.assertIn("Nueve familias públicas", self.home)
+        self.assertIn("Nueve áreas de ayuda", self.home)
         self.assertIn("Consulta de encaje", self.home)
 
     def test_selector_renders_same_nine_families(self):
@@ -231,9 +232,47 @@ class PublicServicesSurfaceTests(unittest.TestCase):
 
     def test_shared_landing_has_visible_ai_disclosure_and_boundaries(self):
         self.assertIn("Imagen ilustrativa generada con IA", self.landing)
-        self.assertIn("Entrada real por reclamación de consumo", self.landing)
+        self.assertIn("Tu caso empieza con una revisión ordenada", self.landing)
         self.assertIn("Consulta de encaje antes de crear un expediente", self.landing)
         self.assertIn('alt={landing.imageAlt}', self.landing)
+
+    def test_public_landings_do_not_expose_internal_implementation_copy(self):
+        public_copy = f"{self.landing}\n{read(CATALOG)}".casefold()
+        for marker in (
+            "backend",
+            "tipo técnico",
+            "tipos técnicos",
+            "reconoce actualmente",
+        ):
+            self.assertNotIn(marker, public_copy)
+
+        public_surfaces = "\n".join(
+            (
+                self.home,
+                self.contact,
+                read(SRC / "pages" / "Asnef.jsx"),
+                read(SRC / "pages" / "ViajesHome.jsx"),
+            )
+        )
+        for marker in (
+            "si el backend admite un expediente",
+            "especialista backend específico",
+            "el tipo técnico se mantiene",
+            "el tipo real disponible",
+        ):
+            self.assertNotIn(marker, public_surfaces)
+
+    def test_consumer_initial_study_is_priced_and_deductible(self):
+        prices = read(PRICES)
+        for marker in (
+            'title: "Reclamaciones de consumo"',
+            'price: "10 €"',
+            'label: "Estudio inicial del caso"',
+            "bancos, energía, telecomunicaciones, seguros, viajes",
+            "se descontará íntegramente del precio o presupuesto",
+            'to: "/iniciar-expediente"',
+        ):
+            self.assertIn(marker, prices)
 
     def test_housing_contact_has_specific_subject_and_no_auto_case_notice(self):
         self.assertIn('searchParams.get("area") === "vivienda"', self.contact)
@@ -314,7 +353,7 @@ class PublicServicesDeliveryTests(unittest.TestCase):
         evidence = json.loads(read(EVIDENCE))
         overlay_paths = evidence["overlay_paths"]
         hashes = evidence["file_sha256"]
-        self.assertEqual(len(overlay_paths), 30)
+        self.assertEqual(len(overlay_paths), 31)
         self.assertEqual(len(overlay_paths), len(set(overlay_paths)))
         self.assertEqual(
             set(hashes),

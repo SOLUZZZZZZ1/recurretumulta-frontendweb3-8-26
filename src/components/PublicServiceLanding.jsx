@@ -113,11 +113,11 @@ export default function PublicServiceLanding({ family }) {
                 <strong>
                   {isConsultation
                     ? "Consulta de encaje antes de crear un expediente"
-                    : "Entrada real por reclamación de consumo"}
+                    : "Tu caso empieza con una revisión ordenada"}
                 </strong>
                 <p>
                   {landing.notice ||
-                    "Esta familia abre el tipo de expediente que el backend reconoce actualmente. Los subasuntos orientan la revisión, pero no se presentan como tipos técnicos independientes."}
+                    "Cuéntanos qué ha ocurrido y reúne la documentación disponible. Revisaremos el caso concreto y te explicaremos los siguientes pasos antes de iniciar cualquier actuación."}
                 </p>
               </div>
             </div>

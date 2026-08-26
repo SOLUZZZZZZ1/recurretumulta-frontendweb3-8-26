@@ -90,8 +90,9 @@ export default function Contacto() {
             <div>
               <strong>Esta consulta no crea un expediente automático</strong>
               <p>
-                Vivienda todavía no dispone de un especialista backend específico.
-                Te responderemos sobre el posible encaje sin prometer una actuación.
+                Los asuntos de vivienda requieren una valoración previa. Te responderemos
+                sobre el posible encaje y el siguiente paso, sin iniciar automáticamente
+                ninguna actuación.
               </p>
             </div>
           </div>
