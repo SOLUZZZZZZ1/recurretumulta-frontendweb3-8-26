@@ -966,9 +966,9 @@ export default function OpsCaseDetail() {
         <Panel>
           <h1 className="sr-h2">Acceso de operador necesario</h1>
           <p className="sr-p">Entra primero en OPS.</p>
-          <Link to="/ops" className="sr-btn-primary">
+          <a href="/ops" className="sr-btn-primary">
             Ir al acceso OPS
-          </Link>
+          </a>
         </Panel>
       </main>
     );
@@ -986,9 +986,9 @@ export default function OpsCaseDetail() {
     return (
       <main className="sr-container py-8">
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
-          <Link to="/ops" className="sr-btn-secondary">
+          <a href="/ops" className="sr-btn-secondary">
             ← Volver al panel
-          </Link>
+          </a>
           <Link to="/ops/followups" className="sr-btn-secondary">
             ⏰ Todos los seguimientos
           </Link>
@@ -1132,9 +1132,9 @@ export default function OpsCaseDetail() {
   return (
     <main className="sr-container py-8">
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
-        <Link to="/ops" className="sr-btn-secondary">
+        <a href="/ops" className="sr-btn-secondary">
           ← Volver al panel
-        </Link>
+        </a>
         <Link to="/ops/queue-smart" className="sr-btn-secondary">
           Cola técnica
         </Link>

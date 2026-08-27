@@ -191,12 +191,12 @@ export default function OpsVehicleRemoval() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Link
-                to="/ops"
+              <a
+                href="/ops"
                 className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100"
               >
                 ← Volver OPS
-              </Link>
+              </a>
               <Link
                 to="/ops/followups"
                 className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-300"

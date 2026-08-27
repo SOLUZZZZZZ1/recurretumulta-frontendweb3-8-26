@@ -474,12 +474,12 @@ export default function OPSQueueSmart() {
               </Link>
             ) : null}
 
-            <Link
-              to="/ops"
+            <a
+              href="/ops"
               className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
             >
               Volver
-            </Link>
+            </a>
           </div>
         </div>
       </div>

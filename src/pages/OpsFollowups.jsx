@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { publicFamilyLabel } from "../lib/opsFamilies.js";
 
 const API = "/api";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -61,17 +62,6 @@ function caseLink(item) {
     return `/ops/vehicle-removal?case_id=${encodeURIComponent(item.case_id)}`;
   }
   return `/ops/case/${encodeURIComponent(item.case_id)}`;
-}
-
-function familyLabel(item) {
-  const labels = {
-    traffic: "Tráfico y vehículos",
-    debt: "Deudas y morosidad",
-    administration: "Administración pública",
-    claims: "Viajes y reclamaciones",
-    other: "Otros / por clasificar",
-  };
-  return labels[normalize(item?.department)] || "Otros / por clasificar";
 }
 
 function Pill({ children, tone = "default" }) {
@@ -174,6 +164,7 @@ export default function OpsFollowups() {
         item.title,
         item.description,
         item.kind,
+        item.public_service_family,
       ]
         .filter(Boolean)
         .join(" ")
@@ -188,9 +179,9 @@ export default function OpsFollowups() {
         <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
           <h1 className="text-2xl font-black text-slate-950">Acceso de operador necesario</h1>
           <p className="mt-2 text-sm text-slate-600">Entra primero en OPS para consultar la bandeja global de seguimientos.</p>
-          <Link to="/ops" className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">
+          <a href="/ops" className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">
             Volver a OPS
-          </Link>
+          </a>
         </div>
       </main>
     );
@@ -207,9 +198,9 @@ export default function OpsFollowups() {
               <p className="mt-2 text-sm text-slate-300">Todos los avisos operativos, con acceso directo a su expediente.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link to="/ops" className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950">
+              <a href="/ops" className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950">
                 ← Volver al panel
-              </Link>
+              </a>
               <button
                 type="button"
                 onClick={load}
@@ -286,7 +277,7 @@ export default function OpsFollowups() {
                       <div className="mt-2 text-sm font-bold text-slate-800">
                         {item.contact_name || item.contact_email || "Cliente sin identificar"}
                       </div>
-                      <div className="mt-1 text-xs font-semibold text-slate-600">{familyLabel(item)}</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-600">{publicFamilyLabel(item)}</div>
                       {item.description ? <p className="mt-3 text-sm text-slate-700">{item.description}</p> : null}
                       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                         <span>Fecha: <b className="text-slate-700">{fmt(item.due_at)}</b></span>

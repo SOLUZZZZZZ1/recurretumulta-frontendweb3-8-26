@@ -7,3 +7,7 @@ dist/
 .vscode/
 Thumbs.db
 .vercel
+
+# Python test artifacts
+__pycache__/
+*.py[cod]

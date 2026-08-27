@@ -76,6 +76,18 @@ class OpsFollowupsContractTest(unittest.TestCase):
         self.assertIn("Ver todas las solicitudes", vehicle_removal)
         self.assertIn('to="/ops/followups"', vehicle_removal)
 
+    def test_returns_to_ops_use_a_full_direct_navigation(self):
+        for relative in (
+            "src/pages/OpsCaseDetail.jsx",
+            "src/pages/OpsFollowups.jsx",
+            "src/pages/OPSQueueSmart.jsx",
+            "src/pages/OpsVehicleRemoval.jsx",
+        ):
+            with self.subTest(relative=relative):
+                source = read(ROOT / relative)
+                self.assertIn('href="/ops"', source)
+                self.assertNotIn('to="/ops"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

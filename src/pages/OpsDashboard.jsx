@@ -1,16 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isPaidStatus } from "../lib/opsPayment.js";
+import { OPS_PUBLIC_FAMILIES, publicFamilyOf } from "../lib/opsFamilies.js";
 
 const API = "/api";
 
-const FAMILIES = [
-  { key:"traffic", icon:"🚗", label:"Tráfico y vehículos", bg:"#eff6ff", border:"#bfdbfe" },
-  { key:"debt", icon:"💳", label:"Deudas y morosidad", bg:"#f5f3ff", border:"#ddd6fe" },
-  { key:"administration", icon:"🏛️", label:"Administración pública", bg:"#fff7ed", border:"#fed7aa" },
-  { key:"claims", icon:"✈️", label:"Viajes y reclamaciones", bg:"#ecfdf5", border:"#bbf7d0" },
-  { key:"other", icon:"📂", label:"Otros / por clasificar", bg:"#f8fafc", border:"#e2e8f0" },
-];
+const FAMILY_COLORS = {
+  trafico: ["#eff6ff", "#bfdbfe"], viajes: ["#ecfdf5", "#bbf7d0"],
+  morosidad: ["#f5f3ff", "#ddd6fe"], administracion: ["#fff7ed", "#fed7aa"],
+  bancos: ["#ecfeff", "#a5f3fc"], energia: ["#fffbeb", "#fde68a"],
+  telecomunicaciones: ["#eef2ff", "#c7d2fe"], seguros: ["#f0fdfa", "#99f6e4"],
+  vivienda: ["#fff1f2", "#fecdd3"], other: ["#f8fafc", "#e2e8f0"],
+};
+const FAMILIES = OPS_PUBLIC_FAMILIES.map((family) => {
+  const [bg, border] = FAMILY_COLORS[family.key] || FAMILY_COLORS.other;
+  return { ...family, bg, border };
+});
 
 const TYPE_LABELS = {
   fine:"Multas", vehicle_removal:"Eliminar vehículo",
@@ -18,7 +23,10 @@ const TYPE_LABELS = {
   aeat:"AEAT / Hacienda", social_security:"Seguridad Social", town_hall:"Ayuntamientos",
   flight_cancelled:"Vuelo cancelado", flight_delayed:"Vuelo retrasado",
   baggage:"Equipaje", overbooking:"Overbooking", cruise:"Cruceros",
-  travel_agency:"Agencias de viajes", other:"Otros",
+  travel_agency:"Agencias de viajes", airline:"Aerolíneas, vuelos y equipaje",
+  consumer:"Reclamación de consumo", other_claim:"Otra reclamación",
+  other_traffic:"Otro trámite de tráfico", other_debt:"Otra cuestión de deuda",
+  general_administration:"Otro trámite administrativo", other:"Otros",
 };
 
 async function fetchJson(url, options={}) {
@@ -28,12 +36,7 @@ async function fetchJson(url, options={}) {
   return data;
 }
 function fmt(d){ if(!d) return "—"; try{return new Date(d).toLocaleString("es-ES");}catch{return "—";} }
-function familyOf(x){
-  const d=String(x?.department||"").toLowerCase();
-  if(["traffic","debt","administration","claims"].includes(d)) return d;
-  if(String(x?.category||"").toLowerCase()==="vehicle_removal") return "traffic";
-  return "other";
-}
+function familyOf(x){return publicFamilyOf(x);}
 function typeOf(x){
   if(x?.case_type) return String(x.case_type).toLowerCase();
   return String(x?.category||"").toLowerCase()==="vehicle_removal" ? "vehicle_removal" : "other";
@@ -55,7 +58,7 @@ function statusLabel(s){
   return m[String(s||"").toLowerCase()]||s||"Sin estado";
 }
 function caseLink(x){
-  return familyOf(x)==="traffic"&&typeOf(x)==="vehicle_removal"
+  return familyOf(x)==="trafico"&&typeOf(x)==="vehicle_removal"
     ? "/ops/vehicle-removal"
     : `/ops/case/${encodeURIComponent(x.case_id)}`;
 }
@@ -140,7 +143,7 @@ export default function OpsDashboard(){
       if(state==="presented"&&!isPresented(x))return false;
       if(state==="closed"&&!isClosed(x))return false;
       if(!q)return true;
-      return [x.contact_name,x.contact_email,x.case_id,x.expediente_ref,x.organismo,x.matricula,
+      return [x.contact_name,x.contact_email,x.case_id,x.expediente_ref,x.organismo,x.matricula,x.public_service_family,
         x.customer_comment,x.department,x.case_type,x.status,x.payment_status].filter(Boolean).join(" ").toLowerCase().includes(q);
     }).sort((a,b)=>{
       const paidPriority=Number(needsPaidReview(b))-Number(needsPaidReview(a));
@@ -189,6 +192,7 @@ export default function OpsDashboard(){
         style={{background:f.bg,border:`1px solid ${f.border}`}}>
         <div className="text-4xl">{f.icon}</div><div className="mt-3 text-lg font-bold text-slate-900">{f.label}</div>
         <div className="mt-4 flex flex-wrap gap-2"><Pill tone="info">{s.total||0} total</Pill>
+          {f.entryMode==="consultation"?<Pill>consulta previa</Pill>:null}
           <Pill tone="warn">{s.work||0} pendientes</Pill>{s.urgent?<Pill tone="danger">{s.urgent} urgentes</Pill>:null}
           {s.paid?<Pill tone="success">{s.paid} pagados por revisar</Pill>:null}
           {s.waiting?<Pill>{s.waiting} esperando cliente</Pill>:null}</div>

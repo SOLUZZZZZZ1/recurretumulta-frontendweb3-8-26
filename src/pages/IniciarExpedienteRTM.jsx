@@ -240,6 +240,7 @@ export default function IniciarExpedienteRTM() {
         department,
         case_type: form.case_type,
         source_module: "rtm_web",
+        public_service_family: selectedFamily?.id || "",
         full_name: form.full_name.trim(),
         dni_nie: normalizeDni(form.dni_nie),
         email: form.email.trim(),
