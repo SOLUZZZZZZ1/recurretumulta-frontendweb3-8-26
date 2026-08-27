@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { isPaidStatus } from "../lib/opsPayment.js";
 
 const API = "/api";
 
@@ -37,10 +38,12 @@ function typeOf(x){
   if(x?.case_type) return String(x.case_type).toLowerCase();
   return String(x?.category||"").toLowerCase()==="vehicle_removal" ? "vehicle_removal" : "other";
 }
+function isPaidCase(x){return isPaidStatus(x?.payment_status);}
 function isPresented(x){const s=String(x?.status||"").toLowerCase();return s==="submitted"||s.includes("presentado");}
 function isClosed(x){return ["closed","archived","resolved","estimado","desestimado","vehicle_removal_completed"].includes(String(x?.status||"").toLowerCase());}
-function isWaiting(x){return ["authorization_pending","pending_documents","ready_to_pay","vehicle_removal_pending_payment"].includes(String(x?.status||"").toLowerCase());}
-function needsWork(x){return !isPresented(x)&&!isClosed(x)&&!isWaiting(x);}
+function needsPaidReview(x){return isPaidCase(x)&&!isPresented(x)&&!isClosed(x);}
+function isWaiting(x){return !isPaidCase(x)&&["authorization_pending","pending_documents","ready_to_pay","vehicle_removal_pending_payment"].includes(String(x?.status||"").toLowerCase());}
+function needsWork(x){return needsPaidReview(x)||(!isPresented(x)&&!isClosed(x)&&!isWaiting(x));}
 function statusLabel(s){
   const m={authorization_pending:"Pendiente autorización",uploaded:"Documentación recibida",
     analyzed:"Analizado",generated:"Borrador generado",manual_review:"Revisión manual",
@@ -107,11 +110,13 @@ export default function OpsDashboard(){
   useEffect(()=>{if(authed)load();},[authed]);
 
   const urgentIds=useMemo(()=>new Set(due.map(x=>String(x.case_id))),[due]);
+  const paidPendingCount=useMemo(()=>items.filter(needsPaidReview).length,[items]);
   const stats=useMemo(()=>{
     const r={};
     FAMILIES.forEach(f=>{
       const a=items.filter(x=>familyOf(x)===f.key);
       r[f.key]={total:a.length,work:a.filter(needsWork).length,
+        paid:a.filter(needsPaidReview).length,
         urgent:a.filter(x=>urgentIds.has(String(x.case_id))).length,waiting:a.filter(isWaiting).length};
     });
     return r;
@@ -129,13 +134,20 @@ export default function OpsDashboard(){
       if(family!=="all"&&familyOf(x)!==family)return false;
       if(type!=="all"&&typeOf(x)!==type)return false;
       if(state==="work"&&!needsWork(x))return false;
+      if(state==="paid"&&!needsPaidReview(x))return false;
       if(state==="urgent"&&!urgentIds.has(String(x.case_id)))return false;
       if(state==="waiting"&&!isWaiting(x))return false;
       if(state==="presented"&&!isPresented(x))return false;
       if(state==="closed"&&!isClosed(x))return false;
       if(!q)return true;
       return [x.contact_name,x.contact_email,x.case_id,x.expediente_ref,x.organismo,x.matricula,
-        x.customer_comment,x.department,x.case_type,x.status].filter(Boolean).join(" ").toLowerCase().includes(q);
+        x.customer_comment,x.department,x.case_type,x.status,x.payment_status].filter(Boolean).join(" ").toLowerCase().includes(q);
+    }).sort((a,b)=>{
+      const paidPriority=Number(needsPaidReview(b))-Number(needsPaidReview(a));
+      if(paidPriority)return paidPriority;
+      const urgentPriority=Number(urgentIds.has(String(b.case_id)))-Number(urgentIds.has(String(a.case_id)));
+      if(urgentPriority)return urgentPriority;
+      return new Date(b.updated_at||0).getTime()-new Date(a.updated_at||0).getTime();
     });
   },[items,family,type,state,search,urgentIds]);
 
@@ -159,7 +171,9 @@ export default function OpsDashboard(){
           <p className="mt-2 text-sm text-slate-300">Familia → tipo de caso → estado → expediente.</p></div>
         <div className="flex flex-wrap gap-2">
           <button onClick={load} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900">{loading?"Cargando…":"↻ Refrescar"}</button>
+          <button onClick={()=>{setFamily("all");setType("all");setState("paid");}} className="rounded-xl bg-lime-300 px-4 py-2.5 text-sm font-bold text-slate-950">💶 {paidPendingCount} pagados por revisar</button>
           <button onClick={runTick} className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold">{tickLoading?"Ejecutando…":"▶ Automatización"}</button>
+          <Link to="/ops/followups" className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950">⏰ Seguimientos{due.length?` (${due.length})`:""}</Link>
           <Link to="/ops/queue-smart" className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold">Cola técnica</Link>
           <button onClick={()=>{localStorage.removeItem("ops_token");setToken("");}} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold">Salir</button>
         </div>
@@ -176,6 +190,7 @@ export default function OpsDashboard(){
         <div className="text-4xl">{f.icon}</div><div className="mt-3 text-lg font-bold text-slate-900">{f.label}</div>
         <div className="mt-4 flex flex-wrap gap-2"><Pill tone="info">{s.total||0} total</Pill>
           <Pill tone="warn">{s.work||0} pendientes</Pill>{s.urgent?<Pill tone="danger">{s.urgent} urgentes</Pill>:null}
+          {s.paid?<Pill tone="success">{s.paid} pagados por revisar</Pill>:null}
           {s.waiting?<Pill>{s.waiting} esperando cliente</Pill>:null}</div>
       </button>})}
     </section>
@@ -192,7 +207,7 @@ export default function OpsDashboard(){
           <option value="all">Todos los tipos</option>{types.map(([t,n])=><option key={t} value={t}>{TYPE_LABELS[t]||t} ({n})</option>)}
         </select>
         <select value={state} onChange={e=>setState(e.target.value)} className="rounded-xl border px-3">
-          <option value="work">Pendientes de trabajo</option><option value="urgent">Urgentes / próximos 7 días</option>
+          <option value="work">Pendientes de trabajo</option><option value="paid">Pagados pendientes de revisión</option><option value="urgent">Urgentes / próximos 7 días</option>
           <option value="waiting">Esperando cliente</option><option value="presented">Presentados / gestionados</option>
           <option value="closed">Cerrados</option><option value="all">Todos</option>
         </select>
@@ -203,7 +218,7 @@ export default function OpsDashboard(){
       <div className="flex items-center justify-between gap-3 border-b p-4">
         <div><h2 className="text-xl font-bold text-slate-900">Expedientes</h2>
           <div className="text-sm text-slate-500">{filtered.length} visibles · {items.length} cargados</div></div>
-        {due.length?<Pill tone="danger">⏰ {due.length} seguimientos vencidos/próximos</Pill>:null}
+        {due.length?<Link to="/ops/followups?scope=due" className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-800 hover:bg-rose-100">⏰ {due.length} seguimientos vencidos/próximos · Ver</Link>:null}
       </div>
       <div className="p-4 space-y-3">
         {!filtered.length?<div className="rounded-2xl border border-dashed p-8 text-center text-slate-500">No hay expedientes con estos filtros.</div>:
@@ -224,6 +239,7 @@ export default function OpsDashboard(){
                 <div className="mt-2 text-[11px] text-slate-400 break-all">Case ID: {x.case_id}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <Pill tone={isPaidCase(x)?"success":"default"}>{isPaidCase(x)?"Pago confirmado":"Sin pago confirmado"}</Pill>
                 <Pill tone={isPresented(x)?"success":isWaiting(x)?"default":urgent?"danger":"warn"}>{statusLabel(x.status)}</Pill>
                 <Link to={caseLink(x)} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white">Abrir expediente</Link>
               </div>

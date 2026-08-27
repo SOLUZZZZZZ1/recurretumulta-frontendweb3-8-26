@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { derivePaymentDisplay } from "../lib/opsPayment.js";
 
 const API = "/api";
 
@@ -258,9 +259,6 @@ function money(cents, currency = "EUR") {
     currency: currency || "EUR",
   }).format(Number(cents || 0) / 100);
 }
-
-const isPaid = (value) =>
-  ["paid", "succeeded", "complete", "completed"].includes(normalize(value));
 
 const statusLabel = (value) =>
   STATUS_LABELS[normalize(value)] || value || "Sin estado";
@@ -660,6 +658,7 @@ export default function OpsCaseDetail() {
   const token = localStorage.getItem("ops_token") || "";
 
   const [workspace, setWorkspace] = useState(null);
+  const [paymentRecord, setPaymentRecord] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [events, setEvents] = useState([]);
   const [followups, setFollowups] = useState([]);
@@ -694,58 +693,63 @@ export default function OpsCaseDetail() {
     setMessage("");
     setDebug("");
 
-    const [ws, ds, es, fs] = await Promise.allSettled([
+    const [ws, payment, ds, es, fs] = await Promise.allSettled([
       apiJson(`/ops/core/cases/${caseId}/workspace`, { headers }),
+      apiJson(`/billing/status/${caseId}`),
       apiJson(`/ops/cases/${caseId}/documents`, { headers }),
       apiJson(`/ops/cases/${caseId}/events`, { headers }),
       apiJson(`/ops/cases/${caseId}/followups`, { headers }),
     ]);
 
-    try {
-      if (ws.status !== "fulfilled") throw ws.reason;
+    const nextWorkspace = ws.status === "fulfilled" ? ws.value : null;
+    const nextDocuments =
+      ds.status === "fulfilled"
+        ? ds.value?.documents || ds.value?.items || []
+        : nextWorkspace?.documents || [];
+    const nextEvents =
+      es.status === "fulfilled"
+        ? es.value?.events || es.value?.items || []
+        : nextWorkspace?.timeline || [];
+    const nextFollowups =
+      fs.status === "fulfilled"
+        ? fs.value?.followups || fs.value?.items || []
+        : [];
 
-      const nextWorkspace = ws.value;
-      const nextDocuments =
-        ds.status === "fulfilled"
-          ? ds.value?.documents || ds.value?.items || []
-          : nextWorkspace?.documents || [];
-      const nextEvents =
-        es.status === "fulfilled"
-          ? es.value?.events || es.value?.items || []
-          : nextWorkspace?.timeline || [];
-      const nextFollowups =
-        fs.status === "fulfilled"
-          ? fs.value?.followups || fs.value?.items || []
-          : [];
+    setWorkspace(nextWorkspace);
+    setPaymentRecord(payment.status === "fulfilled" ? payment.value : null);
+    setDocuments(nextDocuments);
+    setEvents(nextEvents);
+    setFollowups(nextFollowups);
+    setSelectedDocIds((current) => {
+      const valid = current.filter((id) =>
+        nextDocuments.some((doc) => String(doc.id) === id)
+      );
+      if (valid.length) return valid;
+      return nextDocuments
+        .filter((doc) => doc.id && suggestedForZip(doc))
+        .map((doc) => String(doc.id));
+    });
 
-      setWorkspace(nextWorkspace);
-      setDocuments(nextDocuments);
-      setEvents(nextEvents);
-      setFollowups(nextFollowups);
-      setSelectedDocIds((current) => {
-        const valid = current.filter((id) =>
-          nextDocuments.some((doc) => String(doc.id) === id)
-        );
-        if (valid.length) return valid;
-        return nextDocuments
-          .filter((doc) => doc.id && suggestedForZip(doc))
-          .map((doc) => String(doc.id));
-      });
+    const partial = [
+      ["Espacio jurídico", ws],
+      ["Estado de pago", payment],
+      ["Documentos", ds],
+      ["Eventos", es],
+      ["Seguimientos", fs],
+    ]
+      .filter(([, result]) => result.status === "rejected")
+      .map(
+        ([label, result]) =>
+          `${label}: ${result.reason?.message || "Error de carga"}`
+      );
 
-      const partial = [ds, es, fs]
-        .filter((result) => result.status === "rejected")
-        .map((result) => result.reason?.message || "Error parcial");
-      if (partial.length) setDebug(partial.join(" | "));
-    } catch (error) {
-      setWorkspace(null);
-      setDocuments([]);
-      setEvents([]);
-      setFollowups([]);
+    if (ws.status === "rejected") {
       setMessage("❌ No se pudo cargar el espacio jurídico del expediente.");
-      setDebug(error?.message || "");
-    } finally {
-      setLoading(false);
     }
+    if (partial.length) {
+      setDebug(partial.join(" | "));
+    }
+    setLoading(false);
   }, [caseId, headers, token]);
 
   useEffect(() => {
@@ -775,7 +779,12 @@ export default function OpsCaseDetail() {
   );
   const filenameMap = useMemo(() => collectDocumentNames(events), [events]);
 
-  const paid = isPaid(caseData.payment_status);
+  const {
+    known: paymentKnown,
+    paid,
+    label: paymentLabel,
+    tone: paymentTone,
+  } = derivePaymentDisplay(paymentRecord, caseData);
   const factsFrozen = Boolean(latestFacts?.frozen);
   const familyResolved = normalize(resolution.status) === "resolved";
   const familyLocked = Boolean(latestFamily?.locked);
@@ -973,6 +982,153 @@ export default function OpsCaseDetail() {
     );
   }
 
+  if (!workspace) {
+    return (
+      <main className="sr-container py-8">
+        <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
+          <Link to="/ops" className="sr-btn-secondary">
+            ← Volver al panel
+          </Link>
+          <Link to="/ops/followups" className="sr-btn-secondary">
+            ⏰ Todos los seguimientos
+          </Link>
+          <button
+            type="button"
+            className="sr-btn-secondary"
+            onClick={load}
+            disabled={loading}
+          >
+            {loading ? "Actualizando…" : "↻ Actualizar"}
+          </button>
+        </div>
+
+        <header
+          style={{
+            marginTop: 16,
+            padding: 22,
+            borderRadius: 24,
+            background: "#020617",
+            color: "#fff",
+            boxShadow: "0 18px 45px rgba(15,23,42,.22)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  color: "#94a3b8",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: ".24em",
+                }}
+              >
+                RTM · EXPEDIENTE EN MODO SEGURO
+              </div>
+              <h1
+                style={{
+                  margin: "9px 0 4px",
+                  fontSize: "clamp(25px,4vw,37px)",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                Expediente {caseId}
+              </h1>
+              <div style={{ color: "#cbd5e1", lineHeight: 1.6 }}>
+                El espacio jurídico no está disponible; no se infieren datos.
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignContent: "flex-start",
+              }}
+            >
+              {stagingHost ? (
+                <Badge tone="purple">STAGING AISLADO</Badge>
+              ) : null}
+              <Badge tone={paymentTone}>{paymentLabel}</Badge>
+            </div>
+          </div>
+        </header>
+
+        <MessageBox message={message} debug={debug} />
+
+        <Panel
+          className="mt-4"
+          style={{
+            background: paid
+              ? "#f0fdf4"
+              : paymentKnown
+              ? "#fffbeb"
+              : "#fef2f2",
+            borderColor: paid
+              ? "#bbf7d0"
+              : paymentKnown
+              ? "#fde68a"
+              : "#fecaca",
+          }}
+        >
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Estado de pago independiente
+          </h2>
+          <div style={{ marginTop: 10 }}>
+            <Badge tone={paymentTone}>{paymentLabel}</Badge>
+          </div>
+          <p className="sr-p" style={{ marginBottom: 0 }}>
+            {paid
+              ? "RTM tiene el pago registrado. Este expediente debe permanecer en la cola de pagados pendientes de revisión aunque falle el espacio jurídico."
+              : paymentKnown
+              ? "RTM no tiene un pago registrado para este expediente."
+              : "No se ha podido consultar el pago. OPS no debe tratar el expediente como pagado ni como impagado hasta recuperar ese dato."}
+          </p>
+          {paymentRecord ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))",
+                gap: 10,
+                marginTop: 14,
+              }}
+            >
+              <Metric
+                label="Fecha del pago"
+                value={paymentRecord.paid_at ? fmtDate(paymentRecord.paid_at) : "—"}
+              />
+              <Metric
+                label="Producto"
+                value={paymentRecord.product_code || "—"}
+              />
+              <Metric
+                label="Estado operativo"
+                value={statusLabel(paymentRecord.status)}
+              />
+            </div>
+          ) : null}
+        </Panel>
+
+        <Panel className="mt-4">
+          <h2 className="sr-h3" style={{ marginTop: 0 }}>
+            Protección operativa activa
+          </h2>
+          <p className="sr-p" style={{ marginBottom: 0 }}>
+            Mientras el espacio jurídico no cargue, OPS oculta la cadena de
+            control y las acciones CORE. Así evita presentar estados, importes
+            o pasos inventados como si fueran datos reales.
+          </p>
+        </Panel>
+      </main>
+    );
+  }
+
   return (
     <main className="sr-container py-8">
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
@@ -981,6 +1137,9 @@ export default function OpsCaseDetail() {
         </Link>
         <Link to="/ops/queue-smart" className="sr-btn-secondary">
           Cola técnica
+        </Link>
+        <Link to="/ops/followups" className="sr-btn-secondary">
+          ⏰ Todos los seguimientos
         </Link>
         <button
           type="button"
@@ -1046,9 +1205,7 @@ export default function OpsCaseDetail() {
             {stagingHost ? (
               <Badge tone="purple">STAGING AISLADO</Badge>
             ) : null}
-            <Badge tone={paid ? "success" : "warn"}>
-              {paid ? "Pago confirmado" : "Pago pendiente"}
-            </Badge>
+            <Badge tone={paymentTone}>{paymentLabel}</Badge>
             <Badge tone="info">{statusLabel(caseData.status)}</Badge>
             <Badge tone="purple">{stageLabel(nextStep.stage)}</Badge>
           </div>
@@ -1169,15 +1326,17 @@ export default function OpsCaseDetail() {
             />
             <CheckItem
               ok={paid}
-              pending={!paid}
+              pending={paymentKnown && !paid}
               label="Pago del estudio inicial"
               detail={
                 paid
                   ? "Pago confirmado por el backend."
-                  : `Pendiente · ${money(
+                  : paymentKnown
+                  ? `No consta pago · ${money(
                       quote.amount_cents,
                       quote.currency
                     )}`
+                  : "Estado de pago no disponible."
               }
             />
             <CheckItem
@@ -1262,7 +1421,7 @@ export default function OpsCaseDetail() {
             </div>
           </div>
 
-          {!paid ? (
+          {paymentKnown && !paid ? (
             <div
               style={{
                 marginTop: 12,
@@ -1274,8 +1433,25 @@ export default function OpsCaseDetail() {
                 lineHeight: 1.55,
               }}
             >
-              El estudio no está pagado. OPS no debe ejecutar extracción
+              No consta el pago del estudio. OPS no debe ejecutar extracción
               jurídica, resolver familia, crear Previa ni generar documentos.
+            </div>
+          ) : null}
+
+          {!paymentKnown ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 14,
+                borderRadius: 14,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                color: "#991b1b",
+                lineHeight: 1.55,
+              }}
+            >
+              No se ha podido verificar el pago. OPS debe detener cualquier
+              actuación hasta recuperar el estado real.
             </div>
           ) : null}
 
@@ -1436,7 +1612,7 @@ export default function OpsCaseDetail() {
               ["Organismo / contraparte", caseData.organismo || "Pendiente"],
               ["Referencia externa", caseData.expediente_ref || "Pendiente"],
               ["Estado", statusLabel(caseData.status)],
-              ["Pago", paid ? "Confirmado" : "Pendiente"],
+              ["Pago", paymentLabel],
             ].map(([label, value]) => (
               <div
                 key={label}

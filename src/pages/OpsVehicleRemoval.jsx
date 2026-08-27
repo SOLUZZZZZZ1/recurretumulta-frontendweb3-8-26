@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 const API = "/api";
 
@@ -70,6 +70,8 @@ function Stat({ title, value, tone = "default" }) {
 }
 
 export default function OpsVehicleRemoval() {
+  const [searchParams] = useSearchParams();
+  const focusCaseId = searchParams.get("case_id") || "";
   const [token] = useState(() => localStorage.getItem("ops_token") || "");
   const [status, setStatus] = useState("all");
   const [data, setData] = useState({ items: [], summary: {}, count: 0 });
@@ -166,6 +168,9 @@ export default function OpsVehicleRemoval() {
   }
 
   const items = data.items || [];
+  const visibleItems = focusCaseId
+    ? items.filter((item) => String(item.case_id) === focusCaseId)
+    : items;
   const summary = data.summary || {};
 
   return (
@@ -192,6 +197,12 @@ export default function OpsVehicleRemoval() {
               >
                 ← Volver OPS
               </Link>
+              <Link
+                to="/ops/followups"
+                className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-300"
+              >
+                ⏰ Seguimientos
+              </Link>
               <button
                 onClick={load}
                 disabled={loading}
@@ -206,6 +217,15 @@ export default function OpsVehicleRemoval() {
         {error ? (
           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
+          </div>
+        ) : null}
+
+        {focusCaseId ? (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            <span>Mostrando el expediente enlazado desde Seguimientos.</span>
+            <Link to="/ops/vehicle-removal" className="font-bold underline underline-offset-2">
+              Ver todas las solicitudes
+            </Link>
           </div>
         ) : null}
 
@@ -237,7 +257,7 @@ export default function OpsVehicleRemoval() {
         </div>
 
         <div className="space-y-4">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <section key={item.case_id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
@@ -352,9 +372,11 @@ export default function OpsVehicleRemoval() {
             </section>
           ))}
 
-          {!items.length && !loading ? (
+          {!visibleItems.length && !loading ? (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center text-slate-500">
-              No hay solicitudes de eliminación de coche en este filtro.
+              {focusCaseId
+                ? "No se encontró la solicitud enlazada. Puedes volver a la lista completa."
+                : "No hay solicitudes de eliminación de coche en este filtro."}
             </div>
           ) : null}
         </div>
