@@ -1,10 +1,11 @@
 // src/components/ContactoExpediente.jsx
 import React, { useEffect, useState } from "react";
+import { apiFetch } from "../lib/api.js";
 
 const API = "/api";
 
 async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+  const r = await apiFetch(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || data?.message || "Error API");
   return data;

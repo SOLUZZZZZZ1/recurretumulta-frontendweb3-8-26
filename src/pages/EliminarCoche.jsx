@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const MAX_FILES = 5;
@@ -38,7 +38,7 @@ async function fetchJsonFallback(path, options = {}) {
   for (const base of RTM_API_CANDIDATES) {
     const url = buildUrl(base, path);
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (error) {
       errors.push(`${url} → ${error?.message || "Error"}`);

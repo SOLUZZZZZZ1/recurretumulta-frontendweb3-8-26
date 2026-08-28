@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-import { RTM_API_BASE } from "../lib/api.js";
+import { apiFetch, RTM_API_BASE } from "../lib/api.js";
 
 function paramsFromSearch(search) {
   const qs = new URLSearchParams(search);
@@ -29,7 +29,7 @@ async function readJson(response) {
 }
 
 async function postConfirm(caseId, sessionId) {
-  const response = await fetch(`${RTM_API_BASE}/billing/confirm`, {
+  const response = await apiFetch(`${RTM_API_BASE}/billing/confirm`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -44,7 +44,7 @@ async function postConfirm(caseId, sessionId) {
 }
 
 async function getPublicStatus(caseId) {
-  const response = await fetch(`${RTM_API_BASE}/cases/${encodeURIComponent(caseId)}/public-status`, {
+  const response = await apiFetch(`${RTM_API_BASE}/cases/${encodeURIComponent(caseId)}/public-status`, {
     method: "GET",
   });
 
@@ -52,7 +52,7 @@ async function getPublicStatus(caseId) {
 }
 
 async function getBillingStatus(caseId) {
-  const response = await fetch(`${RTM_API_BASE}/billing/status/${encodeURIComponent(caseId)}`, {
+  const response = await apiFetch(`${RTM_API_BASE}/billing/status/${encodeURIComponent(caseId)}`, {
     method: "GET",
   });
 

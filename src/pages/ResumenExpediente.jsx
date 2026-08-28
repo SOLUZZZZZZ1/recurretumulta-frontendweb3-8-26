@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
 
 function buildUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}${path}`;
@@ -28,7 +28,7 @@ async function fetchJsonFallback(path, options = {}) {
   for (const base of RTM_API_CANDIDATES) {
     const url = buildUrl(base, path);
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (e) {
       errors.push(`${url} → ${e?.message || "Error"}`);
@@ -49,6 +49,9 @@ function isPaid(v) {
 
 function isAuthorized(data) {
   if (!data) return false;
+  if (Object.prototype.hasOwnProperty.call(data?.progress || {}, "authorization_received")) {
+    return data.progress.authorization_received === true;
+  }
   if (data.authorized === true) return true;
   if (data.authorization_signed === true) return true;
   const interested = data.interested_data || {};
@@ -182,11 +185,6 @@ export default function Resumen() {
         current?.email ||
         "";
 
-      if (!email) {
-        setPayError("Falta el email del interesado. Vuelve a autorización y guarda los datos.");
-        return;
-      }
-
       const checkout = await fetchJsonFallback("/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -194,7 +192,7 @@ export default function Resumen() {
           case_id: caseId,
           product: getReviewInfo(current).product,
           payment_stage: "review",
-          email,
+          email: email || null,
         }),
       });
 

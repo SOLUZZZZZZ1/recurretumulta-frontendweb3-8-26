@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import { PUBLIC_SERVICE_FAMILIES } from "../data/publicServices.js";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
 
 async function parseResponse(response) {
   const text = await response.text().catch(() => "");
@@ -45,7 +45,7 @@ async function fetchPublicStatusWithFallback(caseId) {
     const url = `${cleanBase}/cases/${encodeURIComponent(caseId)}/public-status`;
 
     try {
-      const response = await fetch(url, { method: "GET" });
+      const response = await apiFetch(url, { method: "GET" });
       return await parseResponse(response);
     } catch (error) {
       errors.push(`${url} → ${error?.message || "error"}`);

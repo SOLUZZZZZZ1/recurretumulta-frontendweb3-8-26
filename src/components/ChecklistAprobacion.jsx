@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { RTM_API_BASE } from "../lib/api.js";
+import { apiFetch, openCaseFile, RTM_API_BASE } from "../lib/api.js";
 
 function apiUrl(path) {
   return `${RTM_API_BASE}${path}`;
 }
 
 async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+  const r = await apiFetch(url, options);
   const text = await r.text().catch(() => "");
   let data = {};
   try {
@@ -108,7 +108,7 @@ export default function ChecklistAprobacion({
 
   async function downloadAuthorization() {
     const url = apiUrl(`/cases/${caseId}/authorization-pdf`);
-    window.open(url, "_blank", "noopener,noreferrer");
+    await openCaseFile(url, caseId);
   }
 
   async function saveAndAuthorize() {
@@ -136,6 +136,12 @@ export default function ChecklistAprobacion({
 
       const data = await fetchJson(apiUrl(`/cases/${caseId}/authorize`), {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authority_version: "v1_dgt_homologado",
+          consent: true,
+          representation_confirmed: true,
+        }),
       });
 
       const url = data?.download_url
@@ -146,7 +152,7 @@ export default function ChecklistAprobacion({
       setMsg("✅ Autorización registrada. PDF generado correctamente.");
 
       try {
-        window.open(url, "_blank", "noopener,noreferrer");
+        await openCaseFile(url, caseId);
       } catch {
         // Si el navegador bloquea la ventana emergente, queda el botón de descarga.
       }
@@ -299,7 +305,7 @@ export default function ChecklistAprobacion({
         )}
 
         {downloadUrl ? (
-          <button className="sr-btn-secondary" type="button" onClick={() => window.open(downloadUrl, "_blank", "noopener,noreferrer")}>
+          <button className="sr-btn-secondary" type="button" onClick={() => openCaseFile(downloadUrl, caseId)}>
             Abrir PDF
           </button>
         ) : null}

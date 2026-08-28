@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, openCaseFile, RTM_API_CANDIDATES } from "../lib/api.js";
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
@@ -36,7 +36,7 @@ async function fetchJsonFallback(path, options = {}) {
     const url = buildUrl(base, path);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (e) {
       errors.push(`${url} → ${e?.message || "Failed to fetch"}`);
@@ -46,16 +46,10 @@ async function fetchJsonFallback(path, options = {}) {
   throw new Error(errors.join(" | "));
 }
 
-function openPdf(pathOrUrl) {
+function openPdf(pathOrUrl, caseId) {
   const url = String(pathOrUrl || "");
   if (!url) return;
-
-  if (url.startsWith("http")) {
-    window.open(url, "_blank", "noopener,noreferrer");
-    return;
-  }
-
-  window.open(buildUrl("/api", url), "_blank", "noopener,noreferrer");
+  return openCaseFile(url.startsWith("http") ? url : buildUrl("/api", url), caseId);
 }
 
 function unwrapExtracted(value) {
@@ -258,23 +252,20 @@ export default function Autorizar() {
         }),
       });
 
-      let pdfUrl = `/cases/${caseId}/authorization-pdf`;
-
-      try {
-        const auth = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
-          method: "POST",
-        });
-
-        if (auth?.download_url) {
-          pdfUrl = auth.download_url;
-        }
-      } catch {
-        // Si authorize no devuelve URL, seguimos con endpoint directo del PDF.
-      }
+      const auth = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authority_version: "v1_dgt_homologado",
+          consent: true,
+          representation_confirmed: true,
+        }),
+      });
+      const pdfUrl = auth?.download_url || `/cases/${caseId}/authorization-pdf`;
 
       setGenerated(true);
       setMsg("✅ Datos guardados. Se ha abierto la autorización para descargar, firmar y volver a subir.");
-      openPdf(pdfUrl);
+      await openPdf(pdfUrl, caseId);
     } catch (e) {
       setMsg("❌ No se pudo generar la autorización.");
       setDebug(e?.message || "");
@@ -289,6 +280,10 @@ export default function Autorizar() {
 
     if (!signedFile) {
       setMsg("❌ Selecciona la autorización firmada antes de subirla.");
+      return;
+    }
+    if (signedFile.type !== "application/pdf") {
+      setMsg("❌ La autorización firmada debe ser un PDF.");
       return;
     }
 
@@ -506,7 +501,7 @@ export default function Autorizar() {
 
             <input
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,image/*"
+              accept=".pdf,application/pdf"
               onChange={(e) => {
                 setSignedFile(e.target.files?.[0] || null);
                 setMsg("");
