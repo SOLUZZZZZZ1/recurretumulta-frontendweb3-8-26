@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
+import { RTM_API_CANDIDATES } from "../lib/api.js";
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
@@ -40,7 +32,7 @@ async function readResponse(response) {
 async function fetchJsonFallback(path, options = {}) {
   const errors = [];
 
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     const url = buildUrl(base, path);
 
     try {

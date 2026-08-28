@@ -1,16 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const API = "/api";
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-  API,
-].filter(Boolean);
+import { RTM_API_CANDIDATES } from "../lib/api.js";
 
 const HARD_SEND_LIMIT_BYTES = 2.2 * 1024 * 1024;
 const TARGET_IMAGE_BYTES = 1.6 * 1024 * 1024;
@@ -283,7 +274,7 @@ async function parseResponse(response) {
 async function requestWithFallback(path, options = {}) {
   const errors = [];
 
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     const cleanBase = String(base).replace(/\/$/, "");
     const url = `${cleanBase}${path}`;
 

@@ -1,11 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  "https://recurretumulta-backend.onrender.com";
+import { RTM_API_BASE } from "../lib/api.js";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -175,7 +171,7 @@ export default function Deudas() {
 
       caseFiles.forEach((file) => payload.append("case_files", file));
 
-      const response = await fetch(`${API_BASE}/rtm/intake`, {
+      const response = await fetch(`${RTM_API_BASE}/rtm/intake`, {
         method: "POST",
         body: payload,
       });

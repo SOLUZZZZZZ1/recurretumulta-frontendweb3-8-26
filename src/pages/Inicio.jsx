@@ -1,15 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const API = "/api";
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-const API_CANDIDATES = [
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-  API,
-].filter(Boolean);
+import { RTM_API_CANDIDATES } from "../lib/api.js";
 
 async function parseResponse(response) {
   const text = await response.text().catch(() => "");
@@ -47,7 +39,7 @@ function looksLikeUuid(value) {
 async function fetchPublicStatusWithFallback(caseId) {
   const errors = [];
 
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     const cleanBase = String(base).replace(/\/$/, "");
     const url = `${cleanBase}/cases/${encodeURIComponent(caseId)}/public-status`;
 
@@ -65,7 +57,7 @@ async function fetchPublicStatusWithFallback(caseId) {
 async function fetchContinueLookupWithFallback(caseIdOrExpediente) {
   const errors = [];
 
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     const cleanBase = String(base).replace(/\/$/, "");
     const url = `${cleanBase}/cases/continue-lookup?q=${encodeURIComponent(
       caseIdOrExpediente

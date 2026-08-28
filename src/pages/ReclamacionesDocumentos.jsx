@@ -1,15 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
+import { RTM_API_CANDIDATES } from "../lib/api.js";
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
@@ -46,7 +38,7 @@ async function readResponse(response) {
 async function fetchJsonFallback(path, options = {}) {
   const errors = [];
 
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     const url = buildUrl(base, path);
 
     try {

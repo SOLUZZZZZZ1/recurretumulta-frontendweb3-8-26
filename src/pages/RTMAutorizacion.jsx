@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
+import { RTM_API_CANDIDATES } from "../lib/api.js";
 
 const DEPARTMENT_CONFIG = {
   traffic: {
@@ -91,7 +83,7 @@ async function readResponse(response) {
 async function fetchJsonFallback(path, options = {}) {
   const errors = [];
 
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     const url = buildUrl(base, path);
 
     try {
@@ -106,15 +98,11 @@ async function fetchJsonFallback(path, options = {}) {
 }
 
 function openBackendFile(path) {
-  const candidates = [
-    import.meta.env.VITE_API_BASE_URL,
-    import.meta.env.VITE_API_URL,
-    "/api",
-    DIRECT_BACKEND,
-  ].filter(Boolean);
-
-  const first = candidates[0];
-  window.open(buildUrl(first, path), "_blank", "noopener,noreferrer");
+  window.open(
+    buildUrl(RTM_API_CANDIDATES[0], path),
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
 
 function firstValue(...values) {

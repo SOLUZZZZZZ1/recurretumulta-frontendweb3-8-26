@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  DIRECT_BACKEND;
+import { RTM_API_BASE } from "../lib/api.js";
 
 function apiUrl(path) {
-  const base = String(API || DIRECT_BACKEND).replace(/\/$/, "");
-  return `${base}${path}`;
+  return `${RTM_API_BASE}${path}`;
 }
 
 async function fetchJson(url, options = {}) {

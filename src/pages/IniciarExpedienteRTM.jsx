@@ -5,14 +5,7 @@ import {
   PUBLIC_SERVICE_FAMILIES,
   getPublicService,
 } from "../data/publicServices.js";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
+import { RTM_API_CANDIDATES } from "../lib/api.js";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
@@ -85,7 +78,7 @@ async function readResponse(response) {
 
 async function fetchJsonFallback(path, options = {}) {
   const errors = [];
-  for (const base of API_CANDIDATES) {
+  for (const base of RTM_API_CANDIDATES) {
     try {
       const response = await fetch(buildUrl(base, path), options);
       return await readResponse(response);
@@ -97,8 +90,11 @@ async function fetchJsonFallback(path, options = {}) {
 }
 
 function openBackendFile(path) {
-  const base = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "/api";
-  window.open(buildUrl(base, path), "_blank", "noopener,noreferrer");
+  window.open(
+    buildUrl(RTM_API_CANDIDATES[0], path),
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
 
 function normalizeDni(value = "") {
