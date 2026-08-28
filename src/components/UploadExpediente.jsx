@@ -1,11 +1,16 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  apiFetch,
+  redactCaseAccessToken,
+  rememberCaseAccessToken,
+} from "../lib/api.js";
 
 const API = "/api";
 const MAX_FILES = 5;
 
 async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+  const r = await apiFetch(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     const detail = data?.detail || data?.message || data?.error || "Error API";
@@ -174,12 +179,15 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
         if (!caseId) throw new Error("El backend no devolvió case_id para el expediente.");
       }
 
+      if (!rememberCaseAccessToken(caseId, data?.case_access_token)) {
+        throw new Error("El backend no devolvió la capacidad segura del expediente.");
+      }
       await saveClientDetails(caseId);
 
       localStorage.setItem(
         "rtm_last_analysis",
         JSON.stringify({
-          ...data,
+          ...redactCaseAccessToken(data),
           case_id: caseId,
           client_data: {
             ...client,

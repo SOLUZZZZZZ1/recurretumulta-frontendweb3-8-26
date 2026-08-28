@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
 
 function buildUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}${path}`;
@@ -29,7 +29,7 @@ async function fetchJsonFallback(path, options = {}) {
     const url = buildUrl(base, path);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (e) {
       errors.push(`${url} → ${e?.message || "Error"}`);
@@ -50,8 +50,11 @@ function getEmailFromStatus(status) {
 }
 
 function isAuthorizedForPayment(status, billingAuthorized) {
-  if (billingAuthorized) return true;
   if (!status) return false;
+  if (Object.prototype.hasOwnProperty.call(status?.progress || {}, "authorization_received")) {
+    return status.progress.authorization_received === true;
+  }
+  if (billingAuthorized) return true;
 
   const msg = String(status?.message || "").toLowerCase();
   const signedLabel = String(
@@ -159,11 +162,6 @@ export default function PagarPresentar({ caseId, publicStatus, onUpdated }) {
       return;
     }
 
-    if (!latestEmail) {
-      setMsg("❌ Falta el email del interesado. Escríbelo aquí para continuar.");
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -175,8 +173,9 @@ export default function PagarPresentar({ caseId, publicStatus, onUpdated }) {
         body: JSON.stringify({
           case_id: caseId,
           product: "dgt",
-          email: latestEmail,
+          email: latestEmail || null,
           locale: "es",
+          payment_stage: "final",
         }),
       });
 

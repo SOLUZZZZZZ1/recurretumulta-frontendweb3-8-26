@@ -695,7 +695,7 @@ export default function OpsCaseDetail() {
 
     const [ws, payment, ds, es, fs] = await Promise.allSettled([
       apiJson(`/ops/core/cases/${caseId}/workspace`, { headers }),
-      apiJson(`/billing/status/${caseId}`),
+      apiJson(`/billing/status/${caseId}`, { headers }),
       apiJson(`/ops/cases/${caseId}/documents`, { headers }),
       apiJson(`/ops/cases/${caseId}/events`, { headers }),
       apiJson(`/ops/cases/${caseId}/followups`, { headers }),

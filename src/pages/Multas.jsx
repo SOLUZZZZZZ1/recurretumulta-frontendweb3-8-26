@@ -1,7 +1,12 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import {
+  apiFetch,
+  redactCaseAccessToken,
+  rememberCaseAccessToken,
+  RTM_API_CANDIDATES,
+} from "../lib/api.js";
 
 const HARD_SEND_LIMIT_BYTES = 2.2 * 1024 * 1024;
 const TARGET_IMAGE_BYTES = 1.6 * 1024 * 1024;
@@ -279,7 +284,7 @@ async function requestWithFallback(path, options = {}) {
     const url = `${cleanBase}${path}`;
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await parseResponse(response);
     } catch (error) {
       errors.push(`${url} → ${error?.message || "error"}`);
@@ -427,7 +432,10 @@ export default function Multas() {
         body: formData,
       });
 
-      localStorage.setItem("rtm_last_analysis", JSON.stringify(data));
+      localStorage.setItem(
+        "rtm_last_analysis",
+        JSON.stringify(redactCaseAccessToken(data))
+      );
 
       const newCaseId =
         data?.case_id ||
@@ -440,6 +448,10 @@ export default function Multas() {
         throw new Error(
           "El análisis se completó, pero no se recibió número de expediente."
         );
+      }
+
+      if (!rememberCaseAccessToken(newCaseId, data?.case_access_token)) {
+        throw new Error("El backend no devolvió la capacidad segura del expediente.");
       }
 
       navigate(`/resumen?case=${encodeURIComponent(newCaseId)}`);

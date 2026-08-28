@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, openCaseFile, RTM_API_CANDIDATES } from "../lib/api.js";
 
 const DEPARTMENT_CONFIG = {
   traffic: {
@@ -87,7 +87,7 @@ async function fetchJsonFallback(path, options = {}) {
     const url = buildUrl(base, path);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (error) {
       errors.push(`${url} → ${error?.message || "Error"}`);
@@ -97,12 +97,8 @@ async function fetchJsonFallback(path, options = {}) {
   throw new Error(errors.join(" | "));
 }
 
-function openBackendFile(path) {
-  window.open(
-    buildUrl(RTM_API_CANDIDATES[0], path),
-    "_blank",
-    "noopener,noreferrer"
-  );
+function openBackendFile(path, caseId) {
+  return openCaseFile(buildUrl(RTM_API_CANDIDATES[0], path), caseId);
 }
 
 function firstValue(...values) {
@@ -230,7 +226,13 @@ export default function RTMAutorizacion() {
           telefono: firstValue(interested.telefono, interested.phone),
         });
 
-        if (status?.authorized === true) {
+        const signedAuthorizationReceived = Object.prototype.hasOwnProperty.call(
+          status?.progress || {},
+          "authorization_received"
+        )
+          ? status.progress.authorization_received === true
+          : status?.authorized === true;
+        if (signedAuthorizationReceived) {
           setUploaded(true);
           setGenerated(true);
         }
@@ -304,12 +306,25 @@ export default function RTMAutorizacion() {
         }),
       });
 
+      const authority = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authority_version: "v1_dgt_homologado",
+          consent: true,
+          representation_confirmed: true,
+        }),
+      });
+
       setGenerated(true);
       setMsg(
         "✅ Datos guardados. Se ha abierto la autorización para descargar y firmar."
       );
 
-      openBackendFile(`/cases/${caseId}/rtm-authorization-pdf`);
+      await openBackendFile(
+        authority?.download_url || `/cases/${caseId}/authorization-pdf`,
+        caseId
+      );
     } catch (error) {
       setMsg("❌ No se pudo generar la autorización RTM.");
       setDebug(error?.message || "");
@@ -324,6 +339,10 @@ export default function RTMAutorizacion() {
 
     if (!signedFile) {
       setMsg("❌ Selecciona la autorización firmada.");
+      return;
+    }
+    if (signedFile.type !== "application/pdf") {
+      setMsg("❌ La autorización firmada debe ser un PDF.");
       return;
     }
 
@@ -599,7 +618,7 @@ export default function RTMAutorizacion() {
               type="button"
               className="sr-btn-secondary"
               onClick={() =>
-                openBackendFile(`/cases/${caseId}/rtm-authorization-pdf`)
+                openBackendFile(`/cases/${caseId}/authorization-pdf`, caseId)
               }
               disabled={!caseId}
               style={{ marginBottom: 14 }}
@@ -609,7 +628,7 @@ export default function RTMAutorizacion() {
 
             <input
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,image/*"
+              accept=".pdf,application/pdf"
               onChange={(event) => {
                 setSignedFile(event.target.files?.[0] || null);
                 setMsg("");

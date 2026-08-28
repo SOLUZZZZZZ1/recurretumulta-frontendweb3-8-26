@@ -5,7 +5,12 @@ import {
   PUBLIC_SERVICE_FAMILIES,
   getPublicService,
 } from "../data/publicServices.js";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import {
+  apiFetch,
+  openCaseFile,
+  rememberCaseAccessToken,
+  RTM_API_CANDIDATES,
+} from "../lib/api.js";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
@@ -80,7 +85,7 @@ async function fetchJsonFallback(path, options = {}) {
   const errors = [];
   for (const base of RTM_API_CANDIDATES) {
     try {
-      const response = await fetch(buildUrl(base, path), options);
+      const response = await apiFetch(buildUrl(base, path), options);
       return await readResponse(response);
     } catch (error) {
       errors.push(error?.message || "Error");
@@ -89,12 +94,8 @@ async function fetchJsonFallback(path, options = {}) {
   throw new Error(errors.join(" | "));
 }
 
-function openBackendFile(path) {
-  window.open(
-    buildUrl(RTM_API_CANDIDATES[0], path),
-    "_blank",
-    "noopener,noreferrer"
-  );
+function openBackendFile(path, caseId) {
+  return openCaseFile(buildUrl(RTM_API_CANDIDATES[0], path), caseId);
 }
 
 function normalizeDni(value = "") {
@@ -263,11 +264,27 @@ export default function IniciarExpedienteRTM() {
       const data = await fetchJsonFallback("/cases/intake-draft", { method: "POST", body: fd });
       const caseId = data?.case_id || data?.id;
       if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
+      if (!rememberCaseAccessToken(caseId, data?.case_access_token)) {
+        throw new Error("El backend no devolvió la capacidad segura del expediente.");
+      }
 
-      const pdfPath = data?.authorization_download_url || `/cases/${caseId}/rtm-authorization-pdf`;
+      const authority = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authority_version: "v1_dgt_homologado",
+          consent: true,
+          representation_confirmed: true,
+        }),
+      });
+
+      const pdfPath =
+        authority?.download_url ||
+        data?.authorization_download_url ||
+        `/cases/${caseId}/authorization-pdf`;
       setDraftCase({ caseId, pdfPath, nextPath: data?.next_path || config.nextPath });
       setMessage("✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
-      openBackendFile(pdfPath);
+      await openBackendFile(pdfPath, caseId);
     } catch (error) {
       setMessage(error?.message || "No se pudo crear el expediente.");
     } finally {
@@ -278,7 +295,8 @@ export default function IniciarExpedienteRTM() {
   async function uploadAuthorization() {
     if (!draftCase?.caseId) return setMessage("Primero crea el expediente.");
     if (!signedAuthorization) return setMessage("Selecciona la autorización firmada.");
-    if (signedAuthorization.size > MAX_FILE_BYTES) return setMessage("La autorización supera 12 MB.");
+    if (signedAuthorization.type !== "application/pdf") return setMessage("La autorización firmada debe ser PDF.");
+    if (signedAuthorization.size > 10 * 1024 * 1024) return setMessage("La autorización supera 10 MB.");
 
     setUploading(true);
     setMessage("");
@@ -560,7 +578,7 @@ export default function IniciarExpedienteRTM() {
             </Section>
 
             {!draftCase && <>
-              <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Deseo generar la autorización RTM vinculada a este expediente.</Check>
+              <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
               <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
               <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : "Crear expediente y descargar autorización"}</button>
             </>}
@@ -568,9 +586,9 @@ export default function IniciarExpedienteRTM() {
 
           {draftCase && <Section title="6. Descargar y subir la autorización RTM">
             <div style={{ padding: 14, marginBottom: 16, borderRadius: 14, background: "#dcfce7", color: "#166534", fontWeight: 900, overflowWrap: "anywhere" }}>Expediente: {draftCase.caseId}</div>
-            <button type="button" className="sr-btn-primary" onClick={() => openBackendFile(draftCase.pdfPath)}>⬇ Descargar autorización RTM</button>
+            <button type="button" className="sr-btn-primary" onClick={() => openBackendFile(draftCase.pdfPath, draftCase.caseId)}>⬇ Descargar autorización RTM</button>
             <div style={{ marginTop: 18 }}>
-              <UploadBox label="Autorización firmada" file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,.jpg,.jpeg,.png,image/*" />
+              <UploadBox label="Autorización firmada" file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
             </div>
             <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : "Subir autorización firmada"}</button>
             {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación del caso</button>}

@@ -1199,6 +1199,7 @@ export default function OpsCaseDetailPro() {
 
                     const res = await fetch(`/api/cases/${caseId}/upload-receipt`, {
                       method: "POST",
+                      headers,
                       body: fd,
                     });
 

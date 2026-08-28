@@ -1,10 +1,11 @@
 import React, { useMemo, useRef, useState } from "react";
+import { apiFetch } from "../lib/api.js";
 
 const API = "/api";
 const MAX_FILES = 5;
 
 async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+  const r = await apiFetch(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || data?.message || "Error API");
   return data;

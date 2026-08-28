@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-import { RTM_API_CANDIDATES } from "../lib/api.js";
+import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
@@ -42,7 +42,7 @@ async function fetchJsonFallback(path, options = {}) {
     const url = buildUrl(base, path);
 
     try {
-      const response = await fetch(url, options);
+      const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (error) {
       errors.push(`${url} → ${error?.message || "Error"}`);

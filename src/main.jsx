@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter as Router } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App.jsx";
+import { bootstrapCaseAccessFromUrl } from "./lib/caseAccess.js";
 import "./index.css";
 
 /*
@@ -23,6 +24,7 @@ function migrateLegacyHashRoute() {
 }
 
 migrateLegacyHashRoute();
+bootstrapCaseAccessFromUrl();
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
