@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portal municipal sintético RTM</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="safety-banner">
+      STAGING · SYNTHETIC ONLY · SIN EFECTO JURÍDICO
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="overline">AYUNTAMIENTO SINTÉTICO DE PRUEBAS</p>
+        <h1>Aportación simulada de documentación</h1>
+        <p>
+          Este portal solo permite verificar la adjunción local. No tiene red,
+          registro, firma, Administración ni destinatario real.
+        </p>
+      </section>
+
+      <section class="notice" aria-label="Aviso de representación">
+        <strong>Representación simulada</strong>
+        <span>Interesado representado · autorización obligatoria</span>
+      </section>
+
+      <section class="form-card" aria-labelledby="documents-title">
+        <div class="heading-row">
+          <div>
+            <p class="step">PASO SINTÉTICO 1</p>
+            <h2 id="documents-title">Añade los documentos por separado</h2>
+          </div>
+          <span id="local-count" class="counter">0/3</span>
+        </div>
+
+        <div class="upload-row">
+          <div>
+            <label for="fine-file">Añadir multa</label>
+            <p>PDF · obligatorio</p>
+          </div>
+          <input
+            id="fine-file"
+            name="fine_document"
+            type="file"
+            data-rtm-slot="fine"
+            accept="application/pdf"
+          />
+          <output data-output-for="fine-file">Ningún archivo</output>
+        </div>
+
+        <div class="upload-row">
+          <div>
+            <label for="appeal-file">Añadir recurso</label>
+            <p>PDF · obligatorio</p>
+          </div>
+          <input
+            id="appeal-file"
+            name="appeal_document"
+            type="file"
+            data-rtm-slot="appeal"
+            accept="application/pdf"
+          />
+          <output data-output-for="appeal-file">Ningún archivo</output>
+        </div>
+
+        <div class="upload-row">
+          <div>
+            <label for="authorization-file">Añadir autorización</label>
+            <p>PDF · obligatorio</p>
+          </div>
+          <input
+            id="authorization-file"
+            name="authorization_document"
+            type="file"
+            data-rtm-slot="authorization"
+            accept="application/pdf"
+          />
+          <output data-output-for="authorization-file">Ningún archivo</output>
+        </div>
+
+        <button id="validate-only" type="button">Validar localmente</button>
+        <p id="validation-result" class="validation-result" role="status"></p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

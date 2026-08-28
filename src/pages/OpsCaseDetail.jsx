@@ -163,19 +163,39 @@ const STAGE_LABELS = {
   case_closed: "Expediente cerrado",
 };
 
-const EXTERNAL_KINDS = [
-  ["documento_externo", "Documento externo"],
-  ["requerimiento", "Requerimiento"],
-  ["resolucion", "Resolución"],
-  ["prueba_externa", "Prueba o justificante"],
-  ["contestacion_ayuntamiento", "Contestación recibida"],
-  ["justificante_presentacion", "Justificante de presentación"],
-  ["instancia_firmada", "Instancia firmada"],
-  ["csv_registro", "CSV / registro"],
-];
+const INTERNAL_KEYS = new Set([
+  "access_token", "b2", "b2_bucket", "b2_key", "bucket", "document_url",
+  "download_endpoint", "download_url", "internal_path", "key", "object_key",
+  "file_name", "filename", "original_bucket", "original_filename", "original_key",
+  "presign", "presigned_url", "secret",
+  "signed_url", "source_bucket", "source_key", "source_keys", "storage",
+  "storage_bucket", "storage_coordinates", "storage_key", "storage_locator",
+  "storage_path", "token",
+]);
 
-const INTERNAL_KEYS =
-  /(^|_)(b2|bucket|storage|secret|token|presign|signed_url|download_url|internal_path|object_key|key)$/i;
+const normalizePayloadKey = (key) =>
+  String(key || "")
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+
+const isInternalKey = (key) => {
+  const normalized = normalizePayloadKey(key);
+  return (
+    INTERNAL_KEYS.has(normalized) ||
+    /(^|_)(?:access|auth|bearer|refresh|session)?_?token(?:_|$)/.test(normalized) ||
+    /(^|_)(?:api|encryption|private|secret|signing)?_?key(?:_|$)/.test(normalized) ||
+    /(^|_)(?:secret|presign|presigned)(?:_|$)/.test(normalized) ||
+    /(^|_)(?:b2|bucket)(?:_|$)/.test(normalized) ||
+    /(^|_)(?:object|storage|internal|source|original)_(?:bucket|coordinates|key|keys|locator|path|paths|uri|url)(?:_|$)/.test(normalized) ||
+    /(^|_)(?:content|document|download|file|presigned|signed|upload)_(?:endpoint|path|route|uri|url)(?:_|$)/.test(normalized)
+  );
+};
+
+const INTERNAL_VALUE =
+  /(?:^(?:b2|gs|s3):\/\/|\/(?:home|tmp|var|workspace)\/|[?&](?:x-amz|x-goog)-(?:credential|signature)=)/i;
 
 const normalize = (value) => String(value || "").trim().toLowerCase();
 
@@ -225,15 +245,6 @@ async function readJson(response) {
 
 async function apiJson(path, options = {}) {
   return readJson(await fetch(apiUrl(path), options));
-}
-
-async function apiBlob(path, options = {}) {
-  const response = await fetch(apiUrl(path), options);
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-  return response.blob();
 }
 
 function fmtDate(value) {
@@ -312,40 +323,15 @@ function sanitizePayload(value, depth = 0) {
   if (depth > 5) return "…";
   if (Array.isArray(value))
     return value.map((item) => sanitizePayload(item, depth + 1));
+  if (typeof value === "string" && INTERNAL_VALUE.test(value))
+    return "[dato interno oculto]";
   if (!value || typeof value !== "object") return value;
   const result = {};
   for (const [key, child] of Object.entries(value)) {
-    if (INTERNAL_KEYS.test(key)) continue;
+    if (isInternalKey(key)) continue;
     result[key] = sanitizePayload(child, depth + 1);
   }
   return result;
-}
-
-function collectDocumentNames(events = []) {
-  const names = new Map();
-  function walk(value) {
-    if (Array.isArray(value)) return value.forEach(walk);
-    if (!value || typeof value !== "object") return;
-    const id = value.document_id || value.id;
-    const filename = value.filename || value.name;
-    if (id && filename) names.set(String(id), String(filename));
-    Object.values(value).forEach(walk);
-  }
-  events.forEach((event) => walk(event?.payload));
-  return names;
-}
-
-function suggestedForZip(doc = {}) {
-  const kind = normalize(doc.kind);
-  return (
-    kind.includes("identity") ||
-    kind.includes("authorization") ||
-    kind.includes("original") ||
-    kind.includes("generated") ||
-    kind.includes("recurso") ||
-    kind.includes("justificante") ||
-    kind.includes("resolucion")
-  );
 }
 
 const authorityLatest = (workspace, key) =>
@@ -492,13 +478,7 @@ function MessageBox({ message, debug }) {
   );
 }
 
-function DocumentRow({
-  doc,
-  filename,
-  selected,
-  onToggle,
-  onDownload,
-}) {
+function DocumentRow({ doc }) {
   return (
     <div
       style={{
@@ -507,11 +487,9 @@ function DocumentRow({
         justifyContent: "space-between",
         gap: 14,
         padding: 14,
-        border: selected
-          ? "1px solid #60a5fa"
-          : "1px solid #e2e8f0",
+        border: "1px solid #e2e8f0",
         borderRadius: 16,
-        background: selected ? "#eff6ff" : "#fff",
+        background: "#fff",
       }}
     >
       <div
@@ -522,13 +500,6 @@ function DocumentRow({
           minWidth: 0,
         }}
       >
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => onToggle(doc)}
-          title="Incluir en ZIP"
-          style={{ width: 18, height: 18, marginTop: 8, flexShrink: 0 }}
-        />
         <div
           style={{
             width: 42,
@@ -547,18 +518,6 @@ function DocumentRow({
           <div style={{ fontWeight: 900, color: "#0f172a" }}>
             {documentLabel(doc.kind)}
           </div>
-          {filename ? (
-            <div
-              style={{
-                marginTop: 3,
-                color: "#334155",
-                fontSize: 13,
-                overflowWrap: "anywhere",
-              }}
-            >
-              {filename}
-            </div>
-          ) : null}
           <div style={{ marginTop: 4, color: "#64748b", fontSize: 12 }}>
             {doc.mime || "application/octet-stream"} ·{" "}
             {prettyBytes(doc.size_bytes)} · {fmtDate(doc.created_at)}
@@ -568,13 +527,7 @@ function DocumentRow({
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        className="sr-btn-secondary"
-        onClick={() => onDownload(doc, filename)}
-      >
-        Descargar
-      </button>
+      <Badge tone="success">Custodiado en RTM</Badge>
     </div>
   );
 }
@@ -662,21 +615,14 @@ export default function OpsCaseDetail() {
   const [documents, setDocuments] = useState([]);
   const [events, setEvents] = useState([]);
   const [followups, setFollowups] = useState([]);
-  const [selectedDocIds, setSelectedDocIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [debug, setDebug] = useState("");
-  const [zipLoading, setZipLoading] = useState(false);
 
   const [followupTitle, setFollowupTitle] = useState("");
   const [followupDueAt, setFollowupDueAt] = useState("");
   const [followupDescription, setFollowupDescription] = useState("");
   const [followupCreating, setFollowupCreating] = useState(false);
-
-  const [externalKind, setExternalKind] = useState("documento_externo");
-  const [externalNote, setExternalNote] = useState("");
-  const [externalFile, setExternalFile] = useState(null);
-  const [externalUploading, setExternalUploading] = useState(false);
 
   const headers = useMemo(
     () => (token ? { "X-Operator-Token": token } : {}),
@@ -706,10 +652,11 @@ export default function OpsCaseDetail() {
       ds.status === "fulfilled"
         ? ds.value?.documents || ds.value?.items || []
         : nextWorkspace?.documents || [];
-    const nextEvents =
+    const nextEvents = sanitizePayload(
       es.status === "fulfilled"
         ? es.value?.events || es.value?.items || []
-        : nextWorkspace?.timeline || [];
+        : nextWorkspace?.timeline || []
+    );
     const nextFollowups =
       fs.status === "fulfilled"
         ? fs.value?.followups || fs.value?.items || []
@@ -720,15 +667,6 @@ export default function OpsCaseDetail() {
     setDocuments(nextDocuments);
     setEvents(nextEvents);
     setFollowups(nextFollowups);
-    setSelectedDocIds((current) => {
-      const valid = current.filter((id) =>
-        nextDocuments.some((doc) => String(doc.id) === id)
-      );
-      if (valid.length) return valid;
-      return nextDocuments
-        .filter((doc) => doc.id && suggestedForZip(doc))
-        .map((doc) => String(doc.id));
-    });
 
     const partial = [
       ["Espacio jurídico", ws],
@@ -766,6 +704,8 @@ export default function OpsCaseDetail() {
   const stagingHost =
     typeof window !== "undefined" &&
     window.location.hostname.includes("frontend-staging");
+  const presenterAvailable =
+    workspace?.actions?.presenter_available === true;
 
   const latestFacts = authorityLatest(workspace, "validated_facts");
   const latestFamily = authorityLatest(workspace, "family_resolution");
@@ -777,7 +717,6 @@ export default function OpsCaseDetail() {
     () => new Set(documents.map((doc) => normalize(doc.kind))),
     [documents]
   );
-  const filenameMap = useMemo(() => collectDocumentNames(events), [events]);
 
   const {
     known: paymentKnown,
@@ -807,74 +746,6 @@ export default function OpsCaseDetail() {
       kind.includes("original")
     ),
   };
-
-  function toggleDocument(doc) {
-    const id = String(doc?.id || "");
-    if (!id) return;
-    setSelectedDocIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-    );
-  }
-
-  async function downloadDocument(doc, filename) {
-    setMessage("");
-    setDebug("");
-    try {
-      if (!doc?.id)
-        throw new Error("Documento sin identificador de descarga.");
-      const blob = await apiBlob(`/ops/documents/${doc.id}/download`, {
-        headers,
-      });
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download =
-        filename || documentLabel(doc.kind).replace(/\s+/g, "_");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-    } catch (error) {
-      setMessage("❌ No se pudo descargar el documento.");
-      setDebug(error?.message || "");
-    }
-  }
-
-  async function downloadZip() {
-    setZipLoading(true);
-    setMessage("");
-    setDebug("");
-    try {
-      const path = selectedDocIds.length
-        ? `/ops/cases/${caseId}/zip-selected`
-        : `/ops/cases/${caseId}/zip`;
-      const options = selectedDocIds.length
-        ? {
-            method: "POST",
-            headers: { ...headers, "Content-Type": "application/json" },
-            body: JSON.stringify({ document_ids: selectedDocIds }),
-          }
-        : { headers };
-      const blob = await apiBlob(path, options);
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = `expediente_${caseId}${
-        selectedDocIds.length ? "_seleccion" : ""
-      }.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-    } catch (error) {
-      setMessage("❌ No se pudo preparar el ZIP.");
-      setDebug(error?.message || "");
-    } finally {
-      setZipLoading(false);
-    }
-  }
 
   async function createFollowup() {
     if (!followupTitle.trim() || !followupDueAt.trim()) {
@@ -925,38 +796,6 @@ export default function OpsCaseDetail() {
     } catch (error) {
       setMessage("❌ No se pudo resolver el seguimiento.");
       setDebug(error?.message || "");
-    }
-  }
-
-  async function uploadExternalDocument() {
-    if (!externalFile) {
-      setMessage("❌ Selecciona un documento externo.");
-      return;
-    }
-    setExternalUploading(true);
-    setMessage("");
-    setDebug("");
-    try {
-      const formData = new FormData();
-      formData.append("file", externalFile);
-      formData.append("kind", externalKind);
-      if (externalNote.trim())
-        formData.append("note", externalNote.trim());
-
-      await apiJson(`/ops/cases/${caseId}/upload-external-document`, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-      setExternalFile(null);
-      setExternalNote("");
-      setMessage("✅ Documento externo incorporado.");
-      await load();
-    } catch (error) {
-      setMessage("❌ No se pudo incorporar el documento externo.");
-      setDebug(error?.message || "");
-    } finally {
-      setExternalUploading(false);
     }
   }
 
@@ -1525,43 +1364,22 @@ export default function OpsCaseDetail() {
               Documentos del expediente
             </h2>
             <p className="sr-p" style={{ margin: "5px 0 0" }}>
-              Descarga protegida; no se muestran bucket, claves ni rutas.
+              Custodia interna: no se muestran rutas ni se ofrecen al operador
+              funciones de descarga, previsualización, ZIP o exportación.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="sr-btn-secondary"
-              onClick={() =>
-                setSelectedDocIds(
-                  documents
-                    .filter((doc) => doc.id)
-                    .map((doc) => String(doc.id))
-                )
-              }
-            >
-              Seleccionar todos
-            </button>
-            <button
-              type="button"
-              className="sr-btn-secondary"
-              onClick={() => setSelectedDocIds([])}
-            >
-              Limpiar
-            </button>
-            <button
-              type="button"
+          {presenterAvailable ? (
+            <Link
+              to={`/ops/case/${encodeURIComponent(caseId)}/presenter`}
               className="sr-btn-primary"
-              onClick={downloadZip}
-              disabled={zipLoading}
             >
-              {zipLoading
-                ? "Preparando ZIP…"
-                : selectedDocIds.length
-                ? `ZIP selección (${selectedDocIds.length})`
-                : "ZIP expediente"}
-            </button>
-          </div>
+              Preparar presentación
+            </Link>
+          ) : (
+            <span className="sr-badge">
+              Presenter no habilitado para este expediente
+            </span>
+          )}
         </div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
@@ -1570,10 +1388,6 @@ export default function OpsCaseDetail() {
               <DocumentRow
                 key={doc.id || `${doc.kind}-${doc.created_at}`}
                 doc={doc}
-                filename={filenameMap.get(String(doc.id)) || ""}
-                selected={selectedDocIds.includes(String(doc.id))}
-                onToggle={toggleDocument}
-                onDownload={downloadDocument}
               />
             ))
           ) : (
@@ -1635,48 +1449,25 @@ export default function OpsCaseDetail() {
           </div>
         </Panel>
 
-        <Panel>
-          <h2 className="sr-h3" style={{ marginTop: 0 }}>
-            Añadir documentación externa
-          </h2>
-          <p className="sr-p">
-            Incorpora resoluciones, respuestas, requerimientos o pruebas
-            recibidas posteriormente.
-          </p>
-          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-            <select
-              value={externalKind}
-              onChange={(event) => setExternalKind(event.target.value)}
-              className="border rounded px-3 py-2 text-sm"
-            >
-              {EXTERNAL_KINDS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <input
-              value={externalNote}
-              onChange={(event) => setExternalNote(event.target.value)}
-              placeholder="Nota del documento (opcional)"
-              className="border rounded px-3 py-2 text-sm"
-            />
-            <input
-              type="file"
-              onChange={(event) =>
-                setExternalFile(event.target.files?.[0] || null)
-              }
-            />
-            <button
-              type="button"
+        {presenterAvailable ? (
+          <Panel>
+            <h2 className="sr-h3" style={{ marginTop: 0 }}>
+              Incorporar documentación con custodia y versionado
+            </h2>
+            <p className="sr-p">
+              La entrada documental se realiza únicamente desde RTM Presenter,
+              con sesión individual. Allí puedes crear un documento o una nueva
+              versión sin copiarlo fuera de OPS; permanecerá custodiado y
+              pendiente del análisis de seguridad.
+            </p>
+            <Link
+              to={`/ops/case/${encodeURIComponent(caseId)}/presenter`}
               className="sr-btn-primary"
-              onClick={uploadExternalDocument}
-              disabled={externalUploading}
             >
-              {externalUploading ? "Subiendo…" : "Adjuntar documento"}
-            </button>
-          </div>
-        </Panel>
+              Abrir RTM Presenter con sesión individual
+            </Link>
+          </Panel>
+        ) : null}
       </div>
 
       <Panel className="mt-4">

@@ -2,6 +2,39 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 const API = "/api";
+const INTERNAL_KEYS = new Set([
+  "access_token", "b2", "b2_bucket", "b2_key", "bucket", "document_url",
+  "download_endpoint", "download_url", "internal_path", "key", "object_key",
+  "file_name", "filename", "original_bucket", "original_filename", "original_key",
+  "presign", "presigned_url", "secret",
+  "signed_url", "source_bucket", "source_key", "source_keys", "storage",
+  "storage_bucket", "storage_coordinates", "storage_key", "storage_locator",
+  "storage_path", "token",
+]);
+
+const normalizePayloadKey = (key) =>
+  String(key || "")
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+
+const isInternalKey = (key) => {
+  const normalized = normalizePayloadKey(key);
+  return (
+    INTERNAL_KEYS.has(normalized) ||
+    /(^|_)(?:access|auth|bearer|refresh|session)?_?token(?:_|$)/.test(normalized) ||
+    /(^|_)(?:api|encryption|private|secret|signing)?_?key(?:_|$)/.test(normalized) ||
+    /(^|_)(?:secret|presign|presigned)(?:_|$)/.test(normalized) ||
+    /(^|_)(?:b2|bucket)(?:_|$)/.test(normalized) ||
+    /(^|_)(?:object|storage|internal|source|original)_(?:bucket|coordinates|key|keys|locator|path|paths|uri|url)(?:_|$)/.test(normalized) ||
+    /(^|_)(?:content|document|download|file|presigned|signed|upload)_(?:endpoint|path|route|uri|url)(?:_|$)/.test(normalized)
+  );
+};
+
+const INTERNAL_VALUE =
+  /(?:^(?:b2|gs|s3):\/\/|\/(?:home|tmp|var|workspace)\/|[?&](?:x-amz|x-goog)-(?:credential|signature)=)/i;
 
 const FAMILY_OPTIONS = [
   { value: "velocidad", label: "⚡ Velocidad" },
@@ -134,6 +167,23 @@ function shortText(value, max = 72) {
   const text = String(value || "").trim();
   if (!text) return "—";
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function sanitizePayload(value, depth = 0) {
+  if (depth > 5) return "…";
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizePayload(item, depth + 1));
+  }
+  if (typeof value === "string" && INTERNAL_VALUE.test(value)) {
+    return "[dato interno oculto]";
+  }
+  if (!value || typeof value !== "object") return value;
+  const result = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isInternalKey(key)) continue;
+    result[key] = sanitizePayload(child, depth + 1);
+  }
+  return result;
 }
 
 function infractionLabel(value) {
@@ -304,7 +354,6 @@ function extractSendInfo(ai, detail, events) {
       id: `${e?.type || "submit"}-${idx}`,
       submittedAt: e?.payload?.submitted_at || e?.created_at || "",
       dgtId: e?.payload?.dgt_id || "",
-      documentUrl: e?.payload?.document_url || "",
       mode: e?.payload?.mode || "",
     })),
   };
@@ -438,34 +487,11 @@ function InfoPill({ children, tone = "default" }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${tones[tone] || tones.default}`}>{children}</span>;
 }
 
-function DownloadButton({ docId }) {
-  const token = localStorage.getItem("ops_token") || "";
-  async function handleDownload() {
-    try {
-      const res = await fetch(`${API}/ops/documents/${encodeURIComponent(docId)}/download`, {
-        headers: { "X-Operator-Token": token },
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail || "Error descargando documento");
-      }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "documento";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      alert(e.message || "Error descargando documento");
-    }
-  }
+function CustodyBadge() {
   return (
-    <button type="button" onClick={handleDownload} className="inline-flex rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-      Descargar
-    </button>
+    <span className="inline-flex rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+      Custodiado en RTM
+    </span>
   );
 }
 
@@ -480,12 +506,10 @@ export default function OpsCaseDetailPro() {
 
   const [loading, setLoading] = useState(false);
   const [runningAI, setRunningAI] = useState(false);
-  const [busyApprove, setBusyApprove] = useState(false);
   const [busyManual, setBusyManual] = useState(false);
   const [busySave, setBusySave] = useState(false);
   const [busyFamilyRegenerate, setBusyFamilyRegenerate] = useState(false);
   const [busyHechoRegenerate, setBusyHechoRegenerate] = useState(false);
-  const [busySubmit, setBusySubmit] = useState(false);
   const [pollingMsg, setPollingMsg] = useState("");
   const [error, setError] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
@@ -494,8 +518,6 @@ export default function OpsCaseDetailPro() {
   const [hechoEdit, setHechoEdit] = useState("");
   const [familiaEdit, setFamiliaEdit] = useState("");
   const [saveReason, setSaveReason] = useState("Corrección operador");
-  const [selectedDocumentId, setSelectedDocumentId] = useState("");
-  const [submitForce, setSubmitForce] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
 
   const [beforeDeadlineEdit, setBeforeDeadlineEdit] = useState("");
@@ -507,7 +529,7 @@ export default function OpsCaseDetailPro() {
   const [destinationEdit, setDestinationEdit] = useState("");
   const [addressEdit, setAddressEdit] = useState("");
 
-  const [checkPdf, setCheckPdf] = useState(false);
+  const checkPdf = false;
   const [checkHecho, setCheckHecho] = useState(false);
   const [checkFamilia, setCheckFamilia] = useState(false);
   const [checkPlazos, setCheckPlazos] = useState(false);
@@ -517,7 +539,6 @@ export default function OpsCaseDetailPro() {
 
   const token = localStorage.getItem("ops_token") || "";
   const headers = { "X-Operator-Token": token };
-  const plannerStorageKey = `ops_case_planning_${caseId}`;
 
   function clearPollTimer() {
     if (pollTimerRef.current) {
@@ -548,19 +569,19 @@ export default function OpsCaseDetailPro() {
       const overridesRes = await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/ai-overrides`, { headers });
 
       const docs = docsRes.documents || docsRes.items || [];
-      const evs = evRes.events || evRes.items || [];
+      const evs = sanitizePayload(evRes.events || evRes.items || []);
+      const safeDetail = sanitizePayload(detailRes || null);
       const aiEvent = pickLatestAiEvent(evs);
-      const payload = { ...(aiEvent?.payload || {}), ai_overrides: overridesRes?.overrides || detailRes?.ai_overrides || {} };
+      const payload = sanitizePayload({
+        ...(aiEvent?.payload || {}),
+        ai_overrides: overridesRes?.overrides || safeDetail?.ai_overrides || {},
+      });
 
       setDocuments(docs);
       setEvents(evs);
-      setDetail(detailRes || null);
+      setDetail(safeDetail);
       setAiResult(payload);
 
-      if ((!selectedDocumentId || !docs.some((d) => d?.id === selectedDocumentId)) && docs.length) {
-        const preferred = docs.find((d) => String(d?.kind || "").toLowerCase().includes("pdf")) || docs[0];
-        setSelectedDocumentId(preferred?.id || "");
-      }
     } catch (e) {
       if (!silent) {
         setError(e.message || "Error cargando expediente");
@@ -698,70 +719,9 @@ export default function OpsCaseDetailPro() {
     }
   }
 
-  function savePlanningLocal() {
-    try {
-      const payload = {
-        beforeDeadlineEdit,
-        afterDeadlineEdit,
-        beforeTextEdit,
-        afterTextEdit,
-        channelEdit,
-        entityEdit,
-        destinationEdit,
-        addressEdit,
-        savedAt: new Date().toISOString(),
-      };
-      localStorage.setItem(plannerStorageKey, JSON.stringify(payload));
-      setPlanningMsg("✅ Plazos y envío guardados en este navegador.");
-      setTimeout(() => setPlanningMsg(""), 3000);
-    } catch {
-      setError("No se pudo guardar en local.");
-    }
-  }
-
-  async function submitResource() {
-    setError("");
-    setSaveMsg("");
-    if (!token) return setError("Falta token de operador.");
-    if (!packageStatus.ready) return setError("El paquete de envío está incompleto.");
-    if (!selectedDocumentId) return setError("Selecciona un documento para enviar.");
-
-    setBusySubmit(true);
-    try {
-      savePlanningLocal();
-      const documentUrl = `${API}/ops/documents/${encodeURIComponent(selectedDocumentId)}/download`;
-      await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/submit`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ document_url: documentUrl, force: submitForce }),
-      });
-      await loadCase();
-      setSaveMsg("✅ Recurso enviado y guardado en historial.");
-      setTimeout(() => setSaveMsg(""), 3500);
-    } catch (e) {
-      setError(e.message || "Error enviando recurso");
-    } finally {
-      setBusySubmit(false);
-    }
-  }
-
-  async function approve() {
-    setError("");
-    if (!token) return setError("Falta token de operador.");
-    setBusyApprove(true);
-    try {
-      await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/approve`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ note: "Aprobado desde PRO" }),
-      });
-      await loadCase();
-      alert("Expediente aprobado");
-    } catch (e) {
-      setError(e.message || "Error aprobando expediente");
-    } finally {
-      setBusyApprove(false);
-    }
+  function confirmPlanningInMemory() {
+    setPlanningMsg("✅ Cambios aplicados solo en esta vista; no se guardan en el dispositivo.");
+    setTimeout(() => setPlanningMsg(""), 3500);
   }
 
   async function manual() {
@@ -788,6 +748,8 @@ export default function OpsCaseDetailPro() {
   const sendInfo = useMemo(() => extractSendInfo(aiResult, detail, events), [aiResult, detail, events]);
   const autoDelivery = useMemo(() => resolveAutomaticDelivery(aiResult, detail, sendInfo), [aiResult, detail, sendInfo]);
   const packageStatus = useMemo(() => buildPackageStatus(documents), [documents]);
+  const presenterAvailable =
+    detail?.actions?.presenter_available === true;
   const recursoDoc = useMemo(
     () => documents.find((d) => {
       const kind = String(d?.kind || "").toLowerCase();
@@ -811,40 +773,20 @@ export default function OpsCaseDetailPro() {
   );
 
   useEffect(() => {
-    if (recursoDoc?.id && selectedDocumentId !== recursoDoc.id) {
-      setSelectedDocumentId(recursoDoc.id);
-    }
-  }, [recursoDoc, selectedDocumentId]);
-
-
-  useEffect(() => {
     setHechoEdit(ai.hecho || "");
     setFamiliaEdit(ai.familia || "");
   }, [ai.hecho, ai.familia]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(plannerStorageKey);
-      const local = raw ? JSON.parse(raw) : {};
-      setBeforeDeadlineEdit(local.beforeDeadlineEdit || fmtDateOnly(deadlines.beforeDate));
-      setAfterDeadlineEdit(local.afterDeadlineEdit || fmtDateOnly(deadlines.afterDate));
-      setBeforeTextEdit(local.beforeTextEdit || deadlines.beforeText || "");
-      setAfterTextEdit(local.afterTextEdit || deadlines.afterText || "");
-      setChannelEdit(local.channelEdit || sendInfo.channel || "");
-      setEntityEdit(local.entityEdit || sendInfo.entity || "");
-      setDestinationEdit(local.destinationEdit || sendInfo.destination || "");
-      setAddressEdit(local.addressEdit || sendInfo.address || "");
-    } catch {
-      setBeforeDeadlineEdit(fmtDateOnly(deadlines.beforeDate));
-      setAfterDeadlineEdit(fmtDateOnly(deadlines.afterDate));
-      setBeforeTextEdit(deadlines.beforeText || "");
-      setAfterTextEdit(deadlines.afterText || "");
-      setChannelEdit(sendInfo.channel || "");
-      setEntityEdit(sendInfo.entity || "");
-      setDestinationEdit(sendInfo.destination || "");
-      setAddressEdit(sendInfo.address || "");
-    }
-  }, [plannerStorageKey, deadlines.beforeDate, deadlines.afterDate, deadlines.beforeText, deadlines.afterText, sendInfo.channel, sendInfo.entity, sendInfo.destination, sendInfo.address]);
+    setBeforeDeadlineEdit(fmtDateOnly(deadlines.beforeDate));
+    setAfterDeadlineEdit(fmtDateOnly(deadlines.afterDate));
+    setBeforeTextEdit(deadlines.beforeText || "");
+    setAfterTextEdit(deadlines.afterText || "");
+    setChannelEdit(sendInfo.channel || "");
+    setEntityEdit(sendInfo.entity || "");
+    setDestinationEdit(sendInfo.destination || "");
+    setAddressEdit(sendInfo.address || "");
+  }, [caseId, deadlines.beforeDate, deadlines.afterDate, deadlines.beforeText, deadlines.afterText, sendInfo.channel, sendInfo.entity, sendInfo.destination, sendInfo.address]);
 
 
   useEffect(() => {
@@ -928,8 +870,13 @@ export default function OpsCaseDetailPro() {
             <button className="min-w-[146px] rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50" onClick={saveAiChanges} disabled={busySave}>
               {busySave ? "Guardando..." : "Guardar cambios IA"}
             </button>
-            <button className="min-w-[118px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50" onClick={approve} disabled={busyApprove}>
-              {busyApprove ? "Aprobando..." : "Aprobar"}
+            <button
+              type="button"
+              className="min-w-[160px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled
+              aria-describedby="approval-blocked-reason"
+            >
+              Aprobación bloqueada
             </button>
             <button className="min-w-[118px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50" onClick={manual} disabled={busyManual}>
               {busyManual ? "Enviando..." : "Manual"}
@@ -945,6 +892,11 @@ export default function OpsCaseDetailPro() {
       {pollingMsg ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{pollingMsg}</div> : null}
       {saveMsg ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">{saveMsg}</div> : null}
       {planningMsg ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{planningMsg}</div> : null}
+
+      <p id="approval-blocked-reason" className="mt-3 text-xs font-semibold text-slate-600">
+        La aprobación seguirá bloqueada hasta que RTM emita un recibo individual
+        de revisión interna ligado al hash del PDF.
+      </p>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
         <b>Última IA ejecutada:</b> {latestAiEvent ? fmt(latestAiEvent.created_at) : "—"}
@@ -1054,7 +1006,7 @@ export default function OpsCaseDetailPro() {
                   </div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">{d.kind || "documento"}</div>
                   <div className="mt-1 text-xs text-slate-500">{fmt(d.created_at)}</div>
-                  <div className="mt-2">{d.id ? <DownloadButton docId={d.id} /> : null}</div>
+                  <div className="mt-2">{d.id ? <CustodyBadge /> : null}</div>
                 </div>
               ))}
             </div>
@@ -1077,8 +1029,8 @@ export default function OpsCaseDetailPro() {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={savePlanningLocal} className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600">
-              Guardar plazos
+            <button type="button" onClick={confirmPlanningInMemory} className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600">
+              Aplicar plazos en esta vista
             </button>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               Último envío registrado: {deadlines.submittedAt ? fmt(deadlines.submittedAt) : "todavía no enviado"}.
@@ -1106,8 +1058,8 @@ export default function OpsCaseDetailPro() {
 
               <textarea value={addressEdit} onChange={(e) => setAddressEdit(e.target.value)} className="mt-2 min-h-[84px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none" placeholder="Dirección o instrucciones de envío..." />
 
-              <button type="button" onClick={savePlanningLocal} className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
-                Guardar envío
+              <button type="button" onClick={confirmPlanningInMemory} className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+                Aplicar envío en esta vista
               </button>
 
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
@@ -1121,33 +1073,24 @@ export default function OpsCaseDetailPro() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-[11px] uppercase tracking-wide text-slate-400">Documento a enviar</div>
-              <select
-                value={selectedDocumentId}
-                onChange={(e) => setSelectedDocumentId(e.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none"
-              >
-                <option value="">Selecciona documento</option>
-                {documents.map((d, i) => (
-                  <option key={d?.id || i} value={d?.id || ""}>
-                    {(d.kind || "documento")} · {fmt(d.created_at)}
-                  </option>
-                ))}
-              </select>
-
-              <label className="mt-3 flex items-center gap-2 text-xs text-slate-600">
-                <input type="checkbox" checked={submitForce} onChange={() => setSubmitForce(!submitForce)} />
-                Forzar envío aunque no esté en ready_to_submit
-              </label>
-
-              <button
-                type="button"
-                onClick={submitResource}
-                disabled={busySubmit || !packageStatus.ready}
-                className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-              >
-                {busySubmit ? "Enviando paquete..." : "Enviar paquete completo"}
-              </button>
+              <div className="text-[11px] uppercase tracking-wide text-slate-400">Presentación controlada</div>
+              <p className="mt-2 text-sm text-slate-700">
+                Los documentos permanecen en RTM. En este staging, el Presentador
+                prepara y congela el paquete; el puente remoto de adjuntos sigue
+                cerrado hasta disponer de una extensión gestionada y atestada.
+              </p>
+              {presenterAvailable ? (
+                <Link
+                  to={`/ops/case/${encodeURIComponent(caseId)}/presenter`}
+                  className="mt-3 inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Preparar en RTM Presenter
+                </Link>
+              ) : (
+                <div className="mt-3 rounded-xl bg-slate-100 px-4 py-3 text-center text-xs font-semibold text-slate-600">
+                  Presenter no está habilitado para este expediente.
+                </div>
+              )}
               {!packageStatus.ready ? (
                 <div className="mt-2 text-xs text-amber-600">
                   Falta documentación para enviar el recurso.
@@ -1166,7 +1109,6 @@ export default function OpsCaseDetailPro() {
                       <div className="font-semibold text-slate-900">{fmt(s.submittedAt)}</div>
                       <div className="mt-1 text-xs text-slate-500">ID externo: {s.dgtId || "—"}</div>
                       <div className="mt-1 text-xs text-slate-500">Modo: {s.mode || "—"}</div>
-                      <div className="mt-1 break-all text-xs text-slate-500">{s.documentUrl || "—"}</div>
                     </div>
                   ))}
                 </div>
@@ -1228,7 +1170,7 @@ export default function OpsCaseDetailPro() {
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <Section title="Checklist antes de aprobar" right={<InfoPill tone={checklistOk === checklistTotal ? "success" : "warn"}>{checklistOk}/{checklistTotal}</InfoPill>}>
           <div className="space-y-2.5">
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkPdf} onChange={() => setCheckPdf(!checkPdf)} className="mt-1" /><div><div className="font-semibold text-slate-900">He leído el último PDF regenerado</div><div className="text-xs text-slate-500">Nunca aprobar sin abrir el PDF final.</div></div></label>
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><input type="checkbox" checked={checkPdf} disabled aria-describedby="secure-pdf-review-reason" className="mt-1" /><div><div className="font-semibold text-slate-900">Revisión del PDF pendiente de evidencia</div><div id="secure-pdf-review-reason" className="text-xs text-slate-500">Se habilitará al existir un visor interno con recibo individual, hash y auditoría.</div></div></label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkHecho} onChange={() => setCheckHecho(!checkHecho)} className="mt-1" /><div><div className="font-semibold text-slate-900">El hecho denunciado es correcto y limpio</div><div className="text-xs text-slate-500">Debe reflejar la conducta real sin ruido OCR.</div></div></label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkFamilia} onChange={() => setCheckFamilia(!checkFamilia)} className="mt-1" /><div><div className="font-semibold text-slate-900">La familia jurídica es la correcta</div><div className="text-xs text-slate-500">Semáforo, velocidad, móvil, etc.</div></div></label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkPlazos} onChange={() => setCheckPlazos(!checkPlazos)} className="mt-1" /><div><div className="font-semibold text-slate-900">He revisado los plazos del expediente</div><div className="text-xs text-slate-500">Plazo inicial y, si aplica, plazo post-presentación.</div></div></label>
@@ -1238,7 +1180,7 @@ export default function OpsCaseDetailPro() {
 
         <Section title="Guía rápida operador">
           <div className="space-y-3 text-sm text-slate-700">
-            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Orden correcto del trabajo</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Revisar el hecho denunciado y la familia detectada.</li><li>Descargar y leer el último PDF regenerado antes de aprobar.</li><li>Comprobar plazos antes y después del recurso.</li><li>Seleccionar canal, entidad y enviar cuando todo esté correcto.</li></ul></div>
+            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Orden correcto del trabajo</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Revisar el hecho denunciado y la familia detectada.</li><li>Revisar el último PDF dentro de RTM antes de aprobar.</li><li>Comprobar plazos antes y después del recurso.</li><li>Preparar la presentación desde RTM cuando todo esté correcto.</li></ul></div>
             <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Cuándo tocar el hecho imputado</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Si ves ruido OCR o texto mezclado.</li><li>Si el hecho está jurídicamente bien pero mal redactado.</li><li>Si quieres una versión más limpia para revisión interna.</li></ul></div>
             <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Cuándo usar Manual</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Cuando la familia no convence.</li><li>Cuando el PDF final no refleja bien el caso.</li><li>Cuando falte prueba, plazo o canal claro de presentación.</li></ul></div>
           </div>
@@ -1254,10 +1196,10 @@ export default function OpsCaseDetailPro() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-slate-900">{d.kind || "documento"}</div>
-                      <div className="mt-1 text-xs text-slate-500 break-all">{d.bucket || d.b2_bucket || "—"}/{d.key || d.b2_key || "—"}</div>
+                      <div className="mt-1 text-xs font-medium text-emerald-700">Custodia interna · sin rutas de almacenamiento</div>
                       <div className="mt-1 text-xs text-slate-500">{d.mime || "—"} · {d.size_bytes ? `${d.size_bytes} bytes` : "—"} · {fmt(d.created_at)}</div>
                     </div>
-                    {d.id ? <DownloadButton docId={d.id} /> : null}
+                    {d.id ? <CustodyBadge /> : null}
                   </div>
                 </div>
               ))}
@@ -1277,7 +1219,7 @@ export default function OpsCaseDetailPro() {
                   </button>
                   {openEvent === i ? (
                     <div className="mt-3 rounded-2xl bg-slate-50 p-3">
-                      <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700">{JSON.stringify(e.payload || {}, null, 2)}</pre>
+                      <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700">{JSON.stringify(sanitizePayload(e.payload || {}), null, 2)}</pre>
                     </div>
                   ) : null}
                 </div>
@@ -1292,7 +1234,7 @@ export default function OpsCaseDetailPro() {
           <details className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <summary className="cursor-pointer list-none px-4 py-3 text-base font-semibold text-slate-900">Payload IA bruto</summary>
             <div className="border-t border-slate-100 p-4">
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700">{JSON.stringify(aiResult, null, 2)}</pre>
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700">{JSON.stringify(sanitizePayload(aiResult), null, 2)}</pre>
             </div>
           </details>
         </div>
