@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "src" / "App.jsx"
 DASHBOARD = ROOT / "src" / "pages" / "OpsDashboard.jsx"
 FOLLOWUPS = ROOT / "src" / "pages" / "OpsFollowups.jsx"
+DETAIL = ROOT / "src" / "pages" / "OpsCaseDetail.jsx"
+INDEX_CSS = ROOT / "src" / "index.css"
 
 
 def read(path: Path) -> str:
@@ -20,6 +22,8 @@ class OpsFollowupsContractTest(unittest.TestCase):
         cls.app = read(APP)
         cls.dashboard = read(DASHBOARD)
         cls.followups = read(FOLLOWUPS)
+        cls.detail = read(DETAIL)
+        cls.index_css = read(INDEX_CSS)
 
     def test_global_followups_route_is_wired(self):
         self.assertIn('import OpsFollowups from "./pages/OpsFollowups.jsx"', self.app)
@@ -65,9 +69,18 @@ class OpsFollowupsContractTest(unittest.TestCase):
         self.assertIn("Abrir expediente", self.followups)
 
     def test_case_detail_links_back_to_global_followups(self):
-        detail = read(ROOT / "src" / "pages" / "OpsCaseDetail.jsx")
-        self.assertIn('to="/ops/followups"', detail)
-        self.assertIn("Todos los seguimientos", detail)
+        self.assertIn('to="/ops/followups"', self.detail)
+        self.assertIn("Todos los seguimientos", self.detail)
+
+    def test_case_detail_controls_clear_the_overhanging_brand(self):
+        self.assertEqual(
+            self.detail.count('className="sr-container ops-case-main"'), 4
+        )
+        self.assertNotIn('className="sr-container py-', self.detail)
+        self.assertRegex(
+            self.index_css,
+            r"\.ops-case-main\s*\{[^}]*padding-top:\s*42px;[^}]*\}",
+        )
 
     def test_vehicle_removal_link_focuses_the_exact_case(self):
         vehicle_removal = read(ROOT / "src" / "pages" / "OpsVehicleRemoval.jsx")

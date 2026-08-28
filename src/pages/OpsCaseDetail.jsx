@@ -962,7 +962,7 @@ export default function OpsCaseDetail() {
 
   if (!token) {
     return (
-      <main className="sr-container py-10">
+      <main className="sr-container ops-case-main">
         <Panel>
           <h1 className="sr-h2">Acceso de operador necesario</h1>
           <p className="sr-p">Entra primero en OPS.</p>
@@ -976,7 +976,7 @@ export default function OpsCaseDetail() {
 
   if (loading && !workspace) {
     return (
-      <main className="sr-container py-10">
+      <main className="sr-container ops-case-main">
         <Panel>Cargando espacio jurídico del expediente…</Panel>
       </main>
     );
@@ -984,7 +984,7 @@ export default function OpsCaseDetail() {
 
   if (!workspace) {
     return (
-      <main className="sr-container py-8">
+      <main className="sr-container ops-case-main">
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
           <a href="/ops" className="sr-btn-secondary">
             ← Volver al panel
@@ -1130,7 +1130,7 @@ export default function OpsCaseDetail() {
   }
 
   return (
-    <main className="sr-container py-8">
+    <main className="sr-container ops-case-main">
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
         <a href="/ops" className="sr-btn-secondary">
           ← Volver al panel

@@ -56,6 +56,10 @@
 
 /* ===== UTILIDADES ===== */
 .sr-container{ max-width:1100px; margin:0 auto; padding:0 16px }
+.ops-case-main{
+  padding-top:42px;
+  padding-bottom:32px;
+}
 .sr-h1{ font-size:32px; font-weight:700 }
 .sr-h2{ font-size:24px; font-weight:700 }
 .sr-h3{ font-size:18px; font-weight:600 }
