@@ -1,159 +1,101 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  createSyntheticTicketBroker,
-} from "../lib/ticket-client.js";
+import { createSyntheticTicketBroker } from "../lib/ticket-client.js";
 import { sha256Hex } from "../lib/policy.js";
-import {
-  syntheticPackageDefinition,
-} from "../lib/synthetic-package.js";
+import { syntheticWorkspaceDefinition } from "../lib/synthetic-workspace.js";
 
-test("synthetic tickets are one-use, ordered and return only an in-memory Blob", async () => {
-  const broker = await createSyntheticTicketBroker(
-    syntheticPackageDefinition("http://localhost:8765")
-  );
-  assert.deepEqual(
-    broker.package.fields.map((field) => field.order),
-    [1, 2, 3]
-  );
-  assert.equal(broker.remainingTickets(), 3);
+const origin = "http://localhost:8765";
+const intentId = `syn_intent_${"a".repeat(32)}`;
 
-  const field = broker.package.fields[0];
-  const redeemed = await broker.redeem({
-    ticket: field.ticket,
-    slotId: field.slotId,
-    targetOrigin: broker.package.targetOrigin,
-  });
+function context(broker, overrides = {}) {
+  const document = broker.workspace.documents[0];
+  return {
+    intentId,
+    slotId: "fine",
+    documentId: document.documentId,
+    targetOrigin: origin,
+    operatorId: broker.workspace.operatorId,
+    sessionId: broker.workspace.sessionId,
+    ...overrides,
+  };
+}
+
+test("a loose document ticket is issued on demand, one-use and in-memory", async () => {
+  const broker = await createSyntheticTicketBroker(syntheticWorkspaceDefinition(origin));
+  assert.equal(broker.remainingTickets(), 0);
+  assert.equal(broker.workspace.documents.length, 4);
+  assert.equal(broker.workspace.portalFields.length, 3);
+  const request = context(broker);
+  const capability = broker.issue(request);
+  assert.equal(broker.remainingTickets(), 1);
+  const redeemed = await broker.redeem({ ...request, ticket: capability.ticket });
   assert.ok(redeemed.blob instanceof Blob);
-  assert.equal(redeemed.filename, field.filename);
-  assert.equal(await sha256Hex(redeemed.blob), field.sha256);
-  assert.equal(broker.remainingTickets(), 2);
-
+  assert.equal(await sha256Hex(redeemed.blob), broker.workspace.documents[0].sha256);
+  assert.equal(redeemed.version, broker.workspace.documents[0].version);
+  assert.equal(broker.remainingTickets(), 0);
   await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
+    broker.redeem({ ...request, ticket: capability.ticket }),
     /ticket_invalid_or_consumed/
   );
+  assert.throws(() => broker.issue(request), /intent_ticket_already_issued/);
   broker.close();
-  assert.equal(broker.remainingTickets(), 0);
 });
 
-test("a context mismatch consumes the ticket and discloses no document", async () => {
-  const broker = await createSyntheticTicketBroker(
-    syntheticPackageDefinition("http://localhost:8765")
-  );
-  const field = broker.package.fields[1];
+test("context mismatch consumes before validation and discloses no bytes", async () => {
+  const broker = await createSyntheticTicketBroker(syntheticWorkspaceDefinition(origin));
+  const request = context(broker);
+  const capability = broker.issue(request);
   await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: "fine",
-      targetOrigin: broker.package.targetOrigin,
-    }),
+    broker.redeem({ ...request, sessionId: "WRONG", ticket: capability.ticket }),
     /ticket_context_mismatch/
   );
   await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
+    broker.redeem({ ...request, ticket: capability.ticket }),
     /ticket_invalid_or_consumed/
   );
   broker.close();
 });
 
-test("an unapproved origin also consumes the attempted ticket", async () => {
-  const broker = await createSyntheticTicketBroker(
-    syntheticPackageDefinition("http://localhost:8765")
+test("wrong document for a verified field is blocked before ticket issue", async () => {
+  const broker = await createSyntheticTicketBroker(syntheticWorkspaceDefinition(origin));
+  const identity = broker.workspace.documents.find((document) => document.purpose === "identity");
+  assert.throws(
+    () => broker.issue(context(broker, { documentId: identity.documentId })),
+    /document_not_compatible_with_field/
   );
-  const field = broker.package.fields[2];
-  await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: "https://example.com",
-    }),
-    /portal_origin_not_allowed/
-  );
-  await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
-    /ticket_invalid_or_consumed/
-  );
+  assert.equal(broker.remainingTickets(), 0);
   broker.close();
 });
 
-test("expired tickets are consumed and their document is never returned", async () => {
+test("expired tickets remain unavailable", async () => {
   let now = 1_000_000;
-  const broker = await createSyntheticTicketBroker(
-    syntheticPackageDefinition("http://localhost:8765"),
-    { ttlMs: 1_000, clock: () => now }
-  );
-  const field = broker.package.fields[0];
+  const broker = await createSyntheticTicketBroker(syntheticWorkspaceDefinition(origin), {
+    ttlMs: 1_000,
+    clock: () => now,
+  });
+  const request = context(broker);
+  const capability = broker.issue(request);
   now += 1_000;
-
   await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
+    broker.redeem({ ...request, ticket: capability.ticket }),
     /ticket_expired/
   );
-  await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
-    /ticket_invalid_or_consumed/
-  );
-  broker.close();
-});
-
-test("an expiry sweep removes every stale ticket without a redemption attempt", async () => {
-  let now = 2_000_000;
-  const broker = await createSyntheticTicketBroker(
-    syntheticPackageDefinition("http://localhost:8765"),
-    { ttlMs: 1_000, clock: () => now }
-  );
-  const ticket = broker.package.fields[0].ticket;
-  now += 1_000;
-
   assert.equal(broker.remainingTickets(), 0);
-  await assert.rejects(
-    broker.redeem({
-      ticket,
-      slotId: broker.package.fields[0].slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
-    /ticket_invalid_or_consumed/
-  );
   broker.close();
 });
 
-test("a broken runtime clock closes the whole broker fail-closed", async () => {
-  let now = 3_000_000;
-  const broker = await createSyntheticTicketBroker(
-    syntheticPackageDefinition("http://localhost:8765"),
-    { ttlMs: 1_000, clock: () => now }
-  );
-  const field = broker.package.fields[0];
+test("a broken clock closes broker fail-closed", async () => {
+  let now = 2_000_000;
+  const broker = await createSyntheticTicketBroker(syntheticWorkspaceDefinition(origin), {
+    ttlMs: 1_000,
+    clock: () => now,
+  });
+  const request = context(broker);
+  const capability = broker.issue(request);
   now = Number.NaN;
-
   await assert.rejects(
-    broker.redeem({
-      ticket: field.ticket,
-      slotId: field.slotId,
-      targetOrigin: broker.package.targetOrigin,
-    }),
+    broker.redeem({ ...request, ticket: capability.ticket }),
     /ticket_clock_invalid/
   );
   assert.equal(broker.remainingTickets(), 0);

@@ -669,6 +669,12 @@ function mediaTypeLabel(value) {
   return MEDIA_TYPE_LABELS[value] || value;
 }
 
+function correspondenceChannelStatusLabel(value) {
+  return value === "accepted"
+    ? "admitido en el directorio RTM"
+    : value || "canal no disponible";
+}
+
 function ExceptionalExportPanel({ allowed }) {
   if (!allowed) return null;
 
@@ -680,6 +686,175 @@ function ExceptionalExportPanel({ allowed }) {
         Capacidad específica detectada. El canal permanece cerrado hasta que
         exista un flujo administrativo separado, con doble control y recibo JSON.
         Esta pantalla no solicita contraseña ni llama a una ruta de exportación.
+      </p>
+    </section>
+  );
+}
+
+function PresenterStatusTimeline({
+  channel,
+  destinationReady,
+  portalOpened,
+  attachmentsFixed,
+  draftPrepared,
+}) {
+  if (!channel) return null;
+
+  const attachmentsLinked = channel === "email" && attachmentsFixed;
+  const awaitingHumanAction =
+    channel === "portal" ? portalOpened : draftPrepared;
+  const steps = [
+    {
+      label: "Preparando",
+      detail: destinationReady
+        ? "Destino elegido; todavía no existe presentación."
+        : "Falta elegir un destino verificado.",
+      state: destinationReady ? "complete" : "current",
+    },
+    {
+      label: "Adjuntos vinculados",
+      detail: attachmentsLinked
+        ? "Versiones fijadas para revisar la correspondencia."
+        : channel === "portal"
+          ? "Se vincularán uno a uno desde la extensión; el puente sigue pendiente."
+          : "Falta elegir y fijar los adjuntos del correo.",
+      state: attachmentsLinked
+        ? "complete"
+        : destinationReady
+          ? "current"
+          : "pending",
+    },
+    {
+      label: "Pendiente de envío humano",
+      detail: awaitingHumanAction
+        ? "La persona debe revisar y completar el envío en el canal de destino."
+        : "Preparar o adjuntar nunca equivale a enviar.",
+      state: awaitingHumanAction ? "current" : "pending",
+    },
+    {
+      label: "Pendiente de justificante",
+      detail:
+        "No existe todavía un justificante conciliado por RTM. Capturarlo desde la sede o recibir una copia por correo solo crea una evidencia candidata.",
+      state: "pending",
+    },
+    {
+      label: "Verificar justificante y activar seguimiento",
+      detail:
+        "Bloqueado. La fecha del seguimiento operativo solo podrá venir del justificante verificado. Los plazos legales se mostrarán únicamente si existe una regla validada del procedimiento.",
+      state: "blocked",
+    },
+  ];
+
+  return (
+    <section
+      className="rtmp-card rtmp-status-card"
+      aria-labelledby="rtmp-status-title"
+    >
+      <div className="rtmp-section-heading">
+        <div>
+          <p className="rtmp-eyebrow">Estado real del envío</p>
+          <h2 id="rtmp-status-title">Qué está acreditado y qué falta</h2>
+          <p>
+            RTM separa la preparación, la entrega de archivos, el envío humano y
+            el justificante. Ningún paso se da por completado por ausencia de
+            errores.
+          </p>
+        </div>
+        <span className="rtmp-chip rtmp-chip-warn">NO ENVIADO</span>
+      </div>
+      <ol className="rtmp-status-timeline">
+        {steps.map((step, index) => (
+          <li key={step.label} className={`is-${step.state}`}>
+            <span className="rtmp-status-marker" aria-hidden="true">
+              {index + 1}
+            </span>
+            <span>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function PortalReceiptCapturePanel() {
+  return (
+    <section
+      className="rtmp-card rtmp-receipt-capture-card"
+      aria-labelledby="rtmp-receipt-capture-title"
+    >
+      <div className="rtmp-section-heading">
+        <div>
+          <p className="rtmp-eyebrow">Después del envío humano · Justificante</p>
+          <h2 id="rtmp-receipt-capture-title">
+            Traer el justificante al expediente por una de dos vías
+          </h2>
+          <p>
+            Las dos vías empiezan como pendiente de verificación. Incorporar un
+            PDF no acredita por sí solo la presentación ni activa el seguimiento.
+          </p>
+        </div>
+        <span className="rtmp-chip rtmp-chip-warn">JUSTIFICANTE PENDIENTE</span>
+      </div>
+
+      <div className="rtmp-receipt-paths">
+        <article className="rtmp-receipt-path">
+          <span className="rtmp-channel-kicker">DESDE LA SEDE</span>
+          <h3>Capturar al descargar en la sede</h3>
+          <p>
+            Cuando la sede muestre «Descargar justificante», la extensión
+            ofrecerá al lado una acción explícita para custodiar esa misma copia
+            en el expediente, sin conservar una descarga permanente en el PC.
+          </p>
+          <button
+            type="button"
+            className="rtmp-button rtmp-button-primary"
+            disabled
+          >
+            Incorporar justificante a RTM
+          </button>
+          <small>
+            Puente cerrado en staging. Requerirá un adaptador verificado para esa
+            sede y una acción expresa del operador.
+          </small>
+        </article>
+
+        <article className="rtmp-receipt-path">
+          <span className="rtmp-channel-kicker">DESDE EL CORREO</span>
+          <h3>Conciliar la copia recibida por correo</h3>
+          <p>
+            Una copia llegada al buzón controlado podrá asociarse al expediente
+            como candidata. RTM deberá comprobar que corresponde al mismo envío,
+            organismo, registro y relación de documentos.
+          </p>
+          <button
+            type="button"
+            className="rtmp-button rtmp-button-secondary"
+            disabled
+          >
+            Conciliar copia recibida por correo
+          </button>
+          <small>
+            Conciliador cerrado en staging. Recibir un mensaje no demuestra por
+            sí solo que la presentación sea válida.
+          </small>
+        </article>
+      </div>
+
+      <div className="rtmp-receipt-pending" role="note">
+        <strong>Estado inicial de ambas vías: pendiente de verificación.</strong>
+        <span>
+          RTM deberá validar los datos oficiales disponibles, la firma o huella
+          declarada y la lista de anexos. Solo entonces podrá tomar la fecha del
+          justificante como inicio del seguimiento operativo.
+        </span>
+      </div>
+      <p className="rtmp-alert rtmp-alert-error" role="alert">
+        No todas las sedes permiten capturar su descarga de forma segura. Si una
+        sede fuerza una descarga nativa que el adaptador no puede custodiar, RTM
+        no afirmará que el justificante quedó incorporado.
       </p>
     </section>
   );
@@ -720,6 +895,7 @@ export default function RtmPresenterWorkspace({
   const [workspace, setWorkspace] = useState(null);
   const [deliveryChannel, setDeliveryChannel] = useState("");
   const [profileId, setProfileId] = useState("");
+  const [portalOpened, setPortalOpened] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [searchingDestinations, setSearchingDestinations] = useState(false);
@@ -772,6 +948,7 @@ export default function RtmPresenterWorkspace({
       setWorkspace(next);
       setDeliveryChannel("");
       setProfileId("");
+      setPortalOpened(false);
       setDestinationQuery("");
       setDestinationOptions(next.destinations);
       setSelections({});
@@ -850,6 +1027,7 @@ export default function RtmPresenterWorkspace({
     }
     setExternalFileMetadata(null);
     setDeliveryChannel("");
+    setPortalOpened(false);
     setEmailRecipientMode("verified");
     setManualEmail("");
     setManualEmailConfirmed(false);
@@ -1046,7 +1224,7 @@ export default function RtmPresenterWorkspace({
     workspace,
   ]);
   const outputReady =
-    Boolean(deliveryChannel) && readiness.ready && emailDestinationReady;
+    deliveryChannel === "email" && readiness.ready && emailDestinationReady;
   const correspondenceConfirmed = CORRESPONDENCE_CONFIRMATION_KEYS.every(
     (key) => correspondenceConfirmations[key] === true
   );
@@ -1089,6 +1267,7 @@ export default function RtmPresenterWorkspace({
     if (!new Set(["portal", "email"]).has(channel) || editingLocked) return;
     setDeliveryChannel(channel);
     setProfileId("");
+    setPortalOpened(false);
     setSelections({});
     setAuthorizationVersionId("");
     setEmailRecipientMode("verified");
@@ -1140,7 +1319,7 @@ export default function RtmPresenterWorkspace({
         setMessage(
           deliveryChannel === "email"
             ? "RTM no ha encontrado todavía esa empresa en el Centro de destinos. Puedes elegir el perfil sintético de correspondencia e introducir una dirección manual; quedará pendiente de verificación independiente."
-            : "No existe todavía una sede verificada con ese nombre. Debe solicitarse su alta y doble verificación antes de presentar."
+            : "Este staging no contiene un perfil sintético con ese nombre. Los perfiles reales de DGT y ayuntamientos todavía no están cargados; deberán darse de alta y verificarse antes de usarlos."
         );
       }
     } catch (error) {
@@ -1284,6 +1463,7 @@ export default function RtmPresenterWorkspace({
 
   async function freezePackage() {
     if (
+      deliveryChannel !== "email" ||
       !profile ||
       !workspace ||
       !outputReady ||
@@ -1340,9 +1520,9 @@ export default function RtmPresenterWorkspace({
 
   async function prepareSelectedDelivery() {
     if (
+      deliveryChannel !== "email" ||
       !frozenPackage ||
       !deliveryPrepareAllowed ||
-      !new Set(["portal", "email"]).has(deliveryChannel) ||
       !emailDestinationReady ||
       !correspondenceDraftReady ||
       busyCommand ||
@@ -1472,7 +1652,7 @@ export default function RtmPresenterWorkspace({
       <p className="rtmp-stay-notice" role="note">
         <strong>Tus documentos permanecen en RTM.</strong> Esta pantalla solo maneja
         metadatos verificados para que elijas qué documento corresponde a cada
-        campo de la sede. No descarga ni crea copias locales del operador.
+        campo de la sede. No descarga ni crea copias locales del operador. No se crea una carpeta local.
       </p>
 
       {message ? (
@@ -1577,8 +1757,8 @@ export default function RtmPresenterWorkspace({
                 <span className="rtmp-channel-kicker">SEDE O PORTAL</span>
                 <strong>Presentar un escrito o recurso</strong>
                 <span>
-                  Busca DGT, ayuntamiento u organismo y completa sus casillas
-                  en el orden exacto que exige.
+                  Elige un perfil disponible, abre la sede y atiende sus
+                  casillas una a una con los documentos sueltos del contenedor.
                 </span>
               </button>
               <button
@@ -1599,71 +1779,83 @@ export default function RtmPresenterWorkspace({
           </section>
 
           <nav className="rtmp-flow-progress" aria-label="Progreso de la preparación">
-            <ol>
-              <li className="is-complete">
-                <span className="rtmp-progress-number">1</span>
-                <span>
-                  <strong>Contenedor</strong>
-                  <small>{containerDocuments.length} documentos</small>
-                </span>
-              </li>
-              <li
-                className={profile ? "is-complete" : deliveryChannel ? "is-current" : ""}
-              >
-                <span className="rtmp-progress-number">2</span>
-                <span>
-                  <strong>Canal y destino</strong>
-                  <small>{profile ? "Completo" : "Pendiente"}</small>
-                </span>
-              </li>
-              <li
-                className={
-                  outputReady
-                    ? "is-complete"
-                    : profile
-                      ? "is-current"
-                      : ""
-                }
-              >
-                <span className="rtmp-progress-number">3</span>
-                <span>
-                  <strong>Elegir documentos</strong>
-                  <small>{outputReady ? "Completo" : "Pendiente"}</small>
-                </span>
-              </li>
-              <li
-                className={
-                  frozenPackage
-                    ? "is-complete"
-                    : outputReady
-                      ? "is-current"
-                      : ""
-                }
-              >
-                <span className="rtmp-progress-number">4</span>
-                <span>
-                  <strong>Fijar selección</strong>
-                  <small>{frozenPackage ? "Completo" : "Pendiente"}</small>
-                </span>
-              </li>
-              <li
-                className={
-                  delivery
-                    ? "is-complete"
-                    : frozenPackage
-                      ? "is-current"
-                      : ""
-                }
-              >
-                <span className="rtmp-progress-number">5</span>
-                <span>
-                  <strong>
-                    {deliveryChannel === "email" ? "Correspondencia" : "Ejecutar"}
-                  </strong>
-                  <small>{delivery ? "Preparado en OPS" : "Pendiente"}</small>
-                </span>
-              </li>
-            </ol>
+            {deliveryChannel === "portal" ? (
+              <ol>
+                <li className="is-complete">
+                  <span className="rtmp-progress-number">1</span>
+                  <span>
+                    <strong>Contenedor</strong>
+                    <small>{containerDocuments.length} documentos sueltos</small>
+                  </span>
+                </li>
+                <li className={profile ? "is-complete" : "is-current"}>
+                  <span className="rtmp-progress-number">2</span>
+                  <span>
+                    <strong>Sede y procedimiento</strong>
+                    <small>{profile ? "Elegidos" : "Pendiente"}</small>
+                  </span>
+                </li>
+                <li className={portalOpened ? "is-complete" : profile ? "is-current" : ""}>
+                  <span className="rtmp-progress-number">3</span>
+                  <span>
+                    <strong>Abrir sede</strong>
+                    <small>{portalOpened ? "Apertura solicitada" : "Pendiente"}</small>
+                  </span>
+                </li>
+                <li className={portalOpened ? "is-current" : ""}>
+                  <span className="rtmp-progress-number">4</span>
+                  <span>
+                    <strong>Adjuntar uno a uno</strong>
+                    <small>Puente pendiente</small>
+                  </span>
+                </li>
+                <li>
+                  <span className="rtmp-progress-number">5</span>
+                  <span>
+                    <strong>Envío humano</strong>
+                    <small>Sin acreditar</small>
+                  </span>
+                </li>
+              </ol>
+            ) : (
+              <ol>
+                <li className="is-complete">
+                  <span className="rtmp-progress-number">1</span>
+                  <span>
+                    <strong>Contenedor</strong>
+                    <small>{containerDocuments.length} documentos</small>
+                  </span>
+                </li>
+                <li className={profile ? "is-complete" : deliveryChannel ? "is-current" : ""}>
+                  <span className="rtmp-progress-number">2</span>
+                  <span>
+                    <strong>Empresa y canal</strong>
+                    <small>{profile ? "Completo" : "Pendiente"}</small>
+                  </span>
+                </li>
+                <li className={outputReady ? "is-complete" : profile ? "is-current" : ""}>
+                  <span className="rtmp-progress-number">3</span>
+                  <span>
+                    <strong>Elegir adjuntos</strong>
+                    <small>{outputReady ? "Completo" : "Pendiente"}</small>
+                  </span>
+                </li>
+                <li className={frozenPackage ? "is-complete" : outputReady ? "is-current" : ""}>
+                  <span className="rtmp-progress-number">4</span>
+                  <span>
+                    <strong>Fijar selección</strong>
+                    <small>{frozenPackage ? "Completo" : "Pendiente"}</small>
+                  </span>
+                </li>
+                <li className={delivery ? "is-complete" : frozenPackage ? "is-current" : ""}>
+                  <span className="rtmp-progress-number">5</span>
+                  <span>
+                    <strong>Correspondencia</strong>
+                    <small>{delivery ? "Borrador preparado" : "Pendiente"}</small>
+                  </span>
+                </li>
+              </ol>
+            )}
           </nav>
 
           {deliveryChannel ? (
@@ -1674,12 +1866,12 @@ export default function RtmPresenterWorkspace({
                 <h2 id="rtmp-destination-title">
                   {deliveryChannel === "email"
                     ? "¿A qué empresa u organismo escribes?"
-                    : "¿En qué sede vas a presentarlo?"}
+                    : "¿Qué sede o procedimiento vas a abrir?"}
                 </h2>
                 <p>
                   {deliveryChannel === "email"
-                    ? "Busca, por ejemplo, Endesa o una dirección registrada. Después elegirás los adjuntos desde el contenedor."
-                    : "Elige la sede administrativa y cómo actúas. RTM mostrará sus casillas en el orden exacto que solicita."}
+                    ? "Busca una empresa o una dirección ya registrada. Después elegirás los adjuntos desde el contenedor."
+                    : "Elige un perfil disponible y cómo actúas. Los documentos no se preseleccionan: la sede irá pidiéndolos uno a uno."}
                 </p>
               </div>
               <span className={`rtmp-chip ${profile ? "rtmp-chip-ok" : ""}`}>
@@ -1698,8 +1890,8 @@ export default function RtmPresenterWorkspace({
                   maxLength={100}
                   placeholder={
                     deliveryChannel === "email"
-                      ? "Ej. Endesa, atención al cliente, reclamaciones…"
-                      : "Ej. Ayuntamiento de Madrid, DGT, Albacete…"
+                      ? "Ej. empresa sintética, atención al cliente…"
+                      : "Ej. destino sintético de sede…"
                   }
                   disabled={profileLocked || searchingDestinations}
                   onChange={(event) => setDestinationQuery(event.target.value)}
@@ -1720,16 +1912,17 @@ export default function RtmPresenterWorkspace({
             <p className="rtmp-help">
               {deliveryChannel === "email"
                 ? "OPS busca primero en el directorio verificado. Si no está, puedes escribir un correo manual y solicitar su confirmación."
-                : "OPS busca en su registro interno. El operador no puede pegar una URL ni sustituir el perfil verificado de la sede."}
+                : "Este staging consulta únicamente perfiles sintéticos cargados en RTM. Todavía no contiene el catálogo real de DGT o ayuntamientos, y el operador no puede pegar una URL."}
             </p>
             <label className="rtmp-single-field">
               {deliveryChannel === "email"
                 ? "Empresa u organismo"
-                : "Sede administrativa"}
+                : "Sede o procedimiento verificado"}
               <select
                 value={profileId}
                 onChange={(event) => {
                   setProfileId(event.target.value);
+                  setPortalOpened(false);
                   setSelections({});
                   setAuthorizationVersionId("");
                   setEmailRecipientMode("verified");
@@ -1742,7 +1935,7 @@ export default function RtmPresenterWorkspace({
                 <option value="">
                   {deliveryChannel === "email"
                     ? "Selecciona una empresa u organismo"
-                    : "Selecciona una sede"}
+                    : "Selecciona una sede o procedimiento"}
                 </option>
                 {destinationOptions.map((item) => (
                   <option
@@ -1752,7 +1945,9 @@ export default function RtmPresenterWorkspace({
                   >
                     {item.display_name}
                     {!item.delivery_channels?.includes(deliveryChannel)
-                      ? ` · ${item.verified_email?.channel_status || "canal no disponible"}`
+                      ? ` · ${correspondenceChannelStatusLabel(
+                          item.verified_email?.channel_status
+                        )}`
                       : ""}
                   </option>
                 ))}
@@ -1804,6 +1999,7 @@ export default function RtmPresenterWorkspace({
                       disabled={editingLocked}
                       onChange={(event) => {
                         setRepresentationMode(event.target.value);
+                        setPortalOpened(false);
                         setSelections({});
                         setAuthorizationVersionId("");
                         resetFrozenState();
@@ -1834,7 +2030,9 @@ export default function RtmPresenterWorkspace({
                     <dt>Canal oficial</dt>
                     <dd>
                       {profile.verified_email?.channel_label} · {" "}
-                      {profile.verified_email?.channel_status}
+                      {correspondenceChannelStatusLabel(
+                        profile.verified_email?.channel_status
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -1963,9 +2161,123 @@ export default function RtmPresenterWorkspace({
           </section>
           ) : null}
 
-          {(deliveryChannel && profile) || externalPanelOpen ? (
+          {deliveryChannel === "portal" && profile ? (
+            <>
+              <section
+                className="rtmp-card rtmp-portal-open-card"
+                aria-labelledby="rtmp-portal-open-title"
+              >
+                <div className="rtmp-section-heading">
+                  <div>
+                    <p className="rtmp-eyebrow">Paso 3 · Abrir sede</p>
+                    <h2 id="rtmp-portal-open-title">
+                      Entra en la sede y sigue lo que vaya solicitando
+                    </h2>
+                    <p>
+                      No elijas ni fijes documentos antes de entrar. El contenedor
+                      permanece suelto en RTM y la sede determinará qué archivo
+                      necesita en cada casilla.
+                    </p>
+                  </div>
+                  <span className={`rtmp-chip ${portalOpened ? "rtmp-chip-ok" : ""}`}>
+                    {portalOpened ? "APERTURA SOLICITADA" : "PENDIENTE"}
+                  </span>
+                </div>
+                <div className="rtmp-portal-origin-box">
+                  <span>
+                    <strong>{profile.display_name}</strong>
+                    <small className="rtmp-mono">{profile.portal_origin}</small>
+                  </span>
+                  <a
+                    className="rtmp-button rtmp-button-secondary"
+                    href={profile.portal_origin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setPortalOpened(true)}
+                  >
+                    Abrir sede en otra pestaña
+                  </a>
+                </div>
+                <p className="rtmp-alert" role="note">
+                  Este enlace pertenece a un perfil sintético de staging. Abrirlo
+                  no adjunta documentos, no firma y no presenta nada.
+                </p>
+              </section>
+
+              <section
+                className="rtmp-card rtmp-portal-attach-card"
+                aria-labelledby="rtmp-portal-attach-title"
+              >
+                <div className="rtmp-section-heading">
+                  <div>
+                    <p className="rtmp-eyebrow">Paso 4 · Documento a documento</p>
+                    <h2 id="rtmp-portal-attach-title">
+                      La sede pide el archivo; tú lo eliges desde RTM
+                    </h2>
+                    <p>
+                      No se prepara un paquete ni una carpeta en el PC. Cada
+                      documento se vincula únicamente cuando aparece su casilla
+                      en la sede.
+                    </p>
+                  </div>
+                  <span className="rtmp-chip rtmp-chip-warn">PUENTE PENDIENTE</span>
+                </div>
+                <ol className="rtmp-portal-attach-steps">
+                  <li>
+                    <span className="rtmp-step-number" aria-hidden="true">1</span>
+                    <span>
+                      <strong>La sede muestra «Elegir archivo»</strong>
+                      <small>
+                        Puede pedir DNI, multa, escrito, autorización u otro
+                        documento, en su propio orden.
+                      </small>
+                    </span>
+                  </li>
+                  <li>
+                    <span className="rtmp-step-number" aria-hidden="true">2</span>
+                    <span>
+                      <strong>La extensión ofrece «Adjuntar desde RTM»</strong>
+                      <small>
+                        El panel enseñará los documentos sueltos del contenedor y
+                        elegirás solo el que corresponde a esa casilla.
+                      </small>
+                    </span>
+                  </li>
+                  <li>
+                    <span className="rtmp-step-number" aria-hidden="true">3</span>
+                    <span>
+                      <strong>RTM lo coloca en memoria</strong>
+                      <small>
+                        Sin descarga permanente ni carpeta local. El gesto se
+                        repetirá para cada archivo solicitado por la sede.
+                      </small>
+                    </span>
+                  </li>
+                </ol>
+                <div className="rtmp-bridge-preview" role="note">
+                  <span>
+                    <strong>Adjuntar desde RTM</strong>
+                    <small>Acción prevista en la extensión de Edge/Chrome</small>
+                  </span>
+                  <button type="button" className="rtmp-button rtmp-button-primary" disabled>
+                    Puente aún no activado
+                  </button>
+                </div>
+                <p className="rtmp-alert rtmp-alert-error" role="alert">
+                  El puente gestionado continúa cerrado en este staging. Cuando
+                  se active, cada archivo exigirá un ticket de un solo uso. No se han entregado bytes.
+                  Si se abre el explorador de Windows, esta
+                  versión aún no puede sustituirlo por el contenedor RTM.
+                </p>
+              </section>
+
+              <PortalReceiptCapturePanel />
+            </>
+          ) : null}
+
+          {(deliveryChannel === "email" && profile) || externalPanelOpen ? (
           <section className="rtmp-card" aria-labelledby="rtmp-checklist-title">
-            {deliveryChannel && profile ? (
+            {deliveryChannel === "email" && profile ? (
             <div className="rtmp-section-heading">
               <div>
                 <p className="rtmp-eyebrow">Paso 3 · Elegir documentos</p>
@@ -2204,7 +2516,7 @@ export default function RtmPresenterWorkspace({
               </section>
             ) : null}
 
-            {deliveryChannel && profile ? (
+            {deliveryChannel === "email" && profile ? (
             <>
             <ol className="rtmp-requirements">
               {fields.map((field, index) => {
@@ -2365,16 +2677,12 @@ export default function RtmPresenterWorkspace({
           </section>
           ) : null}
 
-          {deliveryChannel && profile ? (
+          {deliveryChannel === "email" && profile ? (
           <section className="rtmp-card" aria-labelledby="rtmp-freeze-title">
             <div className="rtmp-section-heading">
               <div>
                 <p className="rtmp-eyebrow">Paso 4 · Revisar selección</p>
-                <h2 id="rtmp-freeze-title">
-                  {deliveryChannel === "email"
-                    ? "Revisar los adjuntos de Correspondencia"
-                    : "Revisar los documentos elegidos"}
-                </h2>
+                <h2 id="rtmp-freeze-title">Revisar los adjuntos de Correspondencia</h2>
                 <p>
                   {frozenPackage
                     ? "La selección ha quedado fijada sin sacar documentos de RTM."
@@ -2388,11 +2696,7 @@ export default function RtmPresenterWorkspace({
             {frozenPackage ? (
               <>
                 <div className="rtmp-ready-summary" role="status">
-                  <strong>
-                    {deliveryChannel === "email"
-                      ? "Adjuntos fijados para redactar la correspondencia."
-                      : "Todo preparado para trabajar en la sede."}
-                  </strong>
+                  <strong>Adjuntos fijados para redactar la correspondencia.</strong>
                   <span>
                     {frozenPackage.items.length}{" "}
                     {frozenPackage.items.length === 1
@@ -2451,33 +2755,21 @@ export default function RtmPresenterWorkspace({
               >
                 {busyCommand === "freeze"
                   ? "Fijando selección…"
-                  : deliveryChannel === "email"
-                    ? "Fijar adjuntos elegidos"
-                    : "Fijar documentos elegidos"}
+                  : "Fijar adjuntos elegidos"}
               </button>
             )}
           </section>
           ) : null}
 
-          {frozenPackage ? (
+          {deliveryChannel === "email" && frozenPackage ? (
             <section className="rtmp-card rtmp-extension-card" aria-labelledby="rtmp-extension-title">
-              <p className="rtmp-eyebrow">
-                {deliveryChannel === "email"
-                  ? "Paso 5 · Borrador y control"
-                  : "Paso 5 · Presentación humana"}
-              </p>
-              <h2 id="rtmp-extension-title">
-                {deliveryChannel === "email"
-                  ? "RTM Correspondencia"
-                  : "Presentar desde RTM"}
-              </h2>
+              <p className="rtmp-eyebrow">Paso 5 · Borrador y control</p>
+              <h2 id="rtmp-extension-title">RTM Correspondencia</h2>
               <p>
-                {deliveryChannel === "email"
-                  ? "Revisa el remitente, el destinatario, la plantilla aprobada y el texto exacto. Los adjuntos salen directamente de la custodia RTM."
-                  : "RTM seguirá el orden propio de la sede y relacionará cada campo con la versión exacta del contenedor. No se crea una carpeta local ni se ofrece descarga al operador."}
+                Revisa el remitente, el destinatario, la plantilla aprobada y el
+                texto exacto. Los adjuntos salen directamente de la custodia RTM.
               </p>
-              {deliveryChannel === "email" ? (
-                <div className="rtmp-correspondence-composer">
+              <div className="rtmp-correspondence-composer">
                   <dl className="rtmp-correspondence-routing">
                     <div>
                       <dt>Empresa</dt>
@@ -2543,8 +2835,7 @@ export default function RtmPresenterWorkspace({
                       }}
                     />
                   </label>
-                </div>
-              ) : null}
+              </div>
               <ol className="rtmp-delivery-list">
                 {frozenPackage.items.map((item) => (
                   <li key={item.item_id}>
@@ -2554,16 +2845,12 @@ export default function RtmPresenterWorkspace({
                       <small>{item.portal_filename}</small>
                     </span>
                     <span className="rtmp-field-status">
-                      {delivery
-                        ? "AUDITADO"
-                        : deliveryChannel === "email"
-                          ? "ADJUNTO"
-                          : "ELEGIDO"}
+                      {delivery ? "AUDITADO" : "ADJUNTO"}
                     </span>
                   </li>
                 ))}
               </ol>
-              {deliveryChannel === "email" && !delivery ? (
+              {!delivery ? (
                 <fieldset className="rtmp-correspondence-confirmations">
                   <legend>Confirmación obligatoria antes de preparar</legend>
                   {CORRESPONDENCE_CONFIRMATION_KEYS.map((key) => (
@@ -2588,31 +2875,20 @@ export default function RtmPresenterWorkspace({
               {delivery ? (
                 <>
                   <div className="rtmp-delivery-state" role="status">
-                    <strong>
-                      {deliveryChannel === "email"
-                        ? "Borrador y evidencia guardados; sin envío externo."
-                        : "Orden auditada; sin efecto externo."}
-                    </strong>
+                    <strong>Borrador y evidencia guardados; sin envío externo.</strong>
+                    <span>Destinatario: {delivery.destination.recipient}</span>
                     <span>
-                      {deliveryChannel === "email"
-                        ? `Destinatario: ${delivery.destination.recipient}`
-                        : `Destino verificado: ${delivery.destination.portal_origin}`}
-                    </span>
-                    <span>
-                      {deliveryChannel === "email"
-                        ? "SMTP no iniciado: no existe Message-ID, respuesta del servidor ni prueba de recepción."
-                        : "El puente gestionado continúa cerrado hasta disponer de atestación criptográfica; cuando se active, cada documento exigirá un ticket de un solo uso. No se han entregado bytes."}
+                      SMTP no iniciado: no existe Message-ID, respuesta del
+                      servidor ni prueba de recepción.
                     </span>
                   </div>
-                  {deliveryChannel === "email" ? (
-                    <button
-                      type="button"
-                      className="rtmp-button rtmp-button-primary"
-                      disabled
-                    >
-                      Revisar y enviar · bloqueado en staging
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-primary"
+                    disabled
+                  >
+                    Revisar y enviar · bloqueado en staging
+                  </button>
                 </>
               ) : deliveryPrepareAllowed ? (
                 <div className="rtmp-button-row">
@@ -2620,26 +2896,19 @@ export default function RtmPresenterWorkspace({
                     type="button"
                     className="rtmp-button rtmp-button-primary"
                     onClick={() => void prepareSelectedDelivery()}
-                    disabled={
-                      Boolean(busyCommand) ||
-                      (deliveryChannel === "email" && !correspondenceDraftReady)
-                    }
+                    disabled={Boolean(busyCommand) || !correspondenceDraftReady}
                   >
                     {busyCommand === "prepare-delivery"
                       ? "Guardando orden…"
-                      : deliveryChannel === "email"
-                        ? "Guardar borrador auditado"
-                        : "Preparar carga ordenada en la sede"}
+                      : "Guardar borrador auditado"}
                   </button>
-                  {deliveryChannel === "email" ? (
-                    <button
-                      type="button"
-                      className="rtmp-button rtmp-button-secondary"
-                      disabled
-                    >
-                      Revisar y enviar · staging
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-secondary"
+                    disabled
+                  >
+                    Revisar y enviar · staging
+                  </button>
                 </div>
               ) : (
                 <p className="rtmp-alert" role="note">
@@ -2648,12 +2917,21 @@ export default function RtmPresenterWorkspace({
                 </p>
               )}
               <p className="rtmp-alert" role="note">
-                {deliveryChannel === "email"
-                  ? "La aceptación de un mensaje por SMTP no acreditaría por sí sola la recepción. Cuando la materia exija prueba reforzada, el Centro de destinos debe recomendar correo certificado, burofax u otro canal adecuado."
-                  : "Cargar un adjunto puede comunicarlo ya a la sede. RTM nunca pulsa “Enviar”, firma, resuelve CAPTCHA ni completa Cl@ve: la confirmación final y la revisión del justificante siguen siendo humanas."}
+                La aceptación de un mensaje por SMTP no acreditaría por sí sola
+                la recepción. Cuando la materia exija prueba reforzada, el Centro
+                de destinos debe recomendar correo certificado, burofax u otro
+                canal adecuado.
               </p>
             </section>
           ) : null}
+
+          <PresenterStatusTimeline
+            channel={deliveryChannel}
+            destinationReady={Boolean(profile)}
+            portalOpened={portalOpened}
+            attachmentsFixed={Boolean(frozenPackage)}
+            draftPrepared={Boolean(delivery)}
+          />
 
           <ExceptionalExportPanel allowed={exceptionalExportAllowed} />
         </>

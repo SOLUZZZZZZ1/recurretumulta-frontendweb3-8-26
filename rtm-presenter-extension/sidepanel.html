@@ -16,44 +16,107 @@
         <p class="eyebrow">RTM PRESENTADOR</p>
         <h1 id="page-title">Adjuntar desde RTM</h1>
         <p>
-          Cada clic entrega un archivo al campo del portal. Algunas sedes pueden
-          subirlo en ese momento; RTM no firma ni registra el trámite.
+          Pulsa el botón junto al campo que muestre la sede. Después elige aquí
+          un documento suelto y confirma exactamente qué vas a adjuntar.
         </p>
       </section>
 
-      <section class="case-card" aria-labelledby="active-package-title">
+      <section class="card" aria-labelledby="context-title">
         <div class="section-heading">
-          <h2 id="active-package-title">Caso y paquete activos</h2>
+          <h2 id="context-title">Expediente y contenedor</h2>
           <span class="badge">SINTÉTICO</span>
         </div>
-        <dl>
-          <div><dt>Caso</dt><dd id="case-id">Preparando…</dd></div>
-          <div><dt>Paquete</dt><dd id="package-id">Preparando…</dd></div>
+        <dl class="facts">
+          <div><dt>Expediente</dt><dd id="case-id">Preparando…</dd></div>
+          <div><dt>Contenedor</dt><dd id="container-id">Preparando…</dd></div>
           <div><dt>Destino</dt><dd id="portal-name">Preparando…</dd></div>
         </dl>
       </section>
 
-      <section aria-labelledby="documents-title">
+      <section class="card" aria-labelledby="container-title">
         <div class="section-heading">
           <div>
-            <p class="step">ORDEN DE ADJUNCIÓN</p>
-            <h2 id="documents-title">Documentos</h2>
+            <p class="step">DOCUMENTOS SUELTOS</p>
+            <h2 id="container-title">Disponibles en RTM</h2>
           </div>
-          <span id="progress" class="progress">0/0</span>
+          <span id="document-count" class="badge">0</span>
         </div>
-        <ol id="field-list" class="field-list" aria-live="polite"></ol>
+        <p class="helper">
+          No se crea ZIP, carpeta ni descarga. Solo se obtiene en memoria la
+          versión que confirmes para el campo activo.
+        </p>
+        <ul id="container-documents" class="container-list"></ul>
+      </section>
+
+      <section class="card request-card" aria-labelledby="request-title">
+        <div class="section-heading">
+          <div>
+            <p class="step">PETICIÓN DE LA SEDE</p>
+            <h2 id="request-title">Campo activo</h2>
+          </div>
+          <span id="request-state" class="badge is-waiting">ESPERANDO</span>
+        </div>
+
+        <p id="request-idle" class="empty-state">
+          En la sede, pulsa <strong>Adjuntar desde RTM</strong> junto al documento
+          que te esté solicitando.
+        </p>
+
+        <div id="request-workflow" hidden>
+          <div class="field-focus">
+            <span>La sede solicita</span>
+            <strong id="active-field"></strong>
+            <code id="active-origin"></code>
+          </div>
+
+          <fieldset>
+            <legend>1. Elige un documento del contenedor</legend>
+            <div id="document-options" class="document-options"></div>
+          </fieldset>
+
+          <section id="confirmation" class="confirmation" hidden>
+            <h3>2. Confirma antes de adjuntar</h3>
+            <dl class="confirmation-grid">
+              <div><dt>Campo</dt><dd id="confirm-field"></dd></div>
+              <div><dt>Archivo</dt><dd id="confirm-filename"></dd></div>
+              <div><dt>Versión</dt><dd id="confirm-version"></dd></div>
+              <div class="wide"><dt>SHA-256</dt><dd><code id="confirm-sha"></code></dd></div>
+            </dl>
+            <label class="confirmation-check">
+              <input id="confirm-check" type="checkbox" />
+              <span>Confirmo que esta versión corresponde a este campo de la sede.</span>
+            </label>
+            <button id="confirm-attach" type="button" disabled>
+              Confirmar y adjuntar este documento
+            </button>
+          </section>
+        </div>
+        <p id="global-status" class="global-status" role="status"></p>
+      </section>
+
+      <section class="card" aria-labelledby="audit-title">
+        <div class="section-heading">
+          <div>
+            <p class="step">TRAZA SINTÉTICA EN MEMORIA</p>
+            <h2 id="audit-title">Actividad</h2>
+          </div>
+        </div>
+        <p class="helper">
+          <code>attached_at</code> solo prueba asignación al campo. La sede mock
+          puede declarar una fecha en su justificante, pero RTM conserva
+          <code>sent_at</code> sin verificar hasta una futura conciliación segura.
+        </p>
+        <ol id="audit-events" class="audit-list"></ol>
       </section>
 
       <section class="guardrail" aria-labelledby="guardrail-title">
         <h2 id="guardrail-title">Control humano obligatorio</h2>
         <p>
-          Revisa destino, campo y archivo antes de cada clic. Adjuntar comunica el
-          documento a la sede; la extensión nunca pulsa Enviar, Registrar, Firmar,
-          Cl@ve ni CAPTCHA.
+          Adjuntar puede iniciar una subida en algunas sedes. Esta extensión no
+          pulsa Enviar, Registrar, Firmar, Cl@ve, AutoFirma ni CAPTCHA y nunca
+          convierte <code>attached_at</code> en prueba de presentación.
         </p>
       </section>
-
-      <p id="global-status" class="global-status" role="status"></p>
     </main>
 
     <script type="module" src="sidepanel.js"></script>

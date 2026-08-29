@@ -242,17 +242,32 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
             "Enviar una reclamación desde OPS",
             "Buscar sede por organismo o municipio",
             "Buscar empresa, organismo o correo verificado",
-            "Documentación solicitada por la sede",
+            "Sede y procedimiento",
+            "Abrir sede en otra pestaña",
+            "Entra en la sede y sigue lo que vaya solicitando",
+            "La sede pide el archivo; tú lo eliges desde RTM",
+            "La sede muestra «Elegir archivo»",
+            "La extensión ofrece «Adjuntar desde RTM»",
+            "No se prepara un paquete ni una carpeta en el PC",
+            "PUENTE PENDIENTE",
+            "Traer el justificante al expediente por una de dos vías",
+            "Capturar al descargar en la sede",
+            "Incorporar justificante a RTM",
+            "Conciliar la copia recibida por correo",
+            "Estado inicial de ambas vías: pendiente de verificación",
             "Documentos que acompañarán al correo",
             "Elegir desde RTM",
-            "Revisar los documentos elegidos",
-            "Fijar documentos elegidos",
-            "Presentar desde RTM",
-            "Preparar carga ordenada en la sede",
+            "Revisar los adjuntos de Correspondencia",
+            "Fijar adjuntos elegidos",
             "Empresa jurídica",
             "Canal oficial",
             "Guardar borrador auditado",
             "Revisar y enviar · bloqueado en staging",
+            "Preparando",
+            "Adjuntos vinculados",
+            "Pendiente de envío humano",
+            "Pendiente de justificante",
+            "Verificar justificante y activar seguimiento",
         ):
             self.assertIn(visible_step, component)
         self.assertIn('className="rtmp-flow-progress"', component)
@@ -276,8 +291,68 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn(".rtmp-container-list", css)
         self.assertIn(".rtmp-channel-grid", css)
         self.assertIn(".rtmp-correspondence-composer", css)
-        self.assertIn("El operador no puede pegar una URL", component)
+        self.assertIn(".rtmp-portal-attach-steps", css)
+        self.assertIn(".rtmp-receipt-paths", css)
+        self.assertIn(".rtmp-status-timeline", css)
+        self.assertIn("operador no puede pegar una URL", component)
         self.assertIn("verificación independiente", component)
+        self.assertIn("Todavía no contiene el catálogo real de DGT", component)
+
+    def test_portal_is_reactive_and_never_freezes_a_package(self):
+        component = source("RtmPresenterWorkspace.jsx")
+        freeze_function = component.split("async function freezePackage()", 1)[1].split(
+            "async function prepareSelectedDelivery()", 1
+        )[0]
+        prepare_function = component.split(
+            "async function prepareSelectedDelivery()", 1
+        )[1].split("if (!boundary.allowed)", 1)[0]
+        portal_surface = component.split(
+            '{deliveryChannel === "portal" && profile ? (', 1
+        )[1].split(
+            '{(deliveryChannel === "email" && profile) || externalPanelOpen ? (',
+            1,
+        )[0]
+
+        self.assertIn('deliveryChannel !== "email"', freeze_function)
+        self.assertIn('deliveryChannel !== "email"', prepare_function)
+        self.assertNotIn("freezePackage()", portal_surface)
+        self.assertNotIn("updateFieldSelection", portal_surface)
+        self.assertNotIn("frozenPackage.items", portal_surface)
+        self.assertIn("setPortalOpened(true)", portal_surface)
+        self.assertIn('target="_blank"', portal_surface)
+        self.assertIn('rel="noopener noreferrer"', portal_surface)
+        self.assertIn("<PortalReceiptCapturePanel />", portal_surface)
+
+    def test_receipt_capture_has_two_pending_fail_closed_routes(self):
+        component = source("RtmPresenterWorkspace.jsx")
+        panel = component.split("function PortalReceiptCapturePanel", 1)[1].split(
+            "export default function RtmPresenterWorkspace", 1
+        )[0]
+
+        self.assertIn("DESDE LA SEDE", panel)
+        self.assertIn("DESDE EL CORREO", panel)
+        self.assertIn("Incorporar justificante a RTM", panel)
+        self.assertIn("Conciliar copia recibida por correo", panel)
+        self.assertIn("pendiente de verificación", panel)
+        self.assertIn("no acredita por sí solo la presentación", panel)
+        self.assertIn("Puente cerrado en staging", panel)
+        self.assertIn("Conciliador cerrado en staging", panel)
+        self.assertGreaterEqual(panel.count("disabled"), 2)
+        self.assertNotIn("onClick=", panel)
+
+    def test_timeline_never_invents_receipt_or_deadline_state(self):
+        component = source("RtmPresenterWorkspace.jsx")
+        timeline = component.split("function PresenterStatusTimeline", 1)[1].split(
+            "export default function RtmPresenterWorkspace", 1
+        )[0]
+
+        self.assertIn('state: "pending"', timeline)
+        self.assertIn('state: "blocked"', timeline)
+        self.assertIn("No existe todavía un justificante conciliado por RTM", timeline)
+        self.assertIn("fecha del seguimiento operativo", timeline)
+        self.assertIn("Los plazos legales se mostrarán únicamente", timeline)
+        self.assertNotIn("receiptVerified", timeline)
+        self.assertNotIn("deadlineStartedAt", timeline)
 
     def test_staging_synthetic_boundary_and_transport_are_fail_closed(self):
         component = source("RtmPresenterWorkspace.jsx")

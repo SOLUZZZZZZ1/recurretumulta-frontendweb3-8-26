@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { attachFileToVerifiedInput } from "../lib/portal-attach.js";
 import { sha256Hex } from "../lib/policy.js";
-import { buildSyntheticPdf } from "../lib/synthetic-package.js";
+import { buildSyntheticPdf } from "../lib/synthetic-workspace.js";
 
 class FakeDataTransfer {
   constructor() {
@@ -98,11 +98,15 @@ async function validPayload() {
       labelText: "Añadir multa",
     },
     file: {
+      documentId: "syn-doc-fine",
       filename: "01_MULTA_SINTETICA.pdf",
+      version: 3,
       mimeType: "application/pdf",
       size: bytes.byteLength,
       sha256: await sha256Hex(bytes),
     },
+    intentId: `syn_intent_${"a".repeat(32)}`,
+    attachedAt: "2026-08-29T18:00:00.000Z",
     bytes: Array.from(bytes),
   };
 }
@@ -113,14 +117,52 @@ test("verified synthetic PDF is assigned and emits input/change", async () => {
     const result = await attachFileToVerifiedInput(await validPayload());
     assert.deepEqual(result, {
       ok: true,
-      code: "attached",
+      code: "assigned_to_input",
       slot: "fine",
+      intentId: `syn_intent_${"a".repeat(32)}`,
+      documentId: "syn-doc-fine",
       filename: "01_MULTA_SINTETICA.pdf",
+      version: 3,
+      sha256: result.sha256,
+      attachedAt: "2026-08-29T18:00:00.000Z",
       size: environment.input.files[0].size,
       mimeType: "application/pdf",
+      submissionProven: false,
     });
     assert.equal(environment.input.files.length, 1);
     assert.deepEqual(environment.events, ["input", "change"]);
+  } finally {
+    environment.restore();
+  }
+});
+
+test("an occupied input is never overwritten", async () => {
+  const environment = installPortalEnvironment();
+  try {
+    environment.input.files = [new Blob(["manual"], { type: "application/pdf" })];
+    const before = environment.input.files[0];
+    const result = await attachFileToVerifiedInput(await validPayload());
+    assert.deepEqual(result, { ok: false, code: "input_already_has_file" });
+    assert.equal(environment.input.files[0], before);
+    assert.deepEqual(environment.events, []);
+  } finally {
+    environment.restore();
+  }
+});
+
+test("a field occupied during async hash verification is not overwritten", async () => {
+  const environment = installPortalEnvironment();
+  try {
+    const operation = attachFileToVerifiedInput(await validPayload());
+    const manual = new Blob(["manual"], { type: "application/pdf" });
+    environment.input.files = [manual];
+    const result = await operation;
+    assert.deepEqual(result, {
+      ok: false,
+      code: "field_changed_during_verification",
+    });
+    assert.equal(environment.input.files[0], manual);
+    assert.deepEqual(environment.events, []);
   } finally {
     environment.restore();
   }

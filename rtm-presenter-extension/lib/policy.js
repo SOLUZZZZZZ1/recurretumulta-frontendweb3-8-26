@@ -44,6 +44,49 @@ export function assertSafeSlot(value) {
   return slot;
 }
 
+export function assertSafeIntentId(value) {
+  const intentId = String(value || "");
+  if (!/^syn_intent_[a-f0-9]{32}$/.test(intentId)) {
+    throw new Error("intent_id_invalid");
+  }
+  return intentId;
+}
+
+export function assertSafeDocumentId(value) {
+  const documentId = String(value || "");
+  if (!/^syn-doc-[a-z0-9-]{1,48}$/.test(documentId)) {
+    throw new Error("document_id_invalid");
+  }
+  return documentId;
+}
+
+export function assertDocumentVersion(value) {
+  const version = Number(value);
+  if (!Number.isSafeInteger(version) || version < 1 || version > 9999) {
+    throw new Error("document_version_invalid");
+  }
+  return version;
+}
+
+export function assertSha256(value) {
+  const sha256 = String(value || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error("hash_invalid");
+  return sha256;
+}
+
+export function assertIsoTimestamp(value, code = "timestamp_invalid") {
+  const timestamp = String(value || "");
+  const milliseconds = Date.parse(timestamp);
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp) ||
+    !Number.isFinite(milliseconds) ||
+    new Date(milliseconds).toISOString() !== timestamp
+  ) {
+    throw new Error(code);
+  }
+  return timestamp;
+}
+
 export function assertSafePdfName(value) {
   const filename = String(value || "");
   if (

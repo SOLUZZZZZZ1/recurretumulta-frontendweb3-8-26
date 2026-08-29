@@ -310,6 +310,208 @@
   letter-spacing: .12em;
 }
 
+.rtmp-portal-open-card {
+  border-color: #8ab8ec;
+  background: #f8fbff;
+}
+
+.rtmp-portal-origin-box,
+.rtmp-bridge-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #bfd5ef;
+  border-radius: 15px;
+}
+
+.rtmp-portal-origin-box > span,
+.rtmp-bridge-preview > span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rtmp-portal-origin-box small,
+.rtmp-bridge-preview small {
+  color: var(--rtmp-muted);
+  overflow-wrap: anywhere;
+}
+
+.rtmp-portal-attach-card {
+  border-color: #a7caef;
+}
+
+.rtmp-portal-attach-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rtmp-portal-attach-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid var(--rtmp-line);
+  border-radius: 15px;
+}
+
+.rtmp-portal-attach-steps li > span:last-child {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rtmp-portal-attach-steps small {
+  color: var(--rtmp-muted);
+  line-height: 1.5;
+}
+
+.rtmp-bridge-preview {
+  border-color: #9ed8b9;
+  background: #effcf5;
+}
+
+.rtmp-receipt-capture-card {
+  border-color: #e0c36d;
+  background: #fffdf7;
+}
+
+.rtmp-receipt-paths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.rtmp-receipt-path {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid #dfd3ad;
+  border-radius: 16px;
+}
+
+.rtmp-receipt-path h3,
+.rtmp-receipt-path p {
+  margin: 0;
+}
+
+.rtmp-receipt-path p,
+.rtmp-receipt-path small {
+  color: var(--rtmp-muted);
+  line-height: 1.5;
+}
+
+.rtmp-receipt-path .rtmp-button {
+  margin-top: auto;
+}
+
+.rtmp-receipt-pending {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 15px 17px;
+  color: #6d4800;
+  background: #fff8e6;
+  border: 1px solid #ebcf78;
+  border-radius: 14px;
+}
+
+.rtmp-receipt-pending span {
+  line-height: 1.5;
+}
+
+.rtmp-status-card {
+  border-color: #b9c8da;
+}
+
+.rtmp-status-timeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rtmp-status-timeline li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  color: #526077;
+  background: #f8fafc;
+  border: 1px solid #d7e0eb;
+  border-radius: 14px;
+}
+
+.rtmp-status-timeline li > span:last-child {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rtmp-status-timeline small {
+  line-height: 1.4;
+}
+
+.rtmp-status-marker {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  color: #fff;
+  background: #8a99ad;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.rtmp-status-timeline .is-complete {
+  color: #075f3b;
+  background: #effcf5;
+  border-color: #9ed8b9;
+}
+
+.rtmp-status-timeline .is-complete .rtmp-status-marker {
+  background: var(--rtmp-green);
+}
+
+.rtmp-status-timeline .is-current {
+  color: #133f75;
+  background: #edf6ff;
+  border-color: #8ab8ec;
+}
+
+.rtmp-status-timeline .is-current .rtmp-status-marker {
+  background: var(--rtmp-blue);
+}
+
+.rtmp-status-timeline .is-blocked {
+  color: #6d4800;
+  background: #fff8e6;
+  border-color: #ebcf78;
+}
+
+.rtmp-status-timeline .is-blocked .rtmp-status-marker {
+  background: #9a6500;
+}
+
 .rtmp-email-destination {
   margin-top: 20px;
   padding: 18px;
@@ -650,6 +852,7 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 900;
+  text-decoration: none;
 }
 
 .rtmp-button:disabled {
@@ -924,8 +1127,22 @@
   .rtmp-destination-evidence,
   .rtmp-correspondence-routing,
   .rtmp-correspondence-confirmations,
+  .rtmp-portal-attach-steps,
+  .rtmp-receipt-paths,
+  .rtmp-status-timeline,
   .rtmp-flow-progress ol {
     grid-template-columns: 1fr;
+  }
+
+  .rtmp-portal-origin-box,
+  .rtmp-bridge-preview {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rtmp-portal-origin-box .rtmp-button,
+  .rtmp-bridge-preview .rtmp-button {
+    width: 100%;
   }
 
   .rtmp-container-list li,

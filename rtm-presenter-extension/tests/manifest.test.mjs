@@ -24,7 +24,17 @@ test("manifest MV3 exposes only the required extension permissions", () => {
   ]) {
     assert.ok(!manifest.permissions.includes(forbidden), forbidden);
   }
-  assert.equal(manifest.content_scripts, undefined);
+  assert.deepEqual(manifest.content_scripts, [
+    {
+      matches: [
+        "http://localhost:8765/*",
+        "http://127.0.0.1:8765/*",
+      ],
+      js: ["portal-bridge.js"],
+      run_at: "document_idle",
+      all_frames: false,
+    },
+  ]);
 });
 
 test("host permissions are limited to the synthetic local portal", () => {

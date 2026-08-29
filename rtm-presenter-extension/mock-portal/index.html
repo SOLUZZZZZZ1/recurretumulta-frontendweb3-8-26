@@ -82,6 +82,41 @@
 
         <button id="validate-only" type="button">Validar localmente</button>
         <p id="validation-result" class="validation-result" role="status"></p>
+
+        <section class="human-close" aria-labelledby="human-close-title">
+          <p class="step">PASO SINTÉTICO 2 · ACCIÓN HUMANA</p>
+          <h2 id="human-close-title">Cerrar simulación</h2>
+          <p>
+            Este botón no envía, firma ni registra nada. Solo emite un
+            justificante local sintético para comprobar que
+            <code>attached_at</code> y la fecha declarada por la sede son hechos
+            distintos.
+          </p>
+          <button id="close-simulation" type="button">
+            Cerrar y emitir justificante sintético
+          </button>
+          <p id="close-result" class="validation-result" role="status"></p>
+        </section>
+
+        <section id="synthetic-receipt" class="receipt" aria-labelledby="receipt-title" hidden>
+          <p class="step">JUSTIFICANTE LOCAL · NO VERIFICADO POR RTM</p>
+          <h2 id="receipt-title">Cierre sintético</h2>
+          <dl>
+            <div><dt>ID</dt><dd id="receipt-id"></dd></div>
+            <div><dt>sent_at declarado por la sede mock</dt><dd id="receipt-sent-at"></dd></div>
+          </dl>
+          <ol id="receipt-attachments"></ol>
+          <a id="receipt-download" class="receipt-download" href="#" hidden>
+            Descargar justificante sintético
+          </a>
+          <script id="synthetic-receipt-payload" type="application/json"></script>
+          <div data-rtm-receipt-actions></div>
+          <p>
+            Este DOM no constituye prueba confiable. RTM solo observa una
+            declaración no verificada. La incorporación a RTM requiere otra
+            acción humana y queda pendiente, sin activar seguimiento.
+          </p>
+        </section>
       </section>
     </main>
 
