@@ -442,18 +442,13 @@ function packageFromResponse(
 ) {
   const value = payload?.package;
   if (!value || typeof value !== "object" || !value.package_id) {
-    throw new Error("El backend no devolvió el paquete congelado esperado.");
+    throw new Error("El backend no devolvió la selección fijada esperada.");
   }
   if (Object.keys(value).some((key) => !ALLOWED_PACKAGE_KEYS.has(key))) {
-    throw new Error("El paquete intentó exponer datos fuera del contrato seguro.");
+    throw new Error("La selección intentó exponer datos fuera del contrato seguro.");
   }
   if (
     !Array.isArray(value.items) ||
-    !value.destination ||
-    typeof value.destination !== "object" ||
-    Object.keys(value.destination).some(
-      (key) => !ALLOWED_DELIVERY_DESTINATION_KEYS.has(key)
-    ) ||
     value.items.some(
       (item) =>
         !item ||
@@ -461,10 +456,10 @@ function packageFromResponse(
         Object.keys(item).some((key) => !ALLOWED_PACKAGE_ITEM_KEYS.has(key))
     )
   ) {
-    throw new Error("Los items del paquete no respetan la proyección segura.");
+    throw new Error("Los documentos elegidos no respetan la proyección segura.");
   }
   if (value.download_available !== false || value.zip_available !== false) {
-    throw new Error("El paquete no respeta la política de no extracción.");
+    throw new Error("La selección no respeta la política de no extracción.");
   }
   if (
     String(value.case_id || "") !== String(caseId || "") ||
@@ -478,7 +473,7 @@ function packageFromResponse(
     String(value.status || "") !== "frozen" ||
     !/^[0-9a-f]{64}$/.test(String(value.manifest_sha256 || ""))
   ) {
-    throw new Error("La respuesta congelada no coincide con la solicitud activa.");
+    throw new Error("La selección fijada no coincide con la solicitud activa.");
   }
   const responseItems = Array.isArray(value.items) ? value.items : [];
   const expectedItems = Array.isArray(requestPayload?.items)
@@ -491,7 +486,7 @@ function packageFromResponse(
     portal_filename: String(item?.portal_filename || ""),
   }));
   if (JSON.stringify(exactResponseItems) !== JSON.stringify(expectedItems)) {
-    throw new Error("El backend congeló una selección distinta de la solicitada.");
+    throw new Error("El backend fijó una selección distinta de la solicitada.");
   }
   return value;
 }
@@ -518,6 +513,11 @@ function deliveryFromResponse(
   }
   if (
     !Array.isArray(value.items) ||
+    !value.destination ||
+    typeof value.destination !== "object" ||
+    Object.keys(value.destination).some(
+      (key) => !ALLOWED_DELIVERY_DESTINATION_KEYS.has(key)
+    ) ||
     value.items.some(
       (item) =>
         !item ||
@@ -622,7 +622,7 @@ function deliveryFromResponse(
     value.receipt_required !== true ||
     JSON.stringify(exactItems) !== JSON.stringify(expectedItems)
   ) {
-    throw new Error("La orden no coincide exactamente con el paquete preparado.");
+    throw new Error("La orden no coincide exactamente con la selección fijada.");
   }
   return Object.freeze({ ...value, items: Object.freeze(value.items) });
 }
@@ -1325,7 +1325,7 @@ export default function RtmPresenterWorkspace({
       pendingFreezeRef.current = null;
       setSupersedesPackageId(null);
       setMessage(
-        "Paquete preparado. No se han emitido tickets ni se ha enviado contenido fuera de RTM."
+        "Selección fijada. Los documentos siguen separados en RTM y no se ha enviado contenido fuera."
       );
     } catch (error) {
       if (error instanceof RtmPresenterApiError && error.status && error.status < 500) {
@@ -2372,8 +2372,8 @@ export default function RtmPresenterWorkspace({
                 <p className="rtmp-eyebrow">Paso 4 · Revisar selección</p>
                 <h2 id="rtmp-freeze-title">
                   {deliveryChannel === "email"
-                    ? "Fijar los adjuntos de Correspondencia"
-                    : "Revisar y preparar"}
+                    ? "Revisar los adjuntos de Correspondencia"
+                    : "Revisar los documentos elegidos"}
                 </h2>
                 <p>
                   {frozenPackage
@@ -2382,7 +2382,7 @@ export default function RtmPresenterWorkspace({
                 </p>
               </div>
               {frozenPackage ? (
-                <span className="rtmp-chip rtmp-chip-ok">PAQUETE PREPARADO</span>
+                <span className="rtmp-chip rtmp-chip-ok">SELECCIÓN FIJADA</span>
               ) : null}
             </div>
             {frozenPackage ? (
@@ -2401,18 +2401,18 @@ export default function RtmPresenterWorkspace({
                   </span>
                 </div>
                 <details className="rtmp-technical-details">
-                  <summary>Ver identificadores y huellas del paquete</summary>
+                  <summary>Ver identificadores y huellas de la selección</summary>
                   <dl className="rtmp-package-meta">
                     <div>
-                      <dt>Paquete</dt>
+                      <dt>Selección interna</dt>
                       <dd className="rtmp-mono">{frozenPackage.package_id}</dd>
                     </div>
                     <div>
-                      <dt>Versión lógica</dt>
+                      <dt>Versión de la selección</dt>
                       <dd>{frozenPackage.package_version}</dd>
                     </div>
                     <div>
-                      <dt>Huella del manifiesto</dt>
+                      <dt>Huella de la selección</dt>
                       <dd className="rtmp-mono">
                         {frozenPackage.manifest_sha256}
                       </dd>
@@ -2450,10 +2450,10 @@ export default function RtmPresenterWorkspace({
                 disabled={!outputReady || Boolean(busyCommand)}
               >
                 {busyCommand === "freeze"
-                  ? "Preparando…"
+                  ? "Fijando selección…"
                   : deliveryChannel === "email"
-                    ? "Fijar adjuntos para Correspondencia"
-                    : "Preparar paquete para presentar"}
+                    ? "Fijar adjuntos elegidos"
+                    : "Fijar documentos elegidos"}
               </button>
             )}
           </section>
@@ -2558,7 +2558,7 @@ export default function RtmPresenterWorkspace({
                         ? "AUDITADO"
                         : deliveryChannel === "email"
                           ? "ADJUNTO"
-                          : "EN PAQUETE"}
+                          : "ELEGIDO"}
                     </span>
                   </li>
                 ))}

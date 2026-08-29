@@ -301,7 +301,7 @@ test("unsafe, oversize, or repeated versions cannot enter a package", () => {
         documents,
         expiresAt: "2030-01-01T00:15:00Z",
       }),
-    /no puede ocupar dos campos/
+    /no puede ocupar dos casillas/
   );
 });
 

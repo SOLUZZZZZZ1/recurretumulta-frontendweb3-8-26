@@ -204,6 +204,31 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         ):
             self.assertIn(f'"{field}"', component)
 
+    def test_frozen_package_projection_does_not_require_delivery_destination(self):
+        component = source("RtmPresenterWorkspace.jsx")
+        package_projection = component.split(
+            "function packageFromResponse", 1
+        )[1].split("function deliveryFromResponse", 1)[0]
+
+        self.assertIn("ALLOWED_PACKAGE_KEYS", package_projection)
+        self.assertIn("ALLOWED_PACKAGE_ITEM_KEYS", package_projection)
+        self.assertIn("value.items.some", package_projection)
+        self.assertIn("value.destination_profile_id", package_projection)
+        self.assertIn("value.portal_origin", package_projection)
+        self.assertIn("exactResponseItems", package_projection)
+        self.assertNotIn("!value.destination", package_projection)
+        self.assertNotIn(
+            "ALLOWED_DELIVERY_DESTINATION_KEYS", package_projection
+        )
+
+        delivery_projection = component.split(
+            "function deliveryFromResponse", 1
+        )[1].split("export default function RtmPresenterWorkspace", 1)[0]
+        self.assertIn("!value.destination", delivery_projection)
+        self.assertIn(
+            "ALLOWED_DELIVERY_DESTINATION_KEYS", delivery_projection
+        )
+
     def test_operator_surface_is_a_guided_human_filing_flow(self):
         component = source("RtmPresenterWorkspace.jsx")
         css = source("rtmPresenter.css")
@@ -220,8 +245,8 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
             "Documentación solicitada por la sede",
             "Documentos que acompañarán al correo",
             "Elegir desde RTM",
-            "Revisar y preparar",
-            "Preparar paquete para presentar",
+            "Revisar los documentos elegidos",
+            "Fijar documentos elegidos",
             "Presentar desde RTM",
             "Preparar carga ordenada en la sede",
             "Empresa jurídica",

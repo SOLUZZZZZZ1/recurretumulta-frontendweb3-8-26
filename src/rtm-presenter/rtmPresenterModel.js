@@ -91,7 +91,7 @@ function exactExpiry(value) {
   const raw = requiredText(value, "expires_at");
   const parsed = new Date(raw);
   if (!Number.isFinite(parsed.getTime())) {
-    fail("presenter.expiry_invalid", "La caducidad del paquete no es válida.");
+    fail("presenter.expiry_invalid", "La caducidad de la selección no es válida.");
   }
   return parsed.toISOString();
 }
@@ -346,7 +346,7 @@ export function buildRtmPresenterFreezePayload({
       if (selectedIds.has(documentVersionId)) {
         fail(
           "presenter.document_version_repeated",
-          "Una versión documental no puede ocupar dos campos del paquete."
+          "Una versión documental no puede ocupar dos casillas de la selección."
         );
       }
       const documentVersion = documentVersionById(
@@ -405,7 +405,7 @@ export function buildRtmPresenterFreezePayload({
     ) {
       fail(
         "presenter.authorization_not_in_package",
-        "La autorización exacta debe estar seleccionada dentro del paquete."
+        "La autorización exacta debe estar incluida en la selección."
       );
     }
   } else if (authorizationDocumentVersionId) {
@@ -440,7 +440,7 @@ export function evaluateRtmPresenterReadiness(input) {
     return Object.freeze({
       ready: true,
       payload: buildRtmPresenterFreezePayload(input),
-      message: "El paquete cumple el perfil de la sede.",
+      message: "Los documentos elegidos cumplen el perfil de la sede.",
     });
   } catch (error) {
     if (error instanceof RtmPresenterModelError) {
