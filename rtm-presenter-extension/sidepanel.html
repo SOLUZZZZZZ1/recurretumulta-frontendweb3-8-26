@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RTM Presentador sintético</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="safety-banner" role="status">
+      STAGING · SYNTHETIC ONLY · SIN EFECTO JURÍDICO
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">RTM PRESENTADOR</p>
+        <h1 id="page-title">Adjuntar desde RTM</h1>
+        <p>
+          Cada clic entrega un archivo al campo del portal. Algunas sedes pueden
+          subirlo en ese momento; RTM no firma ni registra el trámite.
+        </p>
+      </section>
+
+      <section class="case-card" aria-labelledby="active-package-title">
+        <div class="section-heading">
+          <h2 id="active-package-title">Caso y paquete activos</h2>
+          <span class="badge">SINTÉTICO</span>
+        </div>
+        <dl>
+          <div><dt>Caso</dt><dd id="case-id">Preparando…</dd></div>
+          <div><dt>Paquete</dt><dd id="package-id">Preparando…</dd></div>
+          <div><dt>Destino</dt><dd id="portal-name">Preparando…</dd></div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="documents-title">
+        <div class="section-heading">
+          <div>
+            <p class="step">ORDEN DE ADJUNCIÓN</p>
+            <h2 id="documents-title">Documentos</h2>
+          </div>
+          <span id="progress" class="progress">0/0</span>
+        </div>
+        <ol id="field-list" class="field-list" aria-live="polite"></ol>
+      </section>
+
+      <section class="guardrail" aria-labelledby="guardrail-title">
+        <h2 id="guardrail-title">Control humano obligatorio</h2>
+        <p>
+          Revisa destino, campo y archivo antes de cada clic. Adjuntar comunica el
+          documento a la sede; la extensión nunca pulsa Enviar, Registrar, Firmar,
+          Cl@ve ni CAPTCHA.
+        </p>
+      </section>
+
+      <p id="global-status" class="global-status" role="status"></p>
+    </main>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

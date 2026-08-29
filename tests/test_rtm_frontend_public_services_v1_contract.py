@@ -155,8 +155,10 @@ class PublicServicesCatalogTests(unittest.TestCase):
         self.assertIn('hash.startsWith("#/")', main)
         self.assertIn('window.history.replaceState(null, "", hash.slice(1))', main)
         vercel = read(ROOT / "vercel.json")
-        self.assertIn('"src": "/(.*)"', vercel)
-        self.assertIn('"dest": "/index.html"', vercel)
+        self.assertNotIn('"routes"', vercel)
+        self.assertIn('"rewrites"', vercel)
+        self.assertIn('"source": "/:path*"', vercel)
+        self.assertIn('"destination": "/index.html"', vercel)
 
 
 class PublicServicesSurfaceTests(unittest.TestCase):

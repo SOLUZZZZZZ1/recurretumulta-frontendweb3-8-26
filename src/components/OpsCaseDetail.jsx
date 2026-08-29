@@ -44,12 +44,6 @@ export default function OpsCaseDetail() {
     setEvents(e.items || []);
   }
 
-  async function presignAndOpen(bucket, key) {
-    const url = `${API}/files/presign?case_id=${caseId}&bucket=${bucket}&key=${key}`;
-    const data = await fetchJson(url);
-    window.open(data.url, "_blank", "noopener,noreferrer");
-  }
-
   async function markSubmitted() {
     const fd = new FormData();
     if (registro) fd.append("registro", registro);
@@ -134,14 +128,16 @@ export default function OpsCaseDetail() {
         <div className="sr-card">
           <h3 className="sr-h3">Documentos</h3>
           {docs.map((d, i) => (
-            <button
+            <div
               key={i}
-              onClick={() => presignAndOpen(d.bucket, d.key)}
               className="block w-full text-left border rounded p-2 mt-2 text-xs"
             >
               <strong>{d.kind}</strong>
               <div>{fmt(d.created_at)}</div>
-            </button>
+              <div className="mt-1 font-semibold text-emerald-700">
+                Custodiado en RTM · sin descarga de operador
+              </div>
+            </div>
           ))}
         </div>
 

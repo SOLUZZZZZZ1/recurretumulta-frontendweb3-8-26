@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "RTM Presentador · prototipo sintético",
+  "version": "0.1.0",
+  "minimum_chrome_version": "114",
+  "description": "Adjunta documentos sintéticos desde un paquete RTM a un portal local sin presentar ni firmar.",
+  "permissions": [
+    "scripting",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "http://localhost:8765/*",
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Abrir RTM Presentador"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self'"
+  }
+}

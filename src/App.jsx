@@ -60,6 +60,22 @@ import a1sF2RouteEnabled, {
 const OpsA1SSyntheticReadOnly = lazy(
   () => import("./pages/OpsA1SSyntheticReadOnly.jsx")
 );
+const OpsPresenterPage = lazy(() => import("./pages/OpsPresenterPage.jsx"));
+
+function OpsPresenterFallback() {
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-950">
+      <div className="mx-auto max-w-3xl rounded-3xl border border-amber-300 bg-amber-50 p-6 shadow-lg">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-900">
+          RTM Presenter · staging sintético
+        </p>
+        <p className="mt-3 font-semibold" role="status">
+          Abriendo el contenedor protegido…
+        </p>
+      </div>
+    </main>
+  );
+}
 
 function PrivateA1SFallback() {
   return (
@@ -165,6 +181,14 @@ export default function App() {
         <Route path="/ops" element={<OpsDashboard />} />
         <Route path="/ops/followups" element={<OpsFollowups />} />
         <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
+        <Route
+          path="/ops/case/:caseId/presenter"
+          element={
+            <Suspense fallback={<OpsPresenterFallback />}>
+              <OpsPresenterPage />
+            </Suspense>
+          }
+        />
         <Route path="/ops/review/:caseId" element={<OpsCaseDetailPro />} />
         <Route path="/ops/case/:caseId/review" element={<OpsCaseDetailPro />} />
         <Route path="/ops/pro/:caseId" element={<OpsCaseDetailPro />} />

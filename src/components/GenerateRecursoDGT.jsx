@@ -23,21 +23,13 @@ export default function GenerateRecursoDGT({
 }) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-  const [result, setResult] = useState(null);
+  const [generated, setGenerated] = useState(false);
 
   const isDgtCase = isDGT(organismo);
 
-  async function presign(bucket, key) {
-    const url = `${API}/files/presign?case_id=${encodeURIComponent(caseId)}&bucket=${encodeURIComponent(
-      bucket
-    )}&key=${encodeURIComponent(key)}`;
-    const data = await fetchJson(url);
-    return data.url;
-  }
-
   async function generate() {
     setMsg("");
-    setResult(null);
+    setGenerated(false);
 
     if (!caseId) return setMsg("Falta el expediente interno.");
 
@@ -55,27 +47,18 @@ export default function GenerateRecursoDGT({
         interesado: {}, // lo rellenaremos con /cases/{id}/details en el siguiente paso
       };
 
-      const data = await fetchJson(`${API}/generate/dgt`, {
+      await fetchJson(`${API}/generate/dgt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      setResult(data);
-      setMsg("Documento generado.");
+      setGenerated(true);
+      setMsg("Documento generado y custodiado en el expediente.");
     } catch (e) {
       setMsg(e?.message || "No se pudo generar el documento.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function openDoc(doc) {
-    try {
-      const url = await presign(doc.bucket, doc.key);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      alert(e?.message || "No se pudo abrir el archivo.");
     }
   }
 
@@ -109,14 +92,9 @@ export default function GenerateRecursoDGT({
         )}
       </div>
 
-      {result?.docx && result?.pdf && (
-        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="sr-btn-secondary" onClick={() => openDoc(result.pdf)}>
-            Abrir PDF
-          </button>
-          <button className="sr-btn-secondary" onClick={() => openDoc(result.docx)}>
-            Abrir DOCX
-          </button>
+      {generated && (
+        <div className="sr-small" style={{ marginTop: 12, color: "#166534" }}>
+          El documento queda dentro del contenedor RTM. No se ofrece descarga ni enlace de almacenamiento.
         </div>
       )}
 
