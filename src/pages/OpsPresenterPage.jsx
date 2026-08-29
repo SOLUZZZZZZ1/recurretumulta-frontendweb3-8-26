@@ -237,7 +237,8 @@ export default function OpsPresenterPage() {
             <h1 className="mt-2 text-3xl font-black">Identifica al presentador</h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               El PIN compartido de OPS no sirve aquí. La sesión vive solo en
-              memoria y vincula cada paquete y cada adjunto al operador real.
+              memoria y vincula cada selección de documentos y cada adjunto al
+              operador real.
             </p>
 
             {authStatus && !authStatus.individual_login_enabled ? (
