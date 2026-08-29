@@ -1,6 +1,6 @@
 import { evaluateRtmPresenterBoundary } from "./rtmPresenterModel.js";
 
-export const RTM_PRESENTER_API_VERSION = "rtm.presenter.api.client.v2";
+export const RTM_PRESENTER_API_VERSION = "rtm.presenter.api.client.v3";
 export const RTM_PRESENTER_API_PREFIX = "/api/ops/presenter";
 
 const MAX_JSON_CHARACTERS = 1_000_000;
@@ -28,6 +28,14 @@ const EXTERNAL_DOCUMENT_EXTENSIONS = Object.freeze({
   "image/jpeg": Object.freeze([".jpg", ".jpeg"]),
   "image/png": Object.freeze([".png"]),
 });
+const CORRESPONDENCE_CONFIRMATION_KEYS = Object.freeze([
+  "destination_reviewed",
+  "interested_confirmed",
+  "representation_confirmed",
+  "text_confirmed",
+  "attachments_confirmed",
+  "data_minimization_confirmed",
+]);
 
 export class RtmPresenterApiError extends Error {
   constructor(code, message, status = null) {
@@ -56,6 +64,48 @@ function safePurpose(value) {
     fail("presenter.external_purpose_invalid", "La finalidad documental no es válida.");
   }
   return purpose;
+}
+
+function normalizeCorrespondenceDraft(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail(
+      "presenter.correspondence_draft_required",
+      "RTM Correspondencia exige un borrador revisado."
+    );
+  }
+  const subject = String(value.subject || "").trim().replace(/\s+/g, " ");
+  const body = String(value.body || "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+  const confirmations = value.confirmations;
+  if (
+    !subject ||
+    subject.length > 240 ||
+    /[\u0000-\u001f\u007f]/.test(subject) ||
+    !body ||
+    body.length > 12000 ||
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(body) ||
+    !confirmations ||
+    typeof confirmations !== "object" ||
+    Array.isArray(confirmations) ||
+    Object.keys(confirmations).length !==
+      CORRESPONDENCE_CONFIRMATION_KEYS.length ||
+    CORRESPONDENCE_CONFIRMATION_KEYS.some(
+      (key) => confirmations[key] !== true
+    )
+  ) {
+    fail(
+      "presenter.correspondence_confirmation_required",
+      "Revisa destinatario, interesado, representación, texto y adjuntos."
+    );
+  }
+  return {
+    subject,
+    body,
+    confirmations: Object.fromEntries(
+      CORRESPONDENCE_CONFIRMATION_KEYS.map((key) => [key, true])
+    ),
+  };
 }
 
 export function validateRtmPresenterExternalFile(file) {
@@ -282,7 +332,14 @@ export function createRtmPresenterClient({
     async prepareDelivery(
       caseId,
       packageId,
-      { channel = "portal", signal = null, idempotencyKey = "" } = {}
+      {
+        channel = "portal",
+        recipientEmail = "",
+        recipientConfirmed = false,
+        correspondenceDraft = null,
+        signal = null,
+        idempotencyKey = "",
+      } = {}
     ) {
       const id = safeSegment(caseId, "caseId");
       const exactPackageId = safeSegment(packageId, "packageId");
@@ -292,6 +349,23 @@ export function createRtmPresenterClient({
           "El canal de presentación no es válido."
         );
       }
+      const normalizedRecipient = String(recipientEmail || "").trim().toLowerCase();
+      if (channel === "portal" && normalizedRecipient) {
+        fail(
+          "presenter.delivery_email_not_allowed_for_portal",
+          "Una presentación en sede no admite destinatario de correo."
+        );
+      }
+      if (channel === "portal" && correspondenceDraft !== null) {
+        fail(
+          "presenter.delivery_email_not_allowed_for_portal",
+          "Una presentación en sede no admite datos de correspondencia."
+        );
+      }
+      const correspondence =
+        channel === "email"
+          ? normalizeCorrespondenceDraft(correspondenceDraft)
+          : null;
       return jsonRequest(
         `${RTM_PRESENTER_API_PREFIX}/cases/${id}/packages/${exactPackageId}/deliveries/prepare`,
         {
@@ -300,7 +374,15 @@ export function createRtmPresenterClient({
             ...commandHeaders({ idempotencyKey }),
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ channel }),
+          body: JSON.stringify({
+            channel,
+            recipient_email: normalizedRecipient || null,
+            recipient_confirmed:
+              channel === "email" && normalizedRecipient
+                ? recipientConfirmed === true
+                : false,
+            correspondence,
+          }),
           signal,
         }
       );

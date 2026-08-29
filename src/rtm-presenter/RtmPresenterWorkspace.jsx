@@ -52,6 +52,8 @@ const ALLOWED_DESTINATION_KEYS = new Set([
   "authority_code",
   "display_name",
   "portal_origin",
+  "delivery_channels",
+  "verified_email",
   "representation_modes",
   "authorization_field_code",
   "fields",
@@ -66,6 +68,26 @@ const ALLOWED_DESTINATION_FIELD_KEYS = new Set([
   "media_types",
   "max_files",
   "max_bytes",
+]);
+const ALLOWED_VERIFIED_EMAIL_KEYS = new Set([
+  "recipient",
+  "verified",
+  "template_code",
+  "template_version",
+  "sender",
+  "legal_entity_name",
+  "entity_role",
+  "channel_label",
+  "channel_status",
+  "routing_scope_label",
+  "routing_warning",
+  "official_source_label",
+  "official_source_url",
+  "recommended_evidence_channel",
+  "sensitive_attachment_policy",
+  "subject_template",
+  "body_template",
+  "matter_codes",
 ]);
 const ALLOWED_PACKAGE_KEYS = new Set([
   "package_id",
@@ -115,6 +137,7 @@ const ALLOWED_DELIVERY_KEYS = new Set([
   "mode",
   "state",
   "destination",
+  "correspondence",
   "items",
   "prepared_at",
   "prepared_by_operator_id",
@@ -139,9 +162,67 @@ const ALLOWED_DELIVERY_ITEM_KEYS = new Set([
   "size_bytes",
   "state",
 ]);
+const ALLOWED_DELIVERY_DESTINATION_KEYS = new Set([
+  "kind",
+  "portal_origin",
+  "recipient",
+  "verified",
+  "template_code",
+  "template_version",
+  "official_profile_recipient",
+  "legal_entity_name",
+  "entity_role",
+  "channel_status",
+  "official_source_label",
+  "official_source_url",
+  "recommended_evidence_channel",
+  "sensitive_attachment_policy",
+]);
 const EXTERNAL_DOCUMENT_PURPOSES = new Set(
   RTM_PRESENTER_EXTERNAL_DOCUMENT_PURPOSES
 );
+const CORRESPONDENCE_CONFIRMATION_KEYS = Object.freeze([
+  "destination_reviewed",
+  "interested_confirmed",
+  "representation_confirmed",
+  "text_confirmed",
+  "attachments_confirmed",
+  "data_minimization_confirmed",
+]);
+const CORRESPONDENCE_CONFIRMATION_LABELS = Object.freeze({
+  destination_reviewed: "Destinatario y canal oficial revisados",
+  interested_confirmed: "Interesado y referencia del expediente correctos",
+  representation_confirmed: "Representación comprobada cuando corresponde",
+  text_confirmed: "Asunto, texto y pretensión definitivos",
+  attachments_confirmed: "Adjuntos y versiones exactos",
+  data_minimization_confirmed: "No se incluyen documentos innecesarios",
+});
+const ALLOWED_CORRESPONDENCE_KEYS = new Set([
+  "sender",
+  "recipient",
+  "subject",
+  "body",
+  "template_code",
+  "template_version",
+  "confirmations",
+  "attachments",
+  "transport_evidence",
+]);
+const ALLOWED_CORRESPONDENCE_ATTACHMENT_KEYS = new Set([
+  "package_item_id",
+  "document_version_id",
+  "document_sha256",
+  "filename",
+]);
+const ALLOWED_TRANSPORT_EVIDENCE_KEYS = new Set([
+  "message_id",
+  "smtp_response",
+  "server_accepted",
+  "delivery_receipt_proven",
+  "bounce_status",
+  "reply_recorded",
+  "claim_reference",
+]);
 
 const ACTOR_OPTIONS = Object.freeze([
   { value: "self", label: "Actúo como interesado" },
@@ -178,6 +259,19 @@ const MEDIA_TYPE_LABELS = Object.freeze({
   "image/png": "PNG",
   "text/plain": "TXT",
 });
+
+function emptyCorrespondenceConfirmations() {
+  return Object.fromEntries(
+    CORRESPONDENCE_CONFIRMATION_KEYS.map((key) => [key, false])
+  );
+}
+
+function fillCorrespondenceTemplate(template, { caseId, company }) {
+  return String(template || "")
+    .replaceAll("[expediente]", String(caseId || ""))
+    .replaceAll("[empresa]", String(company || ""))
+    .replaceAll("[referencia]", "SYNTHETIC-REFERENCE");
+}
 
 function randomCommandKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -231,6 +325,10 @@ function assertSafeDestinationProjection(destinations) {
         (key) => !ALLOWED_DESTINATION_KEYS.has(key)
       ) ||
       !Array.isArray(destination.fields) ||
+      !Array.isArray(destination.delivery_channels) ||
+      destination.delivery_channels.some(
+        (channel) => !new Set(["portal", "email"]).has(channel)
+      ) ||
       destination.fields.some(
         (field) =>
           !field ||
@@ -251,6 +349,39 @@ function assertSafeDestinationProjection(destinations) {
     }
     if (url.protocol !== "https:" || url.origin !== destination.portal_origin) {
       throw new Error("RTM devolvió un origen de sede no verificable.");
+    }
+    const verifiedEmail = destination.verified_email;
+    if (
+      verifiedEmail !== null &&
+      verifiedEmail !== undefined &&
+      (
+        typeof verifiedEmail !== "object" ||
+        Object.keys(verifiedEmail).some(
+          (key) => !ALLOWED_VERIFIED_EMAIL_KEYS.has(key)
+        ) ||
+        verifiedEmail.verified !== true ||
+        verifiedEmail.sender !== "info@recurretumulta.eu" ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          String(verifiedEmail.recipient || "")
+        ) ||
+        !Array.isArray(verifiedEmail.matter_codes) ||
+        verifiedEmail.matter_codes.length < 1 ||
+        !String(verifiedEmail.legal_entity_name || "").trim() ||
+        !String(verifiedEmail.channel_label || "").trim() ||
+        !new Set(["accepted", "form_required", "alternative_preferred"]).has(
+          verifiedEmail.channel_status
+        ) ||
+        !String(verifiedEmail.routing_scope_label || "").trim() ||
+        !String(verifiedEmail.routing_warning || "").trim() ||
+        !String(verifiedEmail.sensitive_attachment_policy || "").trim() ||
+        !String(verifiedEmail.subject_template || "").trim() ||
+        !String(verifiedEmail.body_template || "").trim() ||
+        !String(verifiedEmail.official_source_url || "").startsWith("https://") ||
+        (verifiedEmail.channel_status === "accepted") !==
+          destination.delivery_channels.includes("email")
+      )
+    ) {
+      throw new Error("RTM devolvió un correo de destino no verificable.");
     }
   }
 }
@@ -318,6 +449,11 @@ function packageFromResponse(
   }
   if (
     !Array.isArray(value.items) ||
+    !value.destination ||
+    typeof value.destination !== "object" ||
+    Object.keys(value.destination).some(
+      (key) => !ALLOWED_DELIVERY_DESTINATION_KEYS.has(key)
+    ) ||
     value.items.some(
       (item) =>
         !item ||
@@ -360,7 +496,16 @@ function packageFromResponse(
   return value;
 }
 
-function deliveryFromResponse(payload, { caseId, frozenPackage }) {
+function deliveryFromResponse(
+  payload,
+  {
+    caseId,
+    frozenPackage,
+    channel,
+    expectedRecipient = "",
+    expectedCorrespondence = null,
+  }
+) {
   const value = payload?.delivery;
   if (
     !value ||
@@ -401,16 +546,73 @@ function deliveryFromResponse(payload, { caseId, frozenPackage }) {
     portal_filename: String(item.portal_filename || ""),
     state: "pending",
   }));
+  const exactRecipient = String(expectedRecipient || "").trim().toLowerCase();
+  const destinationMatches =
+    channel === "portal"
+      ? value.destination?.kind === "verified_portal_origin" &&
+        String(value.destination?.portal_origin || "") ===
+          String(frozenPackage?.portal_origin || "")
+      : new Set([
+            "verified_email",
+            "operator_entered_email_pending_verification",
+          ]).has(value.destination?.kind) &&
+        (!exactRecipient ||
+          String(value.destination?.recipient || "").toLowerCase() ===
+            exactRecipient) &&
+        value.destination?.channel_status === "accepted" &&
+        String(value.destination?.official_source_url || "").startsWith(
+          "https://"
+        );
+  const correspondence = value.correspondence;
+  const correspondenceAttachments = packageItems.map((item) => ({
+    package_item_id: String(item.item_id || ""),
+    document_version_id: String(item.document_version_id || ""),
+    document_sha256: String(item.document_sha256 || ""),
+    filename: String(item.portal_filename || ""),
+  }));
+  const correspondenceMatches =
+    channel === "portal"
+      ? correspondence === undefined
+      : correspondence &&
+        typeof correspondence === "object" &&
+        !Object.keys(correspondence).some(
+          (key) => !ALLOWED_CORRESPONDENCE_KEYS.has(key)
+        ) &&
+        correspondence.sender === "info@recurretumulta.eu" &&
+        String(correspondence.recipient || "").toLowerCase() === exactRecipient &&
+        correspondence.subject === expectedCorrespondence?.subject &&
+        correspondence.body === expectedCorrespondence?.body &&
+        JSON.stringify(correspondence.confirmations) ===
+          JSON.stringify(expectedCorrespondence?.confirmations) &&
+        Array.isArray(correspondence.attachments) &&
+        correspondence.attachments.every(
+          (item) =>
+            item &&
+            typeof item === "object" &&
+            !Object.keys(item).some(
+              (key) => !ALLOWED_CORRESPONDENCE_ATTACHMENT_KEYS.has(key)
+            )
+        ) &&
+        JSON.stringify(correspondence.attachments) ===
+          JSON.stringify(correspondenceAttachments) &&
+        correspondence.transport_evidence &&
+        typeof correspondence.transport_evidence === "object" &&
+        !Object.keys(correspondence.transport_evidence).some(
+          (key) => !ALLOWED_TRANSPORT_EVIDENCE_KEYS.has(key)
+        ) &&
+        correspondence.transport_evidence.message_id === null &&
+        correspondence.transport_evidence.smtp_response === null &&
+        correspondence.transport_evidence.server_accepted === false &&
+        correspondence.transport_evidence.delivery_receipt_proven === false;
   if (
     String(value.case_id || "") !== String(caseId || "") ||
     String(value.package_id || "") !== String(frozenPackage?.package_id || "") ||
     String(value.package_manifest_sha256 || "") !==
       String(frozenPackage?.manifest_sha256 || "") ||
-    value.channel !== "portal" ||
+    value.channel !== channel ||
     value.state !== "prepared" ||
-    value.destination?.kind !== "verified_portal_origin" ||
-    String(value.destination?.portal_origin || "") !==
-      String(frozenPackage?.portal_origin || "") ||
+    !destinationMatches ||
+    !correspondenceMatches ||
     value.external_effects_allowed !== false ||
     value.authoritative_submission !== false ||
     value.local_files_created !== false ||
@@ -516,11 +718,20 @@ export default function RtmPresenterWorkspace({
   ]);
 
   const [workspace, setWorkspace] = useState(null);
+  const [deliveryChannel, setDeliveryChannel] = useState("");
   const [profileId, setProfileId] = useState("");
   const [destinationQuery, setDestinationQuery] = useState("");
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [searchingDestinations, setSearchingDestinations] = useState(false);
   const [representationMode, setRepresentationMode] = useState("self");
+  const [emailRecipientMode, setEmailRecipientMode] = useState("verified");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualEmailConfirmed, setManualEmailConfirmed] = useState(false);
+  const [correspondenceSubject, setCorrespondenceSubject] = useState("");
+  const [correspondenceBody, setCorrespondenceBody] = useState("");
+  const [correspondenceConfirmations, setCorrespondenceConfirmations] = useState(
+    emptyCorrespondenceConfirmations
+  );
   const [selections, setSelections] = useState({});
   const [authorizationVersionId, setAuthorizationVersionId] = useState("");
   const [frozenPackage, setFrozenPackage] = useState(null);
@@ -559,11 +770,18 @@ export default function RtmPresenterWorkspace({
       const next = normalizeWorkspace(payload, caseId);
       pendingFreezeRef.current = null;
       setWorkspace(next);
+      setDeliveryChannel("");
       setProfileId("");
       setDestinationQuery("");
       setDestinationOptions(next.destinations);
       setSelections({});
       setAuthorizationVersionId("");
+      setEmailRecipientMode("verified");
+      setManualEmail("");
+      setManualEmailConfirmed(false);
+      setCorrespondenceSubject("");
+      setCorrespondenceBody("");
+      setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
       setFrozenPackage(null);
       setDelivery(null);
       setSupersedesPackageId(null);
@@ -631,7 +849,26 @@ export default function RtmPresenterWorkspace({
       externalFileInputRef.current.value = "";
     }
     setExternalFileMetadata(null);
+    setDeliveryChannel("");
+    setEmailRecipientMode("verified");
+    setManualEmail("");
+    setManualEmailConfirmed(false);
+    setCorrespondenceSubject("");
+    setCorrespondenceBody("");
+    setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
   }, [caseId]);
+
+  useEffect(() => {
+    if (!externalPanelOpen) return undefined;
+    const frame = globalThis.requestAnimationFrame?.(() => {
+      globalThis.document
+        ?.getElementById("rtmp-external-panel")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => {
+      if (frame !== undefined) globalThis.cancelAnimationFrame?.(frame);
+    };
+  }, [externalPanelOpen]);
 
   const profile = useMemo(
     () =>
@@ -640,6 +877,55 @@ export default function RtmPresenterWorkspace({
       ) || null,
     [destinationOptions, profileId]
   );
+
+  const containerDocuments = useMemo(
+    () => latestPresenterDocumentVersions(workspace?.documents || []),
+    [workspace]
+  );
+
+  const normalizedManualEmail = manualEmail.trim().toLowerCase();
+  const manualEmailIsSynthetic =
+    /^[^\s@]+@(?:[a-z0-9-]+\.)*synthetic\.example$/i.test(
+      normalizedManualEmail
+    ) ||
+    /^[^\s@]+@example\.(?:com|net|org)$/i.test(normalizedManualEmail);
+  const verifiedRecipient = String(
+    profile?.verified_email?.recipient || ""
+  ).toLowerCase();
+  const emailDestinationReady =
+    deliveryChannel !== "email" ||
+    (emailRecipientMode === "verified"
+      ? profile?.verified_email?.verified === true && Boolean(verifiedRecipient)
+      : manualEmailIsSynthetic && manualEmailConfirmed);
+  useEffect(() => {
+    if (deliveryChannel !== "email" || !profile) return;
+    if (profile.verified_email?.verified === true) return;
+    setEmailRecipientMode("manual");
+  }, [deliveryChannel, profile]);
+
+  useEffect(() => {
+    if (deliveryChannel !== "email" || !profile?.verified_email) {
+      setCorrespondenceSubject("");
+      setCorrespondenceBody("");
+      setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
+      return;
+    }
+    const values = {
+      caseId,
+      company:
+        profile.verified_email.legal_entity_name || profile.display_name,
+    };
+    setCorrespondenceSubject(
+      fillCorrespondenceTemplate(
+        profile.verified_email.subject_template,
+        values
+      )
+    );
+    setCorrespondenceBody(
+      fillCorrespondenceTemplate(profile.verified_email.body_template, values)
+    );
+    setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
+  }, [caseId, deliveryChannel, profile]);
 
   useEffect(() => {
     if (!profile) return;
@@ -759,6 +1045,25 @@ export default function RtmPresenterWorkspace({
     supersedesPackageId,
     workspace,
   ]);
+  const outputReady =
+    Boolean(deliveryChannel) && readiness.ready && emailDestinationReady;
+  const correspondenceConfirmed = CORRESPONDENCE_CONFIRMATION_KEYS.every(
+    (key) => correspondenceConfirmations[key] === true
+  );
+  const correspondenceDraftReady =
+    deliveryChannel !== "email" ||
+    (correspondenceSubject.trim().length > 0 &&
+      correspondenceSubject.trim().length <= 240 &&
+      correspondenceBody.trim().length > 0 &&
+      correspondenceBody.trim().length <= 12000 &&
+      correspondenceConfirmed);
+  const outputReadinessMessage = !deliveryChannel
+    ? "Elige primero si vas a una sede o a RTM Correspondencia."
+    : !profile
+      ? "Selecciona un destino del Centro de destinos."
+      : !emailDestinationReady
+        ? "Selecciona un correo verificado o confirma una dirección sintética manual."
+        : readiness.message;
 
   const editingLocked = Boolean(busyCommand) || Boolean(frozenPackage);
   const profileLocked = editingLocked || Boolean(supersedesPackageId);
@@ -767,12 +1072,29 @@ export default function RtmPresenterWorkspace({
     Boolean(frozenPackage) ||
     Boolean(supersedesPackageId);
 
-  function resetFrozenState() {
-    pendingFreezeRef.current = null;
+  function resetPreparedDelivery() {
     pendingDeliveryRef.current = null;
-    setFrozenPackage(null);
     setDelivery(null);
     setMessage("");
+  }
+
+  function resetFrozenState() {
+    pendingFreezeRef.current = null;
+    setFrozenPackage(null);
+    setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
+    resetPreparedDelivery();
+  }
+
+  function selectDeliveryChannel(channel) {
+    if (!new Set(["portal", "email"]).has(channel) || editingLocked) return;
+    setDeliveryChannel(channel);
+    setProfileId("");
+    setSelections({});
+    setAuthorizationVersionId("");
+    setEmailRecipientMode("verified");
+    setManualEmail("");
+    setManualEmailConfirmed(false);
+    resetFrozenState();
   }
 
   function updateFieldSelection(fieldCode, slot, value) {
@@ -795,18 +1117,30 @@ export default function RtmPresenterWorkspace({
       });
       const matches = destinationsFromSearchResponse(result, caseId);
       const selected = profile;
-      const nextOptions =
-        selected &&
-        !matches.some(
-          (item) =>
-            item.destination_profile_id === selected.destination_profile_id
-        )
-          ? Object.freeze([selected, ...matches])
-          : matches;
+      const emailFallbacks =
+        deliveryChannel === "email"
+          ? workspace.destinations.filter((item) =>
+              item.delivery_channels?.includes("email")
+            )
+          : [];
+      const nextOptions = Object.freeze(
+        [selected, ...matches, ...emailFallbacks]
+          .filter(Boolean)
+          .filter(
+            (item, index, values) =>
+              values.findIndex(
+                (candidate) =>
+                  candidate.destination_profile_id ===
+                  item.destination_profile_id
+              ) === index
+          )
+      );
       setDestinationOptions(nextOptions);
       if (matches.length === 0) {
         setMessage(
-          "No existe todavía un destino verificado con ese nombre. Debe solicitarse su alta y doble verificación antes de presentar."
+          deliveryChannel === "email"
+            ? "RTM no ha encontrado todavía esa empresa en el Centro de destinos. Puedes elegir el perfil sintético de correspondencia e introducir una dirección manual; quedará pendiente de verificación independiente."
+            : "No existe todavía una sede verificada con ese nombre. Debe solicitarse su alta y doble verificación antes de presentar."
         );
       }
     } catch (error) {
@@ -949,7 +1283,15 @@ export default function RtmPresenterWorkspace({
   }
 
   async function freezePackage() {
-    if (!profile || !workspace || busyCommand || commandLockRef.current) return;
+    if (
+      !profile ||
+      !workspace ||
+      !outputReady ||
+      busyCommand ||
+      commandLockRef.current
+    ) {
+      return;
+    }
     commandLockRef.current = true;
     setBusyCommand("freeze");
     setMessage("");
@@ -996,10 +1338,13 @@ export default function RtmPresenterWorkspace({
     }
   }
 
-  async function preparePortalDelivery() {
+  async function prepareSelectedDelivery() {
     if (
       !frozenPackage ||
       !deliveryPrepareAllowed ||
+      !new Set(["portal", "email"]).has(deliveryChannel) ||
+      !emailDestinationReady ||
+      !correspondenceDraftReady ||
       busyCommand ||
       commandLockRef.current
     ) {
@@ -1016,7 +1361,23 @@ export default function RtmPresenterWorkspace({
         caseId,
         frozenPackage.package_id,
         {
-          channel: "portal",
+          channel: deliveryChannel,
+          recipientEmail:
+            deliveryChannel === "email" && emailRecipientMode === "manual"
+              ? normalizedManualEmail
+              : "",
+          recipientConfirmed:
+            deliveryChannel === "email" && emailRecipientMode === "manual"
+              ? manualEmailConfirmed
+              : false,
+          correspondenceDraft:
+            deliveryChannel === "email"
+              ? {
+                  subject: correspondenceSubject.trim(),
+                  body: correspondenceBody.trim(),
+                  confirmations: correspondenceConfirmations,
+                }
+              : null,
           idempotencyKey: pendingDeliveryRef.current,
         }
       );
@@ -1024,11 +1385,30 @@ export default function RtmPresenterWorkspace({
         deliveryFromResponse(result, {
           caseId,
           frozenPackage,
+          channel: deliveryChannel,
+          expectedRecipient:
+            deliveryChannel === "email"
+              ? emailRecipientMode === "manual"
+                ? normalizedManualEmail
+                : verifiedRecipient
+              : "",
+          expectedCorrespondence:
+            deliveryChannel === "email"
+              ? {
+                  subject: correspondenceSubject.trim(),
+                  body: correspondenceBody.trim(),
+                  confirmations: correspondenceConfirmations,
+                }
+              : null,
         })
       );
       pendingDeliveryRef.current = null;
       setMessage(
-        "Orden de presentación preparada y auditada. Todavía no se ha cargado ni enviado ningún documento fuera de RTM."
+        deliveryChannel === "email"
+          ? emailRecipientMode === "manual"
+            ? "Borrador de RTM Correspondencia guardado y pendiente de verificar el destinatario. No se ha enviado nada."
+            : "Borrador de RTM Correspondencia auditado con destinatario verificado. El envío real continúa bloqueado en staging."
+          : "Orden de presentación preparada y auditada. Todavía no se ha cargado ni enviado ningún documento fuera de RTM."
       );
     } catch (error) {
       if (error instanceof RtmPresenterApiError && error.status && error.status < 500) {
@@ -1109,63 +1489,197 @@ export default function RtmPresenterWorkspace({
 
       {workspace ? (
         <>
+          <section className="rtmp-card rtmp-container-card" aria-labelledby="rtmp-container-title">
+            <div className="rtmp-section-heading">
+              <div>
+                <p className="rtmp-eyebrow">Contenedor del expediente</p>
+                <h2 id="rtmp-container-title">Documentos disponibles en RTM</h2>
+                <p>
+                  Aquí está el expediente completo. Después elegirás el canal y
+                  relacionarás cada petición de la sede o del correo con uno de
+                  estos documentos.
+                </p>
+              </div>
+              <div className="rtmp-heading-actions">
+                {documentIngestAllowed ? (
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-muted"
+                    onClick={() =>
+                      externalPanelOpen
+                        ? closeExternalPanel()
+                        : openExternalPanel()
+                    }
+                    disabled={externalIngestLocked && !externalPanelOpen}
+                    aria-expanded={externalPanelOpen}
+                    aria-controls="rtmp-external-panel"
+                  >
+                    {externalPanelOpen
+                      ? "Cerrar alta"
+                      : "+ Añadir documento al contenedor"}
+                  </button>
+                ) : null}
+                <span className="rtmp-chip rtmp-chip-ok">
+                  {containerDocuments.length} EN RTM
+                </span>
+              </div>
+            </div>
+            <ul className="rtmp-container-list">
+              {containerDocuments.map((documentVersion) => {
+                const ready =
+                  documentVersion.state === "active" &&
+                  documentVersion.scan_status === "clean";
+                return (
+                  <li key={documentVersion.document_version_id}>
+                    <span className="rtmp-document-icon" aria-hidden="true">
+                      {mediaTypeLabel(documentVersion.media_type)}
+                    </span>
+                    <span className="rtmp-container-document-main">
+                      <strong>{purposeLabel(documentVersion.purpose)}</strong>
+                      <span>{documentVersion.original_filename}</span>
+                      <small>
+                        Versión {documentVersion.version_number} · {formatBytes(documentVersion.size_bytes)}
+                      </small>
+                    </span>
+                    <span
+                      className={`rtmp-field-status ${ready ? "is-selected" : ""}`}
+                    >
+                      {ready ? "LISTO" : "EN REVISIÓN"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section className="rtmp-card" aria-labelledby="rtmp-channel-title">
+            <div className="rtmp-section-heading">
+              <div>
+                <p className="rtmp-eyebrow">¿Qué quieres hacer?</p>
+                <h2 id="rtmp-channel-title">Elige cómo sale el expediente</h2>
+                <p>
+                  La sede y el correo son circuitos distintos. Los documentos
+                  siempre se eligen desde el contenedor anterior.
+                </p>
+              </div>
+              <span className={`rtmp-chip ${deliveryChannel ? "rtmp-chip-ok" : ""}`}>
+                {deliveryChannel ? "CANAL ELEGIDO" : "PENDIENTE"}
+              </span>
+            </div>
+            <div className="rtmp-channel-grid">
+              <button
+                type="button"
+                className={`rtmp-channel-card ${deliveryChannel === "portal" ? "is-selected" : ""}`}
+                onClick={() => selectDeliveryChannel("portal")}
+                disabled={editingLocked}
+                aria-pressed={deliveryChannel === "portal"}
+              >
+                <span className="rtmp-channel-kicker">SEDE O PORTAL</span>
+                <strong>Presentar un escrito o recurso</strong>
+                <span>
+                  Busca DGT, ayuntamiento u organismo y completa sus casillas
+                  en el orden exacto que exige.
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`rtmp-channel-card ${deliveryChannel === "email" ? "is-selected" : ""}`}
+                onClick={() => selectDeliveryChannel("email")}
+                disabled={editingLocked}
+                aria-pressed={deliveryChannel === "email"}
+              >
+                <span className="rtmp-channel-kicker">RTM CORRESPONDENCIA</span>
+                <strong>Enviar una reclamación desde OPS</strong>
+                <span>
+                  Resuelve la empresa, el canal oficial y una plantilla aprobada;
+                  después revisas texto y adjuntos desde el contenedor.
+                </span>
+              </button>
+            </div>
+          </section>
+
           <nav className="rtmp-flow-progress" aria-label="Progreso de la preparación">
             <ol>
-              <li className={profile ? "is-complete" : "is-current"}>
+              <li className="is-complete">
                 <span className="rtmp-progress-number">1</span>
                 <span>
-                  <strong>Destino y representación</strong>
+                  <strong>Contenedor</strong>
+                  <small>{containerDocuments.length} documentos</small>
+                </span>
+              </li>
+              <li
+                className={profile ? "is-complete" : deliveryChannel ? "is-current" : ""}
+              >
+                <span className="rtmp-progress-number">2</span>
+                <span>
+                  <strong>Canal y destino</strong>
                   <small>{profile ? "Completo" : "Pendiente"}</small>
                 </span>
               </li>
               <li
                 className={
-                  readiness.ready
+                  outputReady
                     ? "is-complete"
                     : profile
                       ? "is-current"
                       : ""
                 }
               >
-                <span className="rtmp-progress-number">2</span>
+                <span className="rtmp-progress-number">3</span>
                 <span>
-                  <strong>Documentación solicitada</strong>
-                  <small>{readiness.ready ? "Completo" : "Pendiente"}</small>
+                  <strong>Elegir documentos</strong>
+                  <small>{outputReady ? "Completo" : "Pendiente"}</small>
                 </span>
               </li>
               <li
                 className={
                   frozenPackage
                     ? "is-complete"
-                    : readiness.ready
+                    : outputReady
                       ? "is-current"
                       : ""
                 }
               >
-                <span className="rtmp-progress-number">3</span>
-                <span>
-                  <strong>Revisar y preparar</strong>
-                  <small>{frozenPackage ? "Preparado" : "Pendiente"}</small>
-                </span>
-              </li>
-              <li className={delivery ? "is-complete" : frozenPackage ? "is-current" : ""}>
                 <span className="rtmp-progress-number">4</span>
                 <span>
-                  <strong>Presentar y justificar</strong>
-                  <small>{delivery ? "Orden preparada" : "Pendiente"}</small>
+                  <strong>Fijar selección</strong>
+                  <small>{frozenPackage ? "Completo" : "Pendiente"}</small>
+                </span>
+              </li>
+              <li
+                className={
+                  delivery
+                    ? "is-complete"
+                    : frozenPackage
+                      ? "is-current"
+                      : ""
+                }
+              >
+                <span className="rtmp-progress-number">5</span>
+                <span>
+                  <strong>
+                    {deliveryChannel === "email" ? "Correspondencia" : "Ejecutar"}
+                  </strong>
+                  <small>{delivery ? "Preparado en OPS" : "Pendiente"}</small>
                 </span>
               </li>
             </ol>
           </nav>
 
+          {deliveryChannel ? (
           <section className="rtmp-card" aria-labelledby="rtmp-destination-title">
             <div className="rtmp-section-heading">
               <div>
-                <p className="rtmp-eyebrow">Paso 1</p>
-                <h2 id="rtmp-destination-title">¿Dónde vas a presentarlo?</h2>
+                <p className="rtmp-eyebrow">Paso 2 · Canal y destino</p>
+                <h2 id="rtmp-destination-title">
+                  {deliveryChannel === "email"
+                    ? "¿A qué empresa u organismo escribes?"
+                    : "¿En qué sede vas a presentarlo?"}
+                </h2>
                 <p>
-                  Elige la sede administrativa y cómo actúas en este trámite.
-                  RTM cargará automáticamente lo que esa sede solicita.
+                  {deliveryChannel === "email"
+                    ? "Busca, por ejemplo, Endesa o una dirección registrada. Después elegirás los adjuntos desde el contenedor."
+                    : "Elige la sede administrativa y cómo actúas. RTM mostrará sus casillas en el orden exacto que solicita."}
                 </p>
               </div>
               <span className={`rtmp-chip ${profile ? "rtmp-chip-ok" : ""}`}>
@@ -1174,13 +1688,19 @@ export default function RtmPresenterWorkspace({
             </div>
             <form className="rtmp-destination-search" onSubmit={searchDestinations}>
               <label>
-                Buscar sede por organismo o municipio
+                {deliveryChannel === "email"
+                  ? "Buscar empresa, organismo o correo verificado"
+                  : "Buscar sede por organismo o municipio"}
                 <input
                   type="search"
                   value={destinationQuery}
                   minLength={2}
                   maxLength={100}
-                  placeholder="Ej. Ayuntamiento de Madrid, DGT, Albacete…"
+                  placeholder={
+                    deliveryChannel === "email"
+                      ? "Ej. Endesa, atención al cliente, reclamaciones…"
+                      : "Ej. Ayuntamiento de Madrid, DGT, Albacete…"
+                  }
                   disabled={profileLocked || searchingDestinations}
                   onChange={(event) => setDestinationQuery(event.target.value)}
                 />
@@ -1194,39 +1714,55 @@ export default function RtmPresenterWorkspace({
                   destinationQuery.trim().length < 2
                 }
               >
-                {searchingDestinations ? "Buscando…" : "Buscar destino verificado"}
+                {searchingDestinations ? "Buscando…" : "Buscar en RTM"}
               </button>
             </form>
             <p className="rtmp-help">
-              OPS busca en su registro interno. El operador no puede pegar una URL
-              ni enviar a una dirección sin verificar.
+              {deliveryChannel === "email"
+                ? "OPS busca primero en el directorio verificado. Si no está, puedes escribir un correo manual y solicitar su confirmación."
+                : "OPS busca en su registro interno. El operador no puede pegar una URL ni sustituir el perfil verificado de la sede."}
             </p>
             <label className="rtmp-single-field">
-              Sede administrativa
+              {deliveryChannel === "email"
+                ? "Empresa u organismo"
+                : "Sede administrativa"}
               <select
                 value={profileId}
                 onChange={(event) => {
                   setProfileId(event.target.value);
                   setSelections({});
                   setAuthorizationVersionId("");
+                  setEmailRecipientMode("verified");
+                  setManualEmail("");
+                  setManualEmailConfirmed(false);
                   resetFrozenState();
                 }}
                 disabled={profileLocked}
               >
-                <option value="">Selecciona una sede</option>
+                <option value="">
+                  {deliveryChannel === "email"
+                    ? "Selecciona una empresa u organismo"
+                    : "Selecciona una sede"}
+                </option>
                 {destinationOptions.map((item) => (
                   <option
                     key={item.destination_profile_id}
                     value={item.destination_profile_id}
+                    disabled={!item.delivery_channels?.includes(deliveryChannel)}
                   >
                     {item.display_name}
+                    {!item.delivery_channels?.includes(deliveryChannel)
+                      ? ` · ${item.verified_email?.channel_status || "canal no disponible"}`
+                      : ""}
                   </option>
                 ))}
               </select>
             </label>
             {profile ? (
               <details className="rtmp-technical-details">
-                <summary>Ver datos técnicos verificados de la sede</summary>
+                <summary>
+                  Ver datos técnicos verificados del destino
+                </summary>
                 <dl className="rtmp-profile-meta">
                   <div>
                     <dt>Origen exacto</dt>
@@ -1242,6 +1778,14 @@ export default function RtmPresenterWorkspace({
                     <dt>Huella del perfil</dt>
                     <dd className="rtmp-mono">{profile.profile_sha256}</dd>
                   </div>
+                  {deliveryChannel === "email" ? (
+                    <div>
+                      <dt>Fuente oficial</dt>
+                      <dd className="rtmp-mono">
+                        {profile.verified_email?.official_source_url}
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
               </details>
             ) : null}
@@ -1270,18 +1814,170 @@ export default function RtmPresenterWorkspace({
                 ))}
               </fieldset>
             ) : null}
-          </section>
 
+            {profile && deliveryChannel === "email" ? (
+              <section className="rtmp-email-destination" aria-labelledby="rtmp-email-title">
+                <div>
+                  <p className="rtmp-eyebrow">Destinatario del correo</p>
+                  <h3 id="rtmp-email-title">Elige una dirección</h3>
+                </div>
+                <dl className="rtmp-destination-evidence">
+                  <div>
+                    <dt>Empresa jurídica</dt>
+                    <dd>{profile.verified_email?.legal_entity_name}</dd>
+                  </div>
+                  <div>
+                    <dt>Papel en la reclamación</dt>
+                    <dd>{profile.verified_email?.entity_role}</dd>
+                  </div>
+                  <div>
+                    <dt>Canal oficial</dt>
+                    <dd>
+                      {profile.verified_email?.channel_label} · {" "}
+                      {profile.verified_email?.channel_status}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Materias admitidas</dt>
+                    <dd>{profile.verified_email?.routing_scope_label}</dd>
+                  </div>
+                  <div>
+                    <dt>Derivación necesaria</dt>
+                    <dd>{profile.verified_email?.routing_warning}</dd>
+                  </div>
+                  <div>
+                    <dt>Fuente verificada</dt>
+                    <dd>{profile.verified_email?.official_source_label}</dd>
+                  </div>
+                  <div>
+                    <dt>Última comprobación</dt>
+                    <dd>{String(profile.verified_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Alternativa probatoria</dt>
+                    <dd>{profile.verified_email?.recommended_evidence_channel}</dd>
+                  </div>
+                  <div>
+                    <dt>Adjuntos sensibles</dt>
+                    <dd>{profile.verified_email?.sensitive_attachment_policy}</dd>
+                  </div>
+                </dl>
+                <div className="rtmp-email-choice-grid">
+                  <label
+                    className={`rtmp-radio-card ${
+                      emailRecipientMode === "verified" ? "is-selected" : ""
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="rtmp-email-recipient-mode"
+                      value="verified"
+                      checked={emailRecipientMode === "verified"}
+                      disabled={
+                        editingLocked || profile.verified_email?.verified !== true
+                      }
+                      onChange={() => {
+                        setEmailRecipientMode("verified");
+                        setManualEmail("");
+                        setManualEmailConfirmed(false);
+                        resetFrozenState();
+                      }}
+                    />
+                    <span>
+                      <strong>Usar correo verificado por RTM</strong>
+                      <span className="rtmp-help">
+                        {profile.verified_email?.verified === true
+                          ? profile.verified_email.recipient
+                          : "Este destino todavía no tiene correo verificado."}
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    className={`rtmp-radio-card ${
+                      emailRecipientMode === "manual" ? "is-selected" : ""
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="rtmp-email-recipient-mode"
+                      value="manual"
+                      checked={emailRecipientMode === "manual"}
+                      disabled={editingLocked}
+                      onChange={() => {
+                        setEmailRecipientMode("manual");
+                        setManualEmailConfirmed(false);
+                        resetFrozenState();
+                      }}
+                    />
+                    <span>
+                      <strong>Introducir otra dirección</strong>
+                      <span className="rtmp-help">
+                        Quedará pendiente de verificación antes de poder enviarse.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                {emailRecipientMode === "manual" ? (
+                  <div className="rtmp-manual-email-panel">
+                    <label>
+                      Correo electrónico
+                      <input
+                        type="email"
+                        value={manualEmail}
+                        placeholder="reclamaciones@synthetic.example"
+                        disabled={editingLocked}
+                        onChange={(event) => {
+                          setManualEmail(event.target.value);
+                          setManualEmailConfirmed(false);
+                          resetFrozenState();
+                        }}
+                      />
+                    </label>
+                    <label className="rtmp-check-line">
+                      <input
+                        type="checkbox"
+                        checked={manualEmailConfirmed}
+                        disabled={editingLocked || !manualEmailIsSynthetic}
+                        onChange={(event) => {
+                          setManualEmailConfirmed(event.target.checked);
+                          resetFrozenState();
+                        }}
+                      />
+                      <span>
+                        <strong>He comprobado la dirección escrita</strong>
+                        <span className="rtmp-help">
+                          En staging solo se admiten dominios sintéticos reservados.
+                        </span>
+                      </span>
+                    </label>
+                    {manualEmail && !manualEmailIsSynthetic ? (
+                      <p className="rtmp-alert" role="note">
+                        Esta prueba no admite correos reales. Utiliza una dirección
+                        terminada en synthetic.example.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
+          ) : null}
+
+          {(deliveryChannel && profile) || externalPanelOpen ? (
           <section className="rtmp-card" aria-labelledby="rtmp-checklist-title">
+            {deliveryChannel && profile ? (
             <div className="rtmp-section-heading">
               <div>
-                <p className="rtmp-eyebrow">Paso 2</p>
+                <p className="rtmp-eyebrow">Paso 3 · Elegir documentos</p>
                 <h2 id="rtmp-checklist-title">
-                  Documentación solicitada por la sede
+                  {deliveryChannel === "email"
+                    ? "Documentos que acompañarán al correo"
+                    : "Documentación solicitada por la sede"}
                 </h2>
                 <p>
-                  Aparece en el mismo orden que la sede. Pulsa «Elegir desde RTM»
-                  para relacionar cada campo con un documento del expediente.
+                  {deliveryChannel === "email"
+                    ? "Selecciona desde el contenedor lo que acredita el problema o reclamación."
+                    : "Las casillas aparecen en el mismo orden que la sede. En cada una eliges el fichero correspondiente del contenedor."}
                 </p>
               </div>
               <div className="rtmp-heading-actions">
@@ -1307,13 +2003,14 @@ export default function RtmPresenterWorkspace({
                 ) : null}
                 <span
                   className={`rtmp-chip ${
-                    readiness.ready ? "rtmp-chip-ok" : "rtmp-chip-warn"
+                    outputReady ? "rtmp-chip-ok" : "rtmp-chip-warn"
                   }`}
                 >
-                  {readiness.ready ? "COMPLETO" : "PENDIENTE"}
+                  {outputReady ? "COMPLETO" : "PENDIENTE"}
                 </span>
               </div>
             </div>
+            ) : null}
 
             {documentIngestAllowed && externalPanelOpen ? (
               <section
@@ -1507,12 +2204,8 @@ export default function RtmPresenterWorkspace({
               </section>
             ) : null}
 
-            {!profile ? (
-              <p className="rtmp-empty-step">
-                Primero selecciona una sede en el paso 1 para ver qué documentos
-                solicita y en qué orden.
-              </p>
-            ) : null}
+            {deliveryChannel && profile ? (
+            <>
             <ol className="rtmp-requirements">
               {fields.map((field, index) => {
                 const candidates = matchingPresenterDocumentVersions(
@@ -1667,17 +2360,25 @@ export default function RtmPresenterWorkspace({
                 </select>
               </label>
             ) : null}
+            </>
+            ) : null}
           </section>
+          ) : null}
 
+          {deliveryChannel && profile ? (
           <section className="rtmp-card" aria-labelledby="rtmp-freeze-title">
             <div className="rtmp-section-heading">
               <div>
-                <p className="rtmp-eyebrow">Paso 3</p>
-                <h2 id="rtmp-freeze-title">Revisar y preparar</h2>
+                <p className="rtmp-eyebrow">Paso 4 · Revisar selección</p>
+                <h2 id="rtmp-freeze-title">
+                  {deliveryChannel === "email"
+                    ? "Fijar los adjuntos de Correspondencia"
+                    : "Revisar y preparar"}
+                </h2>
                 <p>
                   {frozenPackage
                     ? "La selección ha quedado fijada sin sacar documentos de RTM."
-                    : readiness.message}
+                    : outputReadinessMessage}
                 </p>
               </div>
               {frozenPackage ? (
@@ -1687,7 +2388,11 @@ export default function RtmPresenterWorkspace({
             {frozenPackage ? (
               <>
                 <div className="rtmp-ready-summary" role="status">
-                  <strong>Todo preparado para trabajar en la sede.</strong>
+                  <strong>
+                    {deliveryChannel === "email"
+                      ? "Adjuntos fijados para redactar la correspondencia."
+                      : "Todo preparado para trabajar en la sede."}
+                  </strong>
                   <span>
                     {frozenPackage.items.length}{" "}
                     {frozenPackage.items.length === 1
@@ -1725,6 +2430,9 @@ export default function RtmPresenterWorkspace({
                     setSupersedesPackageId(frozenPackage.package_id);
                     setFrozenPackage(null);
                     setDelivery(null);
+                    setCorrespondenceConfirmations(
+                      emptyCorrespondenceConfirmations()
+                    );
                     pendingDeliveryRef.current = null;
                     setMessage(
                       "Puedes cambiar la selección y preparar una nueva versión; la anterior no se modifica."
@@ -1739,24 +2447,104 @@ export default function RtmPresenterWorkspace({
                 type="button"
                 className="rtmp-button rtmp-button-primary"
                 onClick={() => void freezePackage()}
-                disabled={!readiness.ready || Boolean(busyCommand)}
+                disabled={!outputReady || Boolean(busyCommand)}
               >
                 {busyCommand === "freeze"
                   ? "Preparando…"
-                  : "Preparar paquete para presentar"}
+                  : deliveryChannel === "email"
+                    ? "Fijar adjuntos para Correspondencia"
+                    : "Preparar paquete para presentar"}
               </button>
             )}
           </section>
+          ) : null}
 
           {frozenPackage ? (
             <section className="rtmp-card rtmp-extension-card" aria-labelledby="rtmp-extension-title">
-              <p className="rtmp-eyebrow">Paso 4 · Presentación humana</p>
-              <h2 id="rtmp-extension-title">Presentar desde RTM</h2>
-              <p>
-                RTM seguirá el orden propio de la sede y relacionará cada campo con
-                la versión exacta del contenedor. No se crea una carpeta local ni se
-                ofrece descarga al operador.
+              <p className="rtmp-eyebrow">
+                {deliveryChannel === "email"
+                  ? "Paso 5 · Borrador y control"
+                  : "Paso 5 · Presentación humana"}
               </p>
+              <h2 id="rtmp-extension-title">
+                {deliveryChannel === "email"
+                  ? "RTM Correspondencia"
+                  : "Presentar desde RTM"}
+              </h2>
+              <p>
+                {deliveryChannel === "email"
+                  ? "Revisa el remitente, el destinatario, la plantilla aprobada y el texto exacto. Los adjuntos salen directamente de la custodia RTM."
+                  : "RTM seguirá el orden propio de la sede y relacionará cada campo con la versión exacta del contenedor. No se crea una carpeta local ni se ofrece descarga al operador."}
+              </p>
+              {deliveryChannel === "email" ? (
+                <div className="rtmp-correspondence-composer">
+                  <dl className="rtmp-correspondence-routing">
+                    <div>
+                      <dt>Empresa</dt>
+                      <dd>{profile.verified_email?.legal_entity_name}</dd>
+                    </div>
+                    <div>
+                      <dt>Canal oficial</dt>
+                      <dd>{profile.verified_email?.channel_label}</dd>
+                    </div>
+                    <div>
+                      <dt>Remitente</dt>
+                      <dd>info@recurretumulta.eu</dd>
+                    </div>
+                    <div>
+                      <dt>Destinatario</dt>
+                      <dd>
+                        {emailRecipientMode === "manual"
+                          ? normalizedManualEmail
+                          : verifiedRecipient}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Plantilla aprobada</dt>
+                      <dd>
+                        {profile.verified_email?.template_code} · versión {" "}
+                        {profile.verified_email?.template_version}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Verificación</dt>
+                      <dd>{String(profile.verified_at)}</dd>
+                    </div>
+                  </dl>
+                  <label>
+                    Asunto
+                    <input
+                      type="text"
+                      maxLength={240}
+                      value={correspondenceSubject}
+                      disabled={Boolean(busyCommand) || Boolean(delivery)}
+                      onChange={(event) => {
+                        setCorrespondenceSubject(event.target.value);
+                        setCorrespondenceConfirmations(
+                          emptyCorrespondenceConfirmations()
+                        );
+                        resetPreparedDelivery();
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Texto definitivo
+                    <textarea
+                      rows={10}
+                      maxLength={12000}
+                      value={correspondenceBody}
+                      disabled={Boolean(busyCommand) || Boolean(delivery)}
+                      onChange={(event) => {
+                        setCorrespondenceBody(event.target.value);
+                        setCorrespondenceConfirmations(
+                          emptyCorrespondenceConfirmations()
+                        );
+                        resetPreparedDelivery();
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
               <ol className="rtmp-delivery-list">
                 {frozenPackage.items.map((item) => (
                   <li key={item.item_id}>
@@ -1766,34 +2554,93 @@ export default function RtmPresenterWorkspace({
                       <small>{item.portal_filename}</small>
                     </span>
                     <span className="rtmp-field-status">
-                      {delivery ? "PENDIENTE DE CARGA" : "EN PAQUETE"}
+                      {delivery
+                        ? "AUDITADO"
+                        : deliveryChannel === "email"
+                          ? "ADJUNTO"
+                          : "EN PAQUETE"}
                     </span>
                   </li>
                 ))}
               </ol>
+              {deliveryChannel === "email" && !delivery ? (
+                <fieldset className="rtmp-correspondence-confirmations">
+                  <legend>Confirmación obligatoria antes de preparar</legend>
+                  {CORRESPONDENCE_CONFIRMATION_KEYS.map((key) => (
+                    <label key={key} className="rtmp-check-line">
+                      <input
+                        type="checkbox"
+                        checked={correspondenceConfirmations[key] === true}
+                        disabled={Boolean(busyCommand)}
+                        onChange={(event) => {
+                          setCorrespondenceConfirmations((current) => ({
+                            ...current,
+                            [key]: event.target.checked,
+                          }));
+                          resetPreparedDelivery();
+                        }}
+                      />
+                      <span>{CORRESPONDENCE_CONFIRMATION_LABELS[key]}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              ) : null}
               {delivery ? (
-                <div className="rtmp-delivery-state" role="status">
-                  <strong>Orden auditada; sin efecto externo.</strong>
-                  <span>
-                    Destino verificado: {delivery.destination.portal_origin}
-                  </span>
-                  <span>
-                    El puente gestionado continúa cerrado hasta disponer de
-                    atestación criptográfica; cuando se active, cada documento
-                    exigirá un ticket de un solo uso. No se han entregado bytes.
-                  </span>
-                </div>
+                <>
+                  <div className="rtmp-delivery-state" role="status">
+                    <strong>
+                      {deliveryChannel === "email"
+                        ? "Borrador y evidencia guardados; sin envío externo."
+                        : "Orden auditada; sin efecto externo."}
+                    </strong>
+                    <span>
+                      {deliveryChannel === "email"
+                        ? `Destinatario: ${delivery.destination.recipient}`
+                        : `Destino verificado: ${delivery.destination.portal_origin}`}
+                    </span>
+                    <span>
+                      {deliveryChannel === "email"
+                        ? "SMTP no iniciado: no existe Message-ID, respuesta del servidor ni prueba de recepción."
+                        : "El puente gestionado continúa cerrado hasta disponer de atestación criptográfica; cuando se active, cada documento exigirá un ticket de un solo uso. No se han entregado bytes."}
+                    </span>
+                  </div>
+                  {deliveryChannel === "email" ? (
+                    <button
+                      type="button"
+                      className="rtmp-button rtmp-button-primary"
+                      disabled
+                    >
+                      Revisar y enviar · bloqueado en staging
+                    </button>
+                  ) : null}
+                </>
               ) : deliveryPrepareAllowed ? (
-                <button
-                  type="button"
-                  className="rtmp-button rtmp-button-primary"
-                  onClick={() => void preparePortalDelivery()}
-                  disabled={Boolean(busyCommand)}
-                >
-                  {busyCommand === "prepare-delivery"
-                    ? "Preparando orden…"
-                    : "Preparar carga ordenada en la sede"}
-                </button>
+                <div className="rtmp-button-row">
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-primary"
+                    onClick={() => void prepareSelectedDelivery()}
+                    disabled={
+                      Boolean(busyCommand) ||
+                      (deliveryChannel === "email" && !correspondenceDraftReady)
+                    }
+                  >
+                    {busyCommand === "prepare-delivery"
+                      ? "Guardando orden…"
+                      : deliveryChannel === "email"
+                        ? "Guardar borrador auditado"
+                        : "Preparar carga ordenada en la sede"}
+                  </button>
+                  {deliveryChannel === "email" ? (
+                    <button
+                      type="button"
+                      className="rtmp-button rtmp-button-secondary"
+                      disabled
+                    >
+                      Revisar y enviar · staging
+                    </button>
+                  ) : null}
+                </div>
               ) : (
                 <p className="rtmp-alert" role="note">
                   Esta cuenta todavía no tiene el permiso específico para preparar
@@ -1801,9 +2648,9 @@ export default function RtmPresenterWorkspace({
                 </p>
               )}
               <p className="rtmp-alert" role="note">
-                Cargar un adjunto puede comunicarlo ya a la sede. RTM nunca pulsa
-                “Enviar”, firma, resuelve CAPTCHA ni completa Cl@ve: la confirmación
-                final y la revisión del justificante siguen siendo humanas.
+                {deliveryChannel === "email"
+                  ? "La aceptación de un mensaje por SMTP no acreditaría por sí sola la recepción. Cuando la materia exija prueba reforzada, el Centro de destinos debe recomendar correo certificado, burofax u otro canal adecuado."
+                  : "Cargar un adjunto puede comunicarlo ya a la sede. RTM nunca pulsa “Enviar”, firma, resuelve CAPTCHA ni completa Cl@ve: la confirmación final y la revisión del justificante siguen siendo humanas."}
               </p>
             </section>
           ) : null}

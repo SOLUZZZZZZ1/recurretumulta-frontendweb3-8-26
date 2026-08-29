@@ -91,7 +91,7 @@
 
 .rtmp-flow-progress ol {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
   padding: 0;
@@ -211,6 +211,199 @@
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 9px;
+}
+
+.rtmp-container-card {
+  border-color: #9abde7;
+  box-shadow: 0 14px 34px rgba(22, 78, 164, .1);
+}
+
+.rtmp-container-list {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rtmp-container-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  background: #f8fbff;
+  border: 1px solid #cfdeef;
+  border-radius: 14px;
+}
+
+.rtmp-document-icon {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  min-height: 42px;
+  padding: 4px 8px;
+  color: #174473;
+  background: #e4f1ff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.rtmp-container-document-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rtmp-container-document-main > span,
+.rtmp-container-document-main small {
+  color: var(--rtmp-muted);
+  overflow-wrap: anywhere;
+}
+
+.rtmp-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.rtmp-channel-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 20px;
+  color: #23364f;
+  background: #f8fafc;
+  border: 2px solid #d4deea;
+  border-radius: 17px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.rtmp-channel-card:hover:not(:disabled) {
+  border-color: #8ab8ec;
+}
+
+.rtmp-channel-card.is-selected {
+  color: #123d72;
+  background: #edf6ff;
+  border-color: var(--rtmp-blue);
+  box-shadow: 0 8px 22px rgba(22, 78, 164, .12);
+}
+
+.rtmp-channel-card > strong {
+  font-size: 20px;
+}
+
+.rtmp-channel-card > span:last-child {
+  color: var(--rtmp-muted);
+  line-height: 1.5;
+}
+
+.rtmp-channel-kicker {
+  color: var(--rtmp-blue);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.rtmp-email-destination {
+  margin-top: 20px;
+  padding: 18px;
+  background: #f8fbff;
+  border: 1px solid #bfd5ef;
+  border-radius: 16px;
+}
+
+.rtmp-email-destination h3 {
+  margin: 0;
+}
+
+.rtmp-email-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.rtmp-email-choice-grid .is-selected {
+  background: #effcf5;
+  border-color: #79c39d;
+}
+
+.rtmp-manual-email-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 15px;
+  background: #fff;
+  border: 1px solid var(--rtmp-line);
+  border-radius: 13px;
+}
+
+.rtmp-destination-evidence,
+.rtmp-correspondence-routing {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.rtmp-destination-evidence div,
+.rtmp-correspondence-routing div {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--rtmp-line);
+  border-radius: 11px;
+}
+
+.rtmp-destination-evidence dt,
+.rtmp-correspondence-routing dt {
+  color: var(--rtmp-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.rtmp-destination-evidence dd,
+.rtmp-correspondence-routing dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.rtmp-correspondence-composer {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid #b6dbc7;
+  border-radius: 15px;
+}
+
+.rtmp-correspondence-routing {
+  margin-top: 0;
+}
+
+.rtmp-correspondence-confirmations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 18px 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #b6dbc7;
+  border-radius: 14px;
+}
+
+.rtmp-correspondence-confirmations legend {
+  padding: 0 8px;
+  font-weight: 900;
 }
 
 .rtmp-form-grid,
@@ -726,8 +919,24 @@
   .rtmp-form-grid,
   .rtmp-document-grid,
   .rtmp-ingest-grid,
+  .rtmp-channel-grid,
+  .rtmp-email-choice-grid,
+  .rtmp-destination-evidence,
+  .rtmp-correspondence-routing,
+  .rtmp-correspondence-confirmations,
   .rtmp-flow-progress ol {
     grid-template-columns: 1fr;
+  }
+
+  .rtmp-container-list li,
+  .rtmp-delivery-list li {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rtmp-container-list .rtmp-field-status,
+  .rtmp-delivery-list .rtmp-field-status {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .rtmp-heading-actions {

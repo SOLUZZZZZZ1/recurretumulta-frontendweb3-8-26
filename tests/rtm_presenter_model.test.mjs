@@ -444,8 +444,38 @@ test("normal client only loads workspace and freezes by case", async () => {
     calls.at(-1).options.headers["Idempotency-Key"],
     "idem-delivery-0001"
   );
-  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { channel: "portal" });
-  assert.equal(calls.length, 4);
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), {
+    channel: "portal",
+    recipient_email: null,
+    recipient_confirmed: false,
+    correspondence: null,
+  });
+  const correspondenceDraft = {
+    subject: "Reclamación sintética",
+    body: "Texto sintético revisado.",
+    confirmations: {
+      destination_reviewed: true,
+      interested_confirmed: true,
+      representation_confirmed: true,
+      text_confirmed: true,
+      attachments_confirmed: true,
+      data_minimization_confirmed: true,
+    },
+  };
+  await client.prepareDelivery(CASE_ID, packageId, {
+    channel: "email",
+    recipientEmail: " manual@synthetic.example ",
+    recipientConfirmed: true,
+    correspondenceDraft,
+    idempotencyKey: "idem-delivery-0002",
+  });
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), {
+    channel: "email",
+    recipient_email: "manual@synthetic.example",
+    recipient_confirmed: true,
+    correspondence: correspondenceDraft,
+  });
+  assert.equal(calls.length, 5);
   assert.ok(calls.every((call) => !call.path.endsWith("/documents/external")));
 });
 

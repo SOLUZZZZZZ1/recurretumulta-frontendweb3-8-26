@@ -90,6 +90,8 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn("field_code", model)
         self.assertIn("portal_filename", model)
         self.assertIn('normalized === "interested" ? "self"', model)
+        self.assertIn("correspondence", api)
+        self.assertIn("data_minimization_confirmed", api)
 
     def test_external_document_ingress_is_capability_gated_and_ephemeral(self):
         component = source("RtmPresenterWorkspace.jsx")
@@ -207,15 +209,25 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         css = source("rtmPresenter.css")
 
         for visible_step in (
-            "¿Dónde vas a presentarlo?",
+            "Contenedor del expediente",
+            "Documentos disponibles en RTM",
+            "Elige cómo sale el expediente",
+            "Presentar un escrito o recurso",
+            "RTM CORRESPONDENCIA",
+            "Enviar una reclamación desde OPS",
             "Buscar sede por organismo o municipio",
-            "Buscar destino verificado",
+            "Buscar empresa, organismo o correo verificado",
             "Documentación solicitada por la sede",
+            "Documentos que acompañarán al correo",
             "Elegir desde RTM",
             "Revisar y preparar",
             "Preparar paquete para presentar",
             "Presentar desde RTM",
             "Preparar carga ordenada en la sede",
+            "Empresa jurídica",
+            "Canal oficial",
+            "Guardar borrador auditado",
+            "Revisar y enviar · bloqueado en staging",
         ):
             self.assertIn(visible_step, component)
         self.assertIn('className="rtmp-flow-progress"', component)
@@ -236,8 +248,11 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn(".rtmp-destination-search", css)
         self.assertIn(".rtmp-ingest-panel", css)
         self.assertIn(".rtmp-field-status", css)
+        self.assertIn(".rtmp-container-list", css)
+        self.assertIn(".rtmp-channel-grid", css)
+        self.assertIn(".rtmp-correspondence-composer", css)
         self.assertIn("El operador no puede pegar una URL", component)
-        self.assertIn("doble verificación antes de presentar", component)
+        self.assertIn("verificación independiente", component)
 
     def test_staging_synthetic_boundary_and_transport_are_fail_closed(self):
         component = source("RtmPresenterWorkspace.jsx")
