@@ -84,6 +84,36 @@ const ACTOR_OPTIONS = Object.freeze([
   { value: "self", label: "Actúo como interesado" },
   { value: "representative", label: "Actúo como representante" },
 ]);
+const PURPOSE_LABELS = Object.freeze({
+  original_fine: "Multa o notificación",
+  identity_document: "Documento de identidad",
+  main_filing: "Recurso o escrito principal",
+  authorization: "Autorización",
+  representation: "Autorización de representación",
+  signed_authorization: "Autorización firmada",
+  representation_authorization: "Autorización de representación",
+  submission_receipt: "Justificante de presentación",
+  supporting_evidence: "Documentación de apoyo",
+});
+const FIELD_LABELS = Object.freeze({
+  fine: "Multa o notificación",
+  identity_document: "Documento de identidad",
+  main_document: "Recurso o escrito principal",
+  authorization: "Autorización de representación",
+  representation_authorization: "Autorización de representación",
+  submission_receipt: "Justificante de presentación",
+  evidence: "Documentación de apoyo",
+  supporting_evidence: "Documentación de apoyo",
+});
+const MEDIA_TYPE_LABELS = Object.freeze({
+  "application/json": "JSON",
+  "application/pdf": "PDF",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "DOCX",
+  "image/jpeg": "JPEG",
+  "image/png": "PNG",
+  "text/plain": "TXT",
+});
 
 function randomCommandKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -233,9 +263,27 @@ function versionLabel(documentVersion) {
 }
 
 function purposeLabel(value) {
-  return String(value || "")
+  const normalized = String(value || "").trim().toLowerCase();
+  if (PURPOSE_LABELS[normalized]) return PURPOSE_LABELS[normalized];
+  return normalized
     .replace(/[._-]+/g, " ")
     .replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
+}
+
+function fieldLabel(field) {
+  return FIELD_LABELS[field?.fieldCode] || field?.label || "Documento";
+}
+
+function preferredExternalPurpose(field) {
+  return (
+    (field?.purposes || []).find((purpose) =>
+      EXTERNAL_DOCUMENT_PURPOSES.has(String(purpose || "").toLowerCase())
+    ) || ""
+  );
+}
+
+function mediaTypeLabel(value) {
+  return MEDIA_TYPE_LABELS[value] || value;
 }
 
 function ExceptionalExportPanel({ allowed }) {
@@ -301,6 +349,7 @@ export default function RtmPresenterWorkspace({
   const [externalSupersedesId, setExternalSupersedesId] = useState("");
   const [externalFileMetadata, setExternalFileMetadata] = useState(null);
   const [syntheticConfirmed, setSyntheticConfirmed] = useState(false);
+  const [externalPanelOpen, setExternalPanelOpen] = useState(false);
   const commandLockRef = useRef(false);
   const pendingFreezeRef = useRef(null);
   const externalFileInputRef = useRef(null);
@@ -320,11 +369,20 @@ export default function RtmPresenterWorkspace({
       const next = normalizeWorkspace(payload, caseId);
       pendingFreezeRef.current = null;
       setWorkspace(next);
-      setProfileId(next.destinations[0]?.destination_profile_id || "");
+      setProfileId("");
       setSelections({});
       setAuthorizationVersionId("");
       setFrozenPackage(null);
       setSupersedesPackageId(null);
+      setExternalPanelOpen(false);
+      setExternalMode("new");
+      setExternalPurpose("");
+      setExternalSupersedesId("");
+      setExternalFileMetadata(null);
+      setSyntheticConfirmed(false);
+      if (externalFileInputRef.current) {
+        externalFileInputRef.current.value = "";
+      }
     },
     [caseId]
   );
@@ -375,6 +433,7 @@ export default function RtmPresenterWorkspace({
     setExternalPurpose("");
     setExternalSupersedesId("");
     setSyntheticConfirmed(false);
+    setExternalPanelOpen(false);
     if (externalFileInputRef.current) {
       externalFileInputRef.current.value = "";
     }
@@ -538,6 +597,28 @@ export default function RtmPresenterWorkspace({
     setSyntheticConfirmed(false);
   }
 
+  function openExternalPanel(purpose = "") {
+    setExternalMode("new");
+    setExternalSupersedesId("");
+    setExternalPurpose(
+      externalPurposeOptions.includes(String(purpose || "").toLowerCase())
+        ? String(purpose).toLowerCase()
+        : ""
+    );
+    clearExternalFileInput();
+    setExternalPanelOpen(true);
+    setMessage("");
+  }
+
+  function closeExternalPanel() {
+    if (busyCommand === "upload-external") return;
+    setExternalPanelOpen(false);
+    setExternalMode("new");
+    setExternalPurpose("");
+    setExternalSupersedesId("");
+    clearExternalFileInput();
+  }
+
   function chooseExternalFile(event) {
     const input = event.currentTarget;
     const file = input.files?.[0] || null;
@@ -611,8 +692,9 @@ export default function RtmPresenterWorkspace({
       setExternalMode("new");
       setExternalPurpose("");
       setExternalSupersedesId("");
+      setExternalPanelOpen(false);
       setMessage(
-        `${metadata.filename} queda custodiado en RTM como review/pending. En este corte el scanner y la activación aún no están conectados, por lo que no será seleccionable.`
+        `${metadata.filename} queda custodiado en RTM y pendiente de análisis. En este corte el scanner y la activación aún no están conectados, por lo que todavía no será seleccionable.`
       );
     } catch (error) {
       if (uploadConfirmed) {
@@ -672,7 +754,7 @@ export default function RtmPresenterWorkspace({
       pendingFreezeRef.current = null;
       setSupersedesPackageId(null);
       setMessage(
-        "Paquete congelado. No se han emitido tickets ni se ha enviado contenido fuera de RTM."
+        "Paquete preparado. No se han emitido tickets ni se ha enviado contenido fuera de RTM."
       );
     } catch (error) {
       if (error instanceof RtmPresenterApiError && error.status && error.status < 500) {
@@ -714,7 +796,7 @@ export default function RtmPresenterWorkspace({
           <p className="rtmp-eyebrow">RTM Presenter</p>
           <h1>Preparar presentación</h1>
           <p>
-            Expediente sintético{" "}
+            Documentación del expediente sintético{" "}
             <span className="rtmp-mono">{caseId || "sin identificar"}</span>
           </p>
         </div>
@@ -729,16 +811,14 @@ export default function RtmPresenterWorkspace({
             Boolean(supersedesPackageId)
           }
         >
-          {loading ? "Actualizando…" : "Actualizar contenedor"}
+          {loading ? "Actualizando…" : "Actualizar documentos"}
         </button>
       </header>
 
       <p className="rtmp-stay-notice" role="note">
-        <strong>Permanece en RTM.</strong> Para documentos ya custodiados, la
-        interfaz de operador solo maneja metadatos, identificadores de versión y
-        huellas. Al incorporar un archivo externo lo envía directamente a RTM,
-        sin crear una previsualización, descarga ni copia persistente propia; la
-        referencia temporal al archivo se limpia al terminar.
+        <strong>Tus documentos permanecen en RTM.</strong> Esta pantalla solo maneja
+        metadatos verificados para que elijas qué documento corresponde a cada
+        campo de la sede. No descarga ni crea copias locales del operador.
       </p>
 
       {message ? (
@@ -755,193 +835,64 @@ export default function RtmPresenterWorkspace({
 
       {workspace ? (
         <>
-          {documentIngestAllowed ? (
-            <section className="rtmp-card" aria-labelledby="rtmp-external-title">
-              <div className="rtmp-section-heading">
-                <div>
-                  <p className="rtmp-eyebrow">Contenedor individual</p>
-                  <h2 id="rtmp-external-title">Añadir documento externo</h2>
-                  <p>
-                    El archivo se incorpora directamente a la custodia de RTM.
-                    En este corte el scanner y la activación aún no están
-                    conectados: queda en review/pending y no puede seleccionarse.
-                  </p>
-                </div>
-                <span className="rtmp-chip rtmp-chip-warn">
-                  Análisis obligatorio
+          <nav className="rtmp-flow-progress" aria-label="Progreso de la preparación">
+            <ol>
+              <li className={profile ? "is-complete" : "is-current"}>
+                <span className="rtmp-progress-number">1</span>
+                <span>
+                  <strong>Destino y representación</strong>
+                  <small>{profile ? "Completo" : "Pendiente"}</small>
                 </span>
-              </div>
-
-              <form
-                className="rtmp-form-stack"
-                onSubmit={uploadExternalDocument}
+              </li>
+              <li
+                className={
+                  readiness.ready
+                    ? "is-complete"
+                    : profile
+                      ? "is-current"
+                      : ""
+                }
               >
-                <fieldset className="rtmp-actor-fieldset">
-                  <legend>Tipo de incorporación</legend>
-                  <label className="rtmp-radio-card">
-                    <input
-                      type="radio"
-                      name="rtmp-external-mode"
-                      value="new"
-                      checked={externalMode === "new"}
-                      disabled={externalIngestLocked}
-                      onChange={() => {
-                        setExternalMode("new");
-                        setExternalSupersedesId("");
-                      }}
-                    />
-                    Documento nuevo
-                  </label>
-                  <label className="rtmp-radio-card">
-                    <input
-                      type="radio"
-                      name="rtmp-external-mode"
-                      value="version"
-                      checked={externalMode === "version"}
-                      disabled={externalIngestLocked}
-                      onChange={() => {
-                        setExternalMode("version");
-                        setExternalSupersedesId("");
-                      }}
-                    />
-                    Nueva versión de un documento existente
-                  </label>
-                </fieldset>
-
-                {externalMode === "new" ? (
-                  <label>
-                    Finalidad documental
-                    <select
-                      value={effectiveExternalPurpose}
-                      disabled={externalIngestLocked}
-                      required
-                      onChange={(event) => setExternalPurpose(event.target.value)}
-                    >
-                      <option value="">Selecciona una finalidad</option>
-                      {externalPurposeOptions.map((purpose) => (
-                        <option key={purpose} value={purpose}>
-                          {purposeLabel(purpose)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <label>
-                    Versión existente que se sustituye
-                    <select
-                      value={externalSupersedesId}
-                      disabled={externalIngestLocked}
-                      required
-                      onChange={(event) =>
-                        setExternalSupersedesId(event.target.value)
-                      }
-                    >
-                      <option value="">Selecciona una versión</option>
-                      {externalLatestVersionCandidates.map(
-                        (documentVersion) => (
-                          <option
-                            key={documentVersion.document_version_id}
-                            value={documentVersion.document_version_id}
-                          >
-                            {versionLabel(documentVersion)} ·{" "}
-                            {documentVersion.state}/
-                            {documentVersion.scan_status}
-                          </option>
-                        )
-                      )}
-                    </select>
-                    {externalSupersededDocument ? (
-                      <span className="rtmp-help">
-                        Conserva la finalidad:{" "}
-                        {purposeLabel(effectiveExternalPurpose)}
-                      </span>
-                    ) : null}
-                  </label>
-                )}
-
-                <label>
-                  Archivo
-                  <input
-                    ref={externalFileInputRef}
-                    type="file"
-                    accept={RTM_PRESENTER_EXTERNAL_DOCUMENT_ACCEPT}
-                    disabled={externalIngestLocked}
-                    required
-                    aria-describedby="rtmp-external-file-help"
-                    onChange={chooseExternalFile}
-                  />
-                </label>
-                <p id="rtmp-external-file-help" className="rtmp-help">
-                  PDF, DOCX, JPEG o PNG; máximo 25 MiB. No se crea una
-                  previsualización, descarga ni copia persistente propia; la
-                  referencia temporal al archivo se limpia al terminar.
-                </p>
-                {externalFileMetadata ? (
-                  <p className="rtmp-version-summary" role="status">
-                    <strong>{externalFileMetadata.filename}</strong>
-                    <span>
-                      {externalFileMetadata.mediaType} ·{" "}
-                      {formatBytes(externalFileMetadata.size)}
-                    </span>
-                  </p>
-                ) : null}
-                <label className="rtmp-check-line">
-                  <input
-                    type="checkbox"
-                    checked={syntheticConfirmed}
-                    disabled={externalIngestLocked || !externalFileMetadata}
-                    required
-                    onChange={(event) =>
-                      setSyntheticConfirmed(event.target.checked)
-                    }
-                  />
-                  <span>
-                    <strong>
-                      Confirmo que es un documento completamente sintético y sin
-                      datos reales
-                    </strong>
-                    <span className="rtmp-help">
-                      Staging bloquea la incorporación sin esta confirmación
-                      expresa.
-                    </span>
-                  </span>
-                </label>
-                {externalIngestLocked && !busyCommand ? (
-                  <p className="rtmp-alert" role="note">
-                    Termina la preparación o congelación actual antes de incorporar
-                    otra versión al contenedor.
-                  </p>
-                ) : null}
-                <button
-                  type="submit"
-                  className="rtmp-button rtmp-button-primary"
-                  disabled={
-                    externalIngestLocked ||
-                    !externalFileMetadata ||
-                    !effectiveExternalPurpose ||
-                    !syntheticConfirmed ||
-                    (externalMode === "version" && !externalSupersededDocument)
-                  }
-                >
-                  {busyCommand === "upload-external"
-                    ? "Incorporando…"
-                    : "Incorporar al contenedor"}
-                </button>
-              </form>
-            </section>
-          ) : null}
+                <span className="rtmp-progress-number">2</span>
+                <span>
+                  <strong>Documentación solicitada</strong>
+                  <small>{readiness.ready ? "Completo" : "Pendiente"}</small>
+                </span>
+              </li>
+              <li
+                className={
+                  frozenPackage
+                    ? "is-complete"
+                    : readiness.ready
+                      ? "is-current"
+                      : ""
+                }
+              >
+                <span className="rtmp-progress-number">3</span>
+                <span>
+                  <strong>Revisar y preparar</strong>
+                  <small>{frozenPackage ? "Preparado" : "Pendiente"}</small>
+                </span>
+              </li>
+            </ol>
+          </nav>
 
           <section className="rtmp-card" aria-labelledby="rtmp-destination-title">
             <div className="rtmp-section-heading">
               <div>
                 <p className="rtmp-eyebrow">Paso 1</p>
-                <h2 id="rtmp-destination-title">Sede, perfil y representación</h2>
-                <p>El origen y el contrato del perfil llegan verificados por RTM.</p>
+                <h2 id="rtmp-destination-title">¿Dónde vas a presentarlo?</h2>
+                <p>
+                  Elige la sede administrativa y cómo actúas en este trámite.
+                  RTM cargará automáticamente lo que esa sede solicita.
+                </p>
               </div>
-              <span className="rtmp-chip">Custodia interna</span>
+              <span className={`rtmp-chip ${profile ? "rtmp-chip-ok" : ""}`}>
+                {profile ? "DESTINO ELEGIDO" : "PENDIENTE"}
+              </span>
             </div>
             <label className="rtmp-single-field">
-              Sede y perfil de presentación
+              Sede administrativa
               <select
                 value={profileId}
                 onChange={(event) => {
@@ -958,68 +909,300 @@ export default function RtmPresenterWorkspace({
                     key={item.destination_profile_id}
                     value={item.destination_profile_id}
                   >
-                    {item.display_name} · {item.profile_code} v{item.profile_version}
+                    {item.display_name}
                   </option>
                 ))}
               </select>
             </label>
             {profile ? (
-              <dl className="rtmp-profile-meta">
-                <div>
-                  <dt>Origen exacto</dt>
-                  <dd className="rtmp-mono">{profile.portal_origin}</dd>
-                </div>
-                <div>
-                  <dt>Huella del perfil</dt>
-                  <dd className="rtmp-mono">{profile.profile_sha256}</dd>
-                </div>
-              </dl>
+              <details className="rtmp-technical-details">
+                <summary>Ver datos técnicos verificados de la sede</summary>
+                <dl className="rtmp-profile-meta">
+                  <div>
+                    <dt>Origen exacto</dt>
+                    <dd className="rtmp-mono">{profile.portal_origin}</dd>
+                  </div>
+                  <div>
+                    <dt>Perfil verificado</dt>
+                    <dd>
+                      {profile.profile_code} · versión {profile.profile_version}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Huella del perfil</dt>
+                    <dd className="rtmp-mono">{profile.profile_sha256}</dd>
+                  </div>
+                </dl>
+              </details>
             ) : null}
-            <fieldset className="rtmp-actor-fieldset">
-              <legend>Modo de actuación</legend>
-              {ACTOR_OPTIONS.filter((option) =>
-                profile?.representation_modes?.includes(option.value)
-              ).map((option) => (
-                <label key={option.value} className="rtmp-radio-card">
-                  <input
-                    type="radio"
-                    name="rtmp-actor-mode"
-                    value={option.value}
-                    checked={representationMode === option.value}
-                    disabled={editingLocked}
-                    onChange={(event) => {
-                      setRepresentationMode(event.target.value);
-                      setSelections({});
-                      setAuthorizationVersionId("");
-                      resetFrozenState();
-                    }}
-                  />
-                  {option.label}
-                </label>
-              ))}
-            </fieldset>
+            {profile ? (
+              <fieldset className="rtmp-actor-fieldset">
+                <legend>¿Cómo actúas en este trámite?</legend>
+                {ACTOR_OPTIONS.filter((option) =>
+                  profile.representation_modes?.includes(option.value)
+                ).map((option) => (
+                  <label key={option.value} className="rtmp-radio-card">
+                    <input
+                      type="radio"
+                      name="rtmp-actor-mode"
+                      value={option.value}
+                      checked={representationMode === option.value}
+                      disabled={editingLocked}
+                      onChange={(event) => {
+                        setRepresentationMode(event.target.value);
+                        setSelections({});
+                        setAuthorizationVersionId("");
+                        resetFrozenState();
+                      }}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
           </section>
 
           <section className="rtmp-card" aria-labelledby="rtmp-checklist-title">
             <div className="rtmp-section-heading">
               <div>
                 <p className="rtmp-eyebrow">Paso 2</p>
-                <h2 id="rtmp-checklist-title">Elegir versiones del contenedor</h2>
+                <h2 id="rtmp-checklist-title">
+                  Documentación solicitada por la sede
+                </h2>
                 <p>
-                  Se seleccionan únicamente metadatos de versiones activas,
-                  verificadas y compatibles con cada campo de la sede.
+                  Aparece en el mismo orden que la sede. Pulsa «Elegir desde RTM»
+                  para relacionar cada campo con un documento del expediente.
                 </p>
               </div>
-              <span
-                className={`rtmp-chip ${
-                  readiness.ready ? "rtmp-chip-ok" : "rtmp-chip-warn"
-                }`}
-              >
-                {readiness.ready ? "COMPLETO" : "PENDIENTE"}
-              </span>
+              <div className="rtmp-heading-actions">
+                {documentIngestAllowed ? (
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-muted"
+                    onClick={() =>
+                      externalPanelOpen
+                        ? closeExternalPanel()
+                        : openExternalPanel()
+                    }
+                    disabled={
+                      externalIngestLocked && !externalPanelOpen
+                    }
+                    aria-expanded={externalPanelOpen}
+                    aria-controls="rtmp-external-panel"
+                  >
+                    {externalPanelOpen
+                      ? "Cerrar"
+                      : "+ Añadir documento al expediente"}
+                  </button>
+                ) : null}
+                <span
+                  className={`rtmp-chip ${
+                    readiness.ready ? "rtmp-chip-ok" : "rtmp-chip-warn"
+                  }`}
+                >
+                  {readiness.ready ? "COMPLETO" : "PENDIENTE"}
+                </span>
+              </div>
             </div>
 
-            {!profile ? <p>Selecciona una sede para cargar sus campos.</p> : null}
+            {documentIngestAllowed && externalPanelOpen ? (
+              <section
+                id="rtmp-external-panel"
+                className="rtmp-ingest-panel"
+                aria-labelledby="rtmp-external-title"
+              >
+                <div className="rtmp-section-heading rtmp-ingest-heading">
+                  <div>
+                    <p className="rtmp-eyebrow">Documento externo</p>
+                    <h3 id="rtmp-external-title">
+                      Añadir documento al expediente
+                    </h3>
+                    <p>
+                      RTM lo custodiará directamente. En este staging quedará
+                      pendiente de análisis y todavía no podrá seleccionarse.
+                    </p>
+                  </div>
+                  <span className="rtmp-chip rtmp-chip-warn">
+                    Análisis obligatorio
+                  </span>
+                </div>
+
+                <form
+                  className="rtmp-form-stack"
+                  onSubmit={uploadExternalDocument}
+                >
+                  <fieldset className="rtmp-actor-fieldset">
+                    <legend>¿Qué quieres hacer?</legend>
+                    <label className="rtmp-radio-card">
+                      <input
+                        type="radio"
+                        name="rtmp-external-mode"
+                        value="new"
+                        checked={externalMode === "new"}
+                        disabled={externalIngestLocked}
+                        onChange={() => {
+                          setExternalMode("new");
+                          setExternalSupersedesId("");
+                        }}
+                      />
+                      Es un documento nuevo
+                    </label>
+                    <label className="rtmp-radio-card">
+                      <input
+                        type="radio"
+                        name="rtmp-external-mode"
+                        value="version"
+                        checked={externalMode === "version"}
+                        disabled={externalIngestLocked}
+                        onChange={() => {
+                          setExternalMode("version");
+                          setExternalSupersedesId("");
+                        }}
+                      />
+                      Sustituye o mejora uno existente
+                    </label>
+                  </fieldset>
+
+                  <div className="rtmp-ingest-grid">
+                    {externalMode === "new" ? (
+                      <label>
+                        ¿Qué documento es?
+                        <select
+                          value={effectiveExternalPurpose}
+                          disabled={externalIngestLocked}
+                          required
+                          onChange={(event) =>
+                            setExternalPurpose(event.target.value)
+                          }
+                        >
+                          <option value="">Selecciona el tipo de documento</option>
+                          {externalPurposeOptions.map((purpose) => (
+                            <option key={purpose} value={purpose}>
+                              {purposeLabel(purpose)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <label>
+                        Documento que se sustituye
+                        <select
+                          value={externalSupersedesId}
+                          disabled={externalIngestLocked}
+                          required
+                          onChange={(event) =>
+                            setExternalSupersedesId(event.target.value)
+                          }
+                        >
+                          <option value="">Selecciona el documento anterior</option>
+                          {externalLatestVersionCandidates.map(
+                            (documentVersion) => (
+                              <option
+                                key={documentVersion.document_version_id}
+                                value={documentVersion.document_version_id}
+                              >
+                                {versionLabel(documentVersion)}
+                              </option>
+                            )
+                          )}
+                        </select>
+                        {externalSupersededDocument ? (
+                          <span className="rtmp-help">
+                            Mantendrá el tipo «
+                            {purposeLabel(effectiveExternalPurpose)}».
+                          </span>
+                        ) : null}
+                      </label>
+                    )}
+
+                    <label>
+                      Seleccionar archivo
+                      <input
+                        ref={externalFileInputRef}
+                        type="file"
+                        accept={RTM_PRESENTER_EXTERNAL_DOCUMENT_ACCEPT}
+                        disabled={externalIngestLocked}
+                        required
+                        aria-describedby="rtmp-external-file-help"
+                        onChange={chooseExternalFile}
+                      />
+                    </label>
+                  </div>
+
+                  <p id="rtmp-external-file-help" className="rtmp-help">
+                    PDF, DOCX, JPEG o PNG; máximo 25 MiB. El archivo se envía a
+                    RTM sin crear una previsualización ni una copia local.
+                  </p>
+                  {externalFileMetadata ? (
+                    <p className="rtmp-version-summary" role="status">
+                      <strong>{externalFileMetadata.filename}</strong>
+                      <span>
+                        {externalFileMetadata.mediaType} ·{" "}
+                        {formatBytes(externalFileMetadata.size)}
+                      </span>
+                    </p>
+                  ) : null}
+                  <label className="rtmp-check-line">
+                    <input
+                      type="checkbox"
+                      checked={syntheticConfirmed}
+                      disabled={externalIngestLocked || !externalFileMetadata}
+                      required
+                      onChange={(event) =>
+                        setSyntheticConfirmed(event.target.checked)
+                      }
+                    />
+                    <span>
+                      <strong>
+                        Confirmo que es un documento completamente sintético y
+                        sin datos reales
+                      </strong>
+                      <span className="rtmp-help">
+                        Esta confirmación solo aparece en staging.
+                      </span>
+                    </span>
+                  </label>
+                  {externalIngestLocked && !busyCommand ? (
+                    <p className="rtmp-alert" role="note">
+                      Termina la preparación actual antes de añadir otra versión.
+                    </p>
+                  ) : null}
+                  <div className="rtmp-button-row">
+                    <button
+                      type="submit"
+                      className="rtmp-button rtmp-button-primary"
+                      disabled={
+                        externalIngestLocked ||
+                        !externalFileMetadata ||
+                        !effectiveExternalPurpose ||
+                        !syntheticConfirmed ||
+                        (externalMode === "version" &&
+                          !externalSupersededDocument)
+                      }
+                    >
+                      {busyCommand === "upload-external"
+                        ? "Guardando en RTM…"
+                        : "Guardar en RTM"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rtmp-button rtmp-button-muted"
+                      onClick={closeExternalPanel}
+                      disabled={busyCommand === "upload-external"}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              </section>
+            ) : null}
+
+            {!profile ? (
+              <p className="rtmp-empty-step">
+                Primero selecciona una sede en el paso 1 para ver qué documentos
+                solicita y en qué orden.
+              </p>
+            ) : null}
             <ol className="rtmp-requirements">
               {fields.map((field, index) => {
                 const candidates = matchingPresenterDocumentVersions(
@@ -1033,14 +1216,27 @@ export default function RtmPresenterWorkspace({
                       {index + 1}
                     </div>
                     <div className="rtmp-requirement-body">
-                      <h3>
-                        {field.label}
-                        {field.required ? " *" : ""}
-                      </h3>
+                      <div className="rtmp-requirement-title">
+                        <h3>{fieldLabel(field)}</h3>
+                        <span
+                          className={`rtmp-field-status ${
+                            values.filter(Boolean).length > 0
+                              ? "is-selected"
+                              : ""
+                          }`}
+                        >
+                          {values.filter(Boolean).length > 0
+                            ? "ELEGIDO"
+                            : field.required
+                              ? "OBLIGATORIO"
+                              : "OPCIONAL"}
+                        </span>
+                      </div>
                       <p className="rtmp-help">
-                        {field.mediaTypes.join(", ")} · máximo {field.maxFiles}{" "}
-                        {field.maxFiles === 1 ? "archivo" : "archivos"} ·{" "}
-                        {formatBytes(field.maxBytes)} por archivo
+                        Admite {field.mediaTypes.map(mediaTypeLabel).join(", ")} ·{" "}
+                        hasta {field.maxFiles}{" "}
+                        {field.maxFiles === 1 ? "documento" : "documentos"} ·{" "}
+                        máximo {formatBytes(field.maxBytes)} cada uno
                       </p>
                       <div className="rtmp-selection-slots">
                         {Array.from({ length: field.maxFiles }, (_, slot) => {
@@ -1050,10 +1246,22 @@ export default function RtmPresenterWorkspace({
                             selectedId
                           );
                           return (
-                            <div key={`${field.fieldCode}-${slot}`} className="rtmp-version-slot">
+                            <div
+                              key={`${field.fieldCode}-${slot}`}
+                              className={`rtmp-version-slot ${
+                                selected ? "is-selected" : ""
+                              }`}
+                            >
                               <label>
-                                Versión {slot + 1}
+                                {field.maxFiles === 1
+                                  ? "Documento del expediente"
+                                  : `Documento ${slot + 1}`}
                                 <select
+                                  aria-label={`Elegir desde RTM: ${fieldLabel(
+                                    field
+                                  )}${
+                                    field.maxFiles === 1 ? "" : ` ${slot + 1}`
+                                  }`}
                                   value={selectedId}
                                   required={field.required && slot === 0}
                                   disabled={editingLocked}
@@ -1067,8 +1275,8 @@ export default function RtmPresenterWorkspace({
                                 >
                                   <option value="">
                                     {field.required && slot === 0
-                                      ? "Selecciona una versión"
-                                      : "Sin documento adicional"}
+                                      ? "Elegir desde RTM"
+                                      : "No añadir otro documento"}
                                   </option>
                                   {candidates.map((documentVersion) => (
                                     <option
@@ -1081,25 +1289,44 @@ export default function RtmPresenterWorkspace({
                                 </select>
                               </label>
                               {selected ? (
-                                <dl className="rtmp-version-meta">
-                                  <div>
-                                    <dt>Finalidad</dt>
-                                    <dd>{selected.purpose}</dd>
-                                  </div>
-                                  <div>
-                                    <dt>Tipo</dt>
-                                    <dd>{selected.media_type}</dd>
-                                  </div>
-                                  <div>
-                                    <dt>Huella SHA-256</dt>
-                                    <dd className="rtmp-mono">{selected.sha256}</dd>
-                                  </div>
-                                </dl>
+                                <details className="rtmp-selected-details">
+                                  <summary>Ver detalles del documento elegido</summary>
+                                  <dl className="rtmp-version-meta">
+                                    <div>
+                                      <dt>Tipo documental</dt>
+                                      <dd>{purposeLabel(selected.purpose)}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Formato</dt>
+                                      <dd>{mediaTypeLabel(selected.media_type)}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Versión</dt>
+                                      <dd>{selected.version_number}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Huella SHA-256</dt>
+                                      <dd className="rtmp-mono">{selected.sha256}</dd>
+                                    </div>
+                                  </dl>
+                                </details>
                               ) : null}
                             </div>
                           );
                         })}
                       </div>
+                      {documentIngestAllowed && candidates.length === 0 ? (
+                        <button
+                          type="button"
+                          className="rtmp-inline-action"
+                          onClick={() =>
+                            openExternalPanel(preferredExternalPurpose(field))
+                          }
+                          disabled={externalIngestLocked}
+                        >
+                          + Añadir un documento para este requisito
+                        </button>
+                      ) : null}
                     </div>
                   </li>
                 );
@@ -1108,7 +1335,7 @@ export default function RtmPresenterWorkspace({
 
             {representationMode === "representative" ? (
               <label className="rtmp-single-field">
-                Autorización exacta incluida en el paquete
+                Autorización que acredita la representación
                 <select
                   value={effectiveAuthorizationVersionId || ""}
                   onChange={(event) => {
@@ -1118,7 +1345,7 @@ export default function RtmPresenterWorkspace({
                   required
                   disabled={editingLocked}
                 >
-                  <option value="">Selecciona la autorización firmada</option>
+                  <option value="">Elegir autorización desde RTM</option>
                   {authorizationCandidates.map((item) => (
                     <option
                       key={item.document_version_id}
@@ -1136,33 +1363,51 @@ export default function RtmPresenterWorkspace({
             <div className="rtmp-section-heading">
               <div>
                 <p className="rtmp-eyebrow">Paso 3</p>
-                <h2 id="rtmp-freeze-title">Congelar paquete</h2>
-                <p>{readiness.message}</p>
+                <h2 id="rtmp-freeze-title">Revisar y preparar</h2>
+                <p>
+                  {frozenPackage
+                    ? "La selección ha quedado fijada sin sacar documentos de RTM."
+                    : readiness.message}
+                </p>
               </div>
               {frozenPackage ? (
-                <span className="rtmp-chip rtmp-chip-ok">PAQUETE CONGELADO</span>
+                <span className="rtmp-chip rtmp-chip-ok">PAQUETE PREPARADO</span>
               ) : null}
             </div>
             {frozenPackage ? (
               <>
-                <dl className="rtmp-package-meta">
-                  <div>
-                    <dt>Paquete</dt>
-                    <dd className="rtmp-mono">{frozenPackage.package_id}</dd>
-                  </div>
-                  <div>
-                    <dt>Versión lógica</dt>
-                    <dd>{frozenPackage.package_version}</dd>
-                  </div>
-                  <div>
-                    <dt>Huella del manifiesto</dt>
-                    <dd className="rtmp-mono">{frozenPackage.manifest_sha256}</dd>
-                  </div>
-                  <div>
-                    <dt>Caduca</dt>
-                    <dd>{String(frozenPackage.expires_at)}</dd>
-                  </div>
-                </dl>
+                <div className="rtmp-ready-summary" role="status">
+                  <strong>Todo preparado para trabajar en la sede.</strong>
+                  <span>
+                    {frozenPackage.items.length}{" "}
+                    {frozenPackage.items.length === 1
+                      ? "documento relacionado"
+                      : "documentos relacionados"}
+                  </span>
+                </div>
+                <details className="rtmp-technical-details">
+                  <summary>Ver identificadores y huellas del paquete</summary>
+                  <dl className="rtmp-package-meta">
+                    <div>
+                      <dt>Paquete</dt>
+                      <dd className="rtmp-mono">{frozenPackage.package_id}</dd>
+                    </div>
+                    <div>
+                      <dt>Versión lógica</dt>
+                      <dd>{frozenPackage.package_version}</dd>
+                    </div>
+                    <div>
+                      <dt>Huella del manifiesto</dt>
+                      <dd className="rtmp-mono">
+                        {frozenPackage.manifest_sha256}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Caduca</dt>
+                      <dd>{String(frozenPackage.expires_at)}</dd>
+                    </div>
+                  </dl>
+                </details>
                 <button
                   type="button"
                   className="rtmp-button rtmp-button-secondary rtmp-new-version-button"
@@ -1170,11 +1415,11 @@ export default function RtmPresenterWorkspace({
                     setSupersedesPackageId(frozenPackage.package_id);
                     setFrozenPackage(null);
                     setMessage(
-                      "Edita la selección y congela una nueva versión; el paquete anterior no se modifica."
+                      "Puedes cambiar la selección y preparar una nueva versión; la anterior no se modifica."
                     );
                   }}
                 >
-                  Preparar nueva versión
+                  Cambiar la selección
                 </button>
               </>
             ) : (
@@ -1184,20 +1429,22 @@ export default function RtmPresenterWorkspace({
                 onClick={() => void freezePackage()}
                 disabled={!readiness.ready || Boolean(busyCommand)}
               >
-                {busyCommand === "freeze" ? "Congelando…" : "Congelar paquete"}
+                {busyCommand === "freeze"
+                  ? "Preparando…"
+                  : "Preparar paquete para presentar"}
               </button>
             )}
           </section>
 
           {frozenPackage ? (
             <section className="rtmp-card rtmp-extension-card" aria-labelledby="rtmp-extension-title">
-              <p className="rtmp-eyebrow">Paso 4</p>
-              <h2 id="rtmp-extension-title">Adjuntar desde la sede</h2>
+              <p className="rtmp-eyebrow">Presentación humana</p>
+              <h2 id="rtmp-extension-title">Usar el paquete en la sede</h2>
               <p>
                 El puente remoto sigue cerrado en este staging; hoy solo existe un
                 prototipo local sintético y no se entregan bytes. El diseño previsto
                 hará que la extensión confiable identifique cada campo y solicite un
-                ticket de un solo uso ligado al origen, paquete y versión congelada,
+                ticket de un solo uso ligado al origen, paquete y versión preparada,
                 sin crear copias locales del operador.
               </p>
               <p className="rtmp-alert" role="note">
