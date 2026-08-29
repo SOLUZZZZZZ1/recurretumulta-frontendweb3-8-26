@@ -6,6 +6,7 @@ import {
   evaluateRtmPresenterBoundary,
   hasExceptionalExportCapability,
   hasPresenterDocumentIngestCapability,
+  hasPresenterDeliveryPrepareCapability,
   latestPresenterDocumentVersions,
   normalizePresenterRepresentationMode,
   orderedPresenterFields,
@@ -334,6 +335,18 @@ test("external document ingress depends on its exact capability", () => {
   );
 });
 
+test("controlled delivery preparation depends on its exact capability", () => {
+  assert.equal(hasPresenterDeliveryPrepareCapability(["rtm.admin"]), false);
+  assert.equal(
+    hasPresenterDeliveryPrepareCapability(["presenter.delivery.prepare"]),
+    true
+  );
+  assert.equal(
+    hasPresenterDeliveryPrepareCapability(["presenter.delivery.execute"]),
+    false
+  );
+});
+
 test("new external versions can supersede only the absolute latest logical version", () => {
   const versionHistory = [
     { ...documents[0], document_version_id: "version-1", version_number: 1 },
@@ -399,6 +412,13 @@ test("normal client only loads workspace and freezes by case", async () => {
     "Bearer synthetic-operator"
   );
 
+  await client.searchDestinations(CASE_ID, "Ayuntamiento de Madrid");
+  assert.equal(
+    calls.at(-1).path,
+    `/api/ops/presenter/cases/${CASE_ID}/destinations/search?q=Ayuntamiento%20de%20Madrid&limit=20`
+  );
+  assert.equal(calls.at(-1).options.method, "GET");
+
   const body = { destination_profile_id: PROFILE_ID, items: [] };
   await client.freezePackage(CASE_ID, body, {
     idempotencyKey: "idem-presenter-1",
@@ -410,7 +430,22 @@ test("normal client only loads workspace and freezes by case", async () => {
   assert.equal(calls.at(-1).options.method, "POST");
   assert.equal(calls.at(-1).options.headers["Idempotency-Key"], "idem-presenter-1");
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), body);
-  assert.equal(calls.length, 2);
+  const packageId = "55555555-5555-5555-5555-555555555555";
+  await client.prepareDelivery(CASE_ID, packageId, {
+    channel: "portal",
+    idempotencyKey: "idem-delivery-0001",
+  });
+  assert.equal(
+    calls.at(-1).path,
+    `/api/ops/presenter/cases/${CASE_ID}/packages/${packageId}/deliveries/prepare`
+  );
+  assert.equal(calls.at(-1).options.method, "POST");
+  assert.equal(
+    calls.at(-1).options.headers["Idempotency-Key"],
+    "idem-delivery-0001"
+  );
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { channel: "portal" });
+  assert.equal(calls.length, 4);
   assert.ok(calls.every((call) => !call.path.endsWith("/documents/external")));
 });
 

@@ -12,6 +12,7 @@ import {
   evaluateRtmPresenterReadiness,
   hasExceptionalExportCapability,
   hasPresenterDocumentIngestCapability,
+  hasPresenterDeliveryPrepareCapability,
   latestPresenterDocumentVersions,
   matchingPresenterDocumentVersions,
   orderedPresenterFields,
@@ -42,6 +43,29 @@ const ALLOWED_DOCUMENT_KEYS = new Set([
   "size_bytes",
   "source_kind",
   "synthetic_only",
+]);
+const ALLOWED_DESTINATION_KEYS = new Set([
+  "destination_profile_id",
+  "profile_code",
+  "profile_version",
+  "profile_sha256",
+  "authority_code",
+  "display_name",
+  "portal_origin",
+  "representation_modes",
+  "authorization_field_code",
+  "fields",
+  "verified_at",
+]);
+const ALLOWED_DESTINATION_FIELD_KEYS = new Set([
+  "field_code",
+  "step_order",
+  "required",
+  "required_for_modes",
+  "purposes",
+  "media_types",
+  "max_files",
+  "max_bytes",
 ]);
 const ALLOWED_PACKAGE_KEYS = new Set([
   "package_id",
@@ -76,6 +100,45 @@ const ALLOWED_PACKAGE_ITEM_KEYS = new Set([
   "size_bytes",
   "required",
 ]);
+const ALLOWED_DELIVERY_KEYS = new Set([
+  "delivery_contract_version",
+  "delivery_id",
+  "case_id",
+  "package_id",
+  "package_manifest_sha256",
+  "destination_profile_id",
+  "destination_profile_code",
+  "destination_profile_version",
+  "destination_profile_sha256",
+  "destination_display_name",
+  "channel",
+  "mode",
+  "state",
+  "destination",
+  "items",
+  "prepared_at",
+  "prepared_by_operator_id",
+  "request_sha256",
+  "external_effects_allowed",
+  "authoritative_submission",
+  "local_files_created",
+  "operator_download_available",
+  "automatic_retry_allowed",
+  "human_final_submit_required",
+  "receipt_required",
+  "next_action",
+]);
+const ALLOWED_DELIVERY_ITEM_KEYS = new Set([
+  "package_item_id",
+  "item_order",
+  "field_code",
+  "portal_filename",
+  "document_version_id",
+  "document_sha256",
+  "media_type",
+  "size_bytes",
+  "state",
+]);
 const EXTERNAL_DOCUMENT_PURPOSES = new Set(
   RTM_PRESENTER_EXTERNAL_DOCUMENT_PURPOSES
 );
@@ -88,6 +151,7 @@ const PURPOSE_LABELS = Object.freeze({
   original_fine: "Multa o notificación",
   identity_document: "Documento de identidad",
   main_filing: "Recurso o escrito principal",
+  prejudicial_authorization: "Autorización prejudicial para abogado",
   authorization: "Autorización",
   representation: "Autorización de representación",
   signed_authorization: "Autorización firmada",
@@ -158,6 +222,39 @@ function assertSafeDocumentProjection(documents, exactCaseId) {
   }
 }
 
+function assertSafeDestinationProjection(destinations) {
+  for (const destination of destinations) {
+    if (
+      !destination ||
+      typeof destination !== "object" ||
+      Object.keys(destination).some(
+        (key) => !ALLOWED_DESTINATION_KEYS.has(key)
+      ) ||
+      !Array.isArray(destination.fields) ||
+      destination.fields.some(
+        (field) =>
+          !field ||
+          typeof field !== "object" ||
+          Object.keys(field).some(
+            (key) => !ALLOWED_DESTINATION_FIELD_KEYS.has(key)
+          )
+      ) ||
+      !/^[0-9a-f]{64}$/.test(String(destination.profile_sha256 || ""))
+    ) {
+      throw new Error("RTM devolvió un perfil de sede fuera del contrato seguro.");
+    }
+    let url;
+    try {
+      url = new URL(String(destination.portal_origin || ""));
+    } catch {
+      throw new Error("RTM devolvió un origen de sede no verificable.");
+    }
+    if (url.protocol !== "https:" || url.origin !== destination.portal_origin) {
+      throw new Error("RTM devolvió un origen de sede no verificable.");
+    }
+  }
+}
+
 function normalizeWorkspace(payload, fallbackCaseId) {
   const source = payload || {};
   const destinations = Array.isArray(source.destinations)
@@ -180,6 +277,7 @@ function normalizeWorkspace(payload, fallbackCaseId) {
     throw new Error("La frontera de custodia del workspace no es verificable.");
   }
   assertSafeDocumentProjection(documents, exactCaseId);
+  assertSafeDestinationProjection(destinations);
 
   return Object.freeze({
     caseId: exactCaseId,
@@ -187,6 +285,24 @@ function normalizeWorkspace(payload, fallbackCaseId) {
     documents: Object.freeze(documents),
     actions: Object.freeze({ ...actions }),
   });
+}
+
+function destinationsFromSearchResponse(payload, exactCaseId) {
+  const destinations = Array.isArray(payload?.destinations)
+    ? payload.destinations
+    : [];
+  if (
+    String(payload?.case_id || "") !== String(exactCaseId || "") ||
+    payload?.synthetic_only !== true ||
+    payload?.storage_references_exposed !== false ||
+    payload?.unverified_destination_allowed !== false ||
+    payload?.operator_supplied_url_allowed !== false ||
+    Number(payload?.result_count) !== destinations.length
+  ) {
+    throw new Error("La búsqueda de sedes no respeta la frontera verificada.");
+  }
+  assertSafeDestinationProjection(destinations);
+  return Object.freeze(destinations);
 }
 
 function packageFromResponse(
@@ -242,6 +358,71 @@ function packageFromResponse(
     throw new Error("El backend congeló una selección distinta de la solicitada.");
   }
   return value;
+}
+
+function deliveryFromResponse(payload, { caseId, frozenPackage }) {
+  const value = payload?.delivery;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Object.keys(value).some((key) => !ALLOWED_DELIVERY_KEYS.has(key)) ||
+    payload?.synthetic_only !== true ||
+    payload?.storage_references_exposed !== false
+  ) {
+    throw new Error("La orden de presentación no respeta la frontera de custodia.");
+  }
+  if (
+    !Array.isArray(value.items) ||
+    value.items.some(
+      (item) =>
+        !item ||
+        typeof item !== "object" ||
+        Object.keys(item).some((key) => !ALLOWED_DELIVERY_ITEM_KEYS.has(key))
+    )
+  ) {
+    throw new Error("La orden contiene documentos fuera del contrato seguro.");
+  }
+  const packageItems = Array.isArray(frozenPackage?.items)
+    ? frozenPackage.items
+    : [];
+  const exactItems = value.items.map((item) => ({
+    document_version_id: String(item.document_version_id || ""),
+    document_sha256: String(item.document_sha256 || ""),
+    item_order: Number(item.item_order || 0),
+    field_code: String(item.field_code || ""),
+    portal_filename: String(item.portal_filename || ""),
+    state: String(item.state || ""),
+  }));
+  const expectedItems = packageItems.map((item) => ({
+    document_version_id: String(item.document_version_id || ""),
+    document_sha256: String(item.document_sha256 || ""),
+    item_order: Number(item.item_order || 0),
+    field_code: String(item.field_code || ""),
+    portal_filename: String(item.portal_filename || ""),
+    state: "pending",
+  }));
+  if (
+    String(value.case_id || "") !== String(caseId || "") ||
+    String(value.package_id || "") !== String(frozenPackage?.package_id || "") ||
+    String(value.package_manifest_sha256 || "") !==
+      String(frozenPackage?.manifest_sha256 || "") ||
+    value.channel !== "portal" ||
+    value.state !== "prepared" ||
+    value.destination?.kind !== "verified_portal_origin" ||
+    String(value.destination?.portal_origin || "") !==
+      String(frozenPackage?.portal_origin || "") ||
+    value.external_effects_allowed !== false ||
+    value.authoritative_submission !== false ||
+    value.local_files_created !== false ||
+    value.operator_download_available !== false ||
+    value.automatic_retry_allowed !== false ||
+    value.human_final_submit_required !== true ||
+    value.receipt_required !== true ||
+    JSON.stringify(exactItems) !== JSON.stringify(expectedItems)
+  ) {
+    throw new Error("La orden no coincide exactamente con el paquete preparado.");
+  }
+  return Object.freeze({ ...value, items: Object.freeze(value.items) });
 }
 
 function selectedDocumentVersionIds(selections) {
@@ -336,10 +517,14 @@ export default function RtmPresenterWorkspace({
 
   const [workspace, setWorkspace] = useState(null);
   const [profileId, setProfileId] = useState("");
+  const [destinationQuery, setDestinationQuery] = useState("");
+  const [destinationOptions, setDestinationOptions] = useState([]);
+  const [searchingDestinations, setSearchingDestinations] = useState(false);
   const [representationMode, setRepresentationMode] = useState("self");
   const [selections, setSelections] = useState({});
   const [authorizationVersionId, setAuthorizationVersionId] = useState("");
   const [frozenPackage, setFrozenPackage] = useState(null);
+  const [delivery, setDelivery] = useState(null);
   const [supersedesPackageId, setSupersedesPackageId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busyCommand, setBusyCommand] = useState("");
@@ -352,6 +537,7 @@ export default function RtmPresenterWorkspace({
   const [externalPanelOpen, setExternalPanelOpen] = useState(false);
   const commandLockRef = useRef(false);
   const pendingFreezeRef = useRef(null);
+  const pendingDeliveryRef = useRef(null);
   const externalFileInputRef = useRef(null);
   const externalUploadAbortRef = useRef(null);
 
@@ -363,6 +549,10 @@ export default function RtmPresenterWorkspace({
     () => hasPresenterDocumentIngestCapability(operatorCapabilities),
     [operatorCapabilities]
   );
+  const deliveryPrepareAllowed = useMemo(
+    () => hasPresenterDeliveryPrepareCapability(operatorCapabilities),
+    [operatorCapabilities]
+  );
 
   const applyWorkspace = useCallback(
     (payload) => {
@@ -370,9 +560,12 @@ export default function RtmPresenterWorkspace({
       pendingFreezeRef.current = null;
       setWorkspace(next);
       setProfileId("");
+      setDestinationQuery("");
+      setDestinationOptions(next.destinations);
       setSelections({});
       setAuthorizationVersionId("");
       setFrozenPackage(null);
+      setDelivery(null);
       setSupersedesPackageId(null);
       setExternalPanelOpen(false);
       setExternalMode("new");
@@ -442,10 +635,10 @@ export default function RtmPresenterWorkspace({
 
   const profile = useMemo(
     () =>
-      workspace?.destinations.find(
+      destinationOptions.find(
         (item) => item.destination_profile_id === profileId
       ) || null,
-    [profileId, workspace]
+    [destinationOptions, profileId]
   );
 
   useEffect(() => {
@@ -576,7 +769,9 @@ export default function RtmPresenterWorkspace({
 
   function resetFrozenState() {
     pendingFreezeRef.current = null;
+    pendingDeliveryRef.current = null;
     setFrozenPackage(null);
+    setDelivery(null);
     setMessage("");
   }
 
@@ -587,6 +782,38 @@ export default function RtmPresenterWorkspace({
       return { ...current, [fieldCode]: nextValues };
     });
     resetFrozenState();
+  }
+
+  async function searchDestinations(event) {
+    event.preventDefault();
+    if (!client || !workspace || searchingDestinations || busyCommand) return;
+    setSearchingDestinations(true);
+    setMessage("");
+    try {
+      const result = await client.searchDestinations(caseId, destinationQuery, {
+        limit: 20,
+      });
+      const matches = destinationsFromSearchResponse(result, caseId);
+      const selected = profile;
+      const nextOptions =
+        selected &&
+        !matches.some(
+          (item) =>
+            item.destination_profile_id === selected.destination_profile_id
+        )
+          ? Object.freeze([selected, ...matches])
+          : matches;
+      setDestinationOptions(nextOptions);
+      if (matches.length === 0) {
+        setMessage(
+          "No existe todavía un destino verificado con ese nombre. Debe solicitarse su alta y doble verificación antes de presentar."
+        );
+      }
+    } catch (error) {
+      setMessage(publicError(error));
+    } finally {
+      setSearchingDestinations(false);
+    }
   }
 
   function clearExternalFileInput() {
@@ -751,6 +978,8 @@ export default function RtmPresenterWorkspace({
           requestPayload: payload,
         })
       );
+      setDelivery(null);
+      pendingDeliveryRef.current = null;
       pendingFreezeRef.current = null;
       setSupersedesPackageId(null);
       setMessage(
@@ -759,6 +988,51 @@ export default function RtmPresenterWorkspace({
     } catch (error) {
       if (error instanceof RtmPresenterApiError && error.status && error.status < 500) {
         pendingFreezeRef.current = null;
+      }
+      setMessage(publicError(error));
+    } finally {
+      commandLockRef.current = false;
+      setBusyCommand("");
+    }
+  }
+
+  async function preparePortalDelivery() {
+    if (
+      !frozenPackage ||
+      !deliveryPrepareAllowed ||
+      busyCommand ||
+      commandLockRef.current
+    ) {
+      return;
+    }
+    commandLockRef.current = true;
+    setBusyCommand("prepare-delivery");
+    setMessage("");
+    try {
+      if (!pendingDeliveryRef.current) {
+        pendingDeliveryRef.current = randomCommandKey();
+      }
+      const result = await client.prepareDelivery(
+        caseId,
+        frozenPackage.package_id,
+        {
+          channel: "portal",
+          idempotencyKey: pendingDeliveryRef.current,
+        }
+      );
+      setDelivery(
+        deliveryFromResponse(result, {
+          caseId,
+          frozenPackage,
+        })
+      );
+      pendingDeliveryRef.current = null;
+      setMessage(
+        "Orden de presentación preparada y auditada. Todavía no se ha cargado ni enviado ningún documento fuera de RTM."
+      );
+    } catch (error) {
+      if (error instanceof RtmPresenterApiError && error.status && error.status < 500) {
+        pendingDeliveryRef.current = null;
       }
       setMessage(publicError(error));
     } finally {
@@ -874,6 +1148,13 @@ export default function RtmPresenterWorkspace({
                   <small>{frozenPackage ? "Preparado" : "Pendiente"}</small>
                 </span>
               </li>
+              <li className={delivery ? "is-complete" : frozenPackage ? "is-current" : ""}>
+                <span className="rtmp-progress-number">4</span>
+                <span>
+                  <strong>Presentar y justificar</strong>
+                  <small>{delivery ? "Orden preparada" : "Pendiente"}</small>
+                </span>
+              </li>
             </ol>
           </nav>
 
@@ -891,6 +1172,35 @@ export default function RtmPresenterWorkspace({
                 {profile ? "DESTINO ELEGIDO" : "PENDIENTE"}
               </span>
             </div>
+            <form className="rtmp-destination-search" onSubmit={searchDestinations}>
+              <label>
+                Buscar sede por organismo o municipio
+                <input
+                  type="search"
+                  value={destinationQuery}
+                  minLength={2}
+                  maxLength={100}
+                  placeholder="Ej. Ayuntamiento de Madrid, DGT, Albacete…"
+                  disabled={profileLocked || searchingDestinations}
+                  onChange={(event) => setDestinationQuery(event.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                className="rtmp-button rtmp-button-secondary"
+                disabled={
+                  profileLocked ||
+                  searchingDestinations ||
+                  destinationQuery.trim().length < 2
+                }
+              >
+                {searchingDestinations ? "Buscando…" : "Buscar destino verificado"}
+              </button>
+            </form>
+            <p className="rtmp-help">
+              OPS busca en su registro interno. El operador no puede pegar una URL
+              ni enviar a una dirección sin verificar.
+            </p>
             <label className="rtmp-single-field">
               Sede administrativa
               <select
@@ -904,7 +1214,7 @@ export default function RtmPresenterWorkspace({
                 disabled={profileLocked}
               >
                 <option value="">Selecciona una sede</option>
-                {workspace.destinations.map((item) => (
+                {destinationOptions.map((item) => (
                   <option
                     key={item.destination_profile_id}
                     value={item.destination_profile_id}
@@ -1414,6 +1724,8 @@ export default function RtmPresenterWorkspace({
                   onClick={() => {
                     setSupersedesPackageId(frozenPackage.package_id);
                     setFrozenPackage(null);
+                    setDelivery(null);
+                    pendingDeliveryRef.current = null;
                     setMessage(
                       "Puedes cambiar la selección y preparar una nueva versión; la anterior no se modifica."
                     );
@@ -1438,18 +1750,60 @@ export default function RtmPresenterWorkspace({
 
           {frozenPackage ? (
             <section className="rtmp-card rtmp-extension-card" aria-labelledby="rtmp-extension-title">
-              <p className="rtmp-eyebrow">Presentación humana</p>
-              <h2 id="rtmp-extension-title">Usar el paquete en la sede</h2>
+              <p className="rtmp-eyebrow">Paso 4 · Presentación humana</p>
+              <h2 id="rtmp-extension-title">Presentar desde RTM</h2>
               <p>
-                El puente remoto sigue cerrado en este staging; hoy solo existe un
-                prototipo local sintético y no se entregan bytes. El diseño previsto
-                hará que la extensión confiable identifique cada campo y solicite un
-                ticket de un solo uso ligado al origen, paquete y versión preparada,
-                sin crear copias locales del operador.
+                RTM seguirá el orden propio de la sede y relacionará cada campo con
+                la versión exacta del contenedor. No se crea una carpeta local ni se
+                ofrece descarga al operador.
               </p>
+              <ol className="rtmp-delivery-list">
+                {frozenPackage.items.map((item) => (
+                  <li key={item.item_id}>
+                    <span className="rtmp-delivery-order">{item.item_order}</span>
+                    <span>
+                      <strong>{FIELD_LABELS[item.field_code] || item.field_code}</strong>
+                      <small>{item.portal_filename}</small>
+                    </span>
+                    <span className="rtmp-field-status">
+                      {delivery ? "PENDIENTE DE CARGA" : "EN PAQUETE"}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {delivery ? (
+                <div className="rtmp-delivery-state" role="status">
+                  <strong>Orden auditada; sin efecto externo.</strong>
+                  <span>
+                    Destino verificado: {delivery.destination.portal_origin}
+                  </span>
+                  <span>
+                    El puente gestionado continúa cerrado hasta disponer de
+                    atestación criptográfica; cuando se active, cada documento
+                    exigirá un ticket de un solo uso. No se han entregado bytes.
+                  </span>
+                </div>
+              ) : deliveryPrepareAllowed ? (
+                <button
+                  type="button"
+                  className="rtmp-button rtmp-button-primary"
+                  onClick={() => void preparePortalDelivery()}
+                  disabled={Boolean(busyCommand)}
+                >
+                  {busyCommand === "prepare-delivery"
+                    ? "Preparando orden…"
+                    : "Preparar carga ordenada en la sede"}
+                </button>
+              ) : (
+                <p className="rtmp-alert" role="note">
+                  Esta cuenta todavía no tiene el permiso específico para preparar
+                  entregas. Un supervisor debe actualizar su rol de operador.
+                </p>
+              )}
               <p className="rtmp-alert" role="note">
-                La extensión nunca pulsa “Enviar”, firma, resuelve CAPTCHA ni
-                completa Cl@ve. Esas acciones siguen siendo humanas.
+                Cargar un adjunto puede comunicarlo ya a la sede. RTM nunca pulsa
+                “Enviar”, firma, resuelve CAPTCHA ni completa Cl@ve: la confirmación
+                final y la revisión del justificante siguen siendo humanas.
               </p>
             </section>
           ) : null}

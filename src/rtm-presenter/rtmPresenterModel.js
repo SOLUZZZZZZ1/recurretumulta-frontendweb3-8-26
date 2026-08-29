@@ -5,6 +5,8 @@ export const RTM_PRESENTER_EXCEPTIONAL_EXPORT_CAPABILITY =
   "ops.documents.export_exceptional";
 export const RTM_PRESENTER_DOCUMENT_INGEST_CAPABILITY =
   "presenter.documents.ingest";
+export const RTM_PRESENTER_DELIVERY_PREPARE_CAPABILITY =
+  "presenter.delivery.prepare";
 
 const REPRESENTATION_MODES = new Set(["self", "representative"]);
 const AUTHORIZATION_PURPOSES = new Set([
@@ -126,6 +128,12 @@ export function hasExceptionalExportCapability(capabilities) {
 export function hasPresenterDocumentIngestCapability(capabilities) {
   return asArray(capabilities).some(
     (item) => item === RTM_PRESENTER_DOCUMENT_INGEST_CAPABILITY
+  );
+}
+
+export function hasPresenterDeliveryPrepareCapability(capabilities) {
+  return asArray(capabilities).some(
+    (item) => item === RTM_PRESENTER_DELIVERY_PREPARE_CAPABILITY
   );
 }
 

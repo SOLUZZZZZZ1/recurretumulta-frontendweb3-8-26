@@ -50,7 +50,7 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn("solo maneja", component)
         self.assertIn("metadatos", component)
         self.assertIn("ticket de un solo uso", component)
-        self.assertIn("sin crear copias locales del operador", component)
+        self.assertIn("No se crea una carpeta local", component)
 
         for forbidden in (
             "createObjectURL",
@@ -80,6 +80,8 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn(
             "`${RTM_PRESENTER_API_PREFIX}/cases/${id}/documents/external`", api
         )
+        self.assertIn("/deliveries/prepare`", api)
+        self.assertIn("/destinations/search?q=", api)
         self.assertIn("destination_profile_id", model)
         self.assertIn("representation_mode", model)
         self.assertIn("authorization_document_version_id", model)
@@ -108,6 +110,7 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn('form.append("synthetic_confirmed", "true")', api)
         for purpose in (
             "main_filing",
+            "prejudicial_authorization",
             "representation_authorization",
             "submission_receipt",
             "supporting_evidence",
@@ -185,8 +188,8 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn("Cambiar la selección", component)
         self.assertIn("supersedesPackageId", component)
         self.assertIn("supersedes_package_id", model)
-        self.assertIn("El puente remoto sigue cerrado", component)
-        self.assertIn("no se entregan bytes", component)
+        self.assertIn("El puente gestionado continúa cerrado", component)
+        self.assertIn("No se han entregado bytes", component)
         self.assertIn("ALLOWED_DOCUMENT_KEYS", component)
         self.assertIn("!ALLOWED_DOCUMENT_KEYS.has(key)", component)
         self.assertIn("ALLOWED_PACKAGE_KEYS", component)
@@ -205,10 +208,14 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
 
         for visible_step in (
             "¿Dónde vas a presentarlo?",
+            "Buscar sede por organismo o municipio",
+            "Buscar destino verificado",
             "Documentación solicitada por la sede",
             "Elegir desde RTM",
             "Revisar y preparar",
             "Preparar paquete para presentar",
+            "Presentar desde RTM",
+            "Preparar carga ordenada en la sede",
         ):
             self.assertIn(visible_step, component)
         self.assertIn('className="rtmp-flow-progress"', component)
@@ -226,8 +233,11 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         ):
             self.assertIn(document_label, component)
         self.assertIn(".rtmp-flow-progress", css)
+        self.assertIn(".rtmp-destination-search", css)
         self.assertIn(".rtmp-ingest-panel", css)
         self.assertIn(".rtmp-field-status", css)
+        self.assertIn("El operador no puede pegar una URL", component)
+        self.assertIn("doble verificación antes de presentar", component)
 
     def test_staging_synthetic_boundary_and_transport_are_fail_closed(self):
         component = source("RtmPresenterWorkspace.jsx")

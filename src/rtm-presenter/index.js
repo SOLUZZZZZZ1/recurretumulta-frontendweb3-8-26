@@ -16,6 +16,7 @@ export {
   evaluateRtmPresenterReadiness,
   hasExceptionalExportCapability,
   hasPresenterDocumentIngestCapability,
+  hasPresenterDeliveryPrepareCapability,
   latestPresenterDocumentVersions,
   matchingPresenterDocuments,
   matchingPresenterDocumentVersions,
@@ -26,6 +27,7 @@ export {
   presenterVersionMatchesRequirement,
   RTM_PRESENTER_EXCEPTIONAL_EXPORT_CAPABILITY,
   RTM_PRESENTER_DOCUMENT_INGEST_CAPABILITY,
+  RTM_PRESENTER_DELIVERY_PREPARE_CAPABILITY,
   RTM_PRESENTER_MODEL_VERSION,
   RtmPresenterModelError,
 } from "./rtmPresenterModel.js";

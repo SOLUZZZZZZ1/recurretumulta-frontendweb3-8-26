@@ -13,6 +13,7 @@ export const RTM_PRESENTER_EXTERNAL_DOCUMENT_MEDIA_TYPES = Object.freeze([
 ]);
 export const RTM_PRESENTER_EXTERNAL_DOCUMENT_PURPOSES = Object.freeze([
   "main_filing",
+  "prejudicial_authorization",
   "representation_authorization",
   "submission_receipt",
   "supporting_evidence",
@@ -237,6 +238,27 @@ export function createRtmPresenterClient({
       });
     },
 
+    async searchDestinations(caseId, query, { signal = null, limit = 20 } = {}) {
+      const id = safeSegment(caseId, "caseId");
+      const cleanQuery = String(query || "").trim().replace(/\s+/g, " ");
+      if (cleanQuery.length < 2 || cleanQuery.length > 100) {
+        fail(
+          "presenter.destination_query_invalid",
+          "Escribe al menos dos caracteres para buscar una sede."
+        );
+      }
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        fail(
+          "presenter.destination_limit_invalid",
+          "El límite de búsqueda no es válido."
+        );
+      }
+      return jsonRequest(
+        `${RTM_PRESENTER_API_PREFIX}/cases/${id}/destinations/search?q=${encodeURIComponent(cleanQuery)}&limit=${limit}`,
+        { method: "GET", signal }
+      );
+    },
+
     async freezePackage(
       caseId,
       payload,
@@ -254,6 +276,48 @@ export function createRtmPresenterClient({
           body: JSON.stringify(payload),
           signal,
         }
+      );
+    },
+
+    async prepareDelivery(
+      caseId,
+      packageId,
+      { channel = "portal", signal = null, idempotencyKey = "" } = {}
+    ) {
+      const id = safeSegment(caseId, "caseId");
+      const exactPackageId = safeSegment(packageId, "packageId");
+      if (!new Set(["portal", "email"]).has(channel)) {
+        fail(
+          "presenter.delivery_channel_invalid",
+          "El canal de presentación no es válido."
+        );
+      }
+      return jsonRequest(
+        `${RTM_PRESENTER_API_PREFIX}/cases/${id}/packages/${exactPackageId}/deliveries/prepare`,
+        {
+          method: "POST",
+          headers: {
+            ...commandHeaders({ idempotencyKey }),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ channel }),
+          signal,
+        }
+      );
+    },
+
+    async loadDeliveryStatus(
+      caseId,
+      packageId,
+      deliveryId,
+      { signal = null } = {}
+    ) {
+      const id = safeSegment(caseId, "caseId");
+      const exactPackageId = safeSegment(packageId, "packageId");
+      const exactDeliveryId = safeSegment(deliveryId, "deliveryId");
+      return jsonRequest(
+        `${RTM_PRESENTER_API_PREFIX}/cases/${id}/packages/${exactPackageId}/deliveries/${exactDeliveryId}`,
+        { method: "GET", signal }
       );
     },
 

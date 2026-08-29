@@ -173,6 +173,7 @@ export default function IniciarExpedienteRTM() {
     case_type: initialType,
     customer_comment: "",
     representation_confirmed: false,
+    prejudicial_counsel_requested: false,
     privacy_accepted: false,
   });
 
@@ -255,6 +256,9 @@ export default function IniciarExpedienteRTM() {
           ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
           : form.customer_comment.trim(),
         representation_confirmed: String(form.representation_confirmed),
+        prejudicial_counsel_requested: String(
+          form.prejudicial_counsel_requested
+        ),
         privacy_accepted: String(form.privacy_accepted),
       }).forEach(([key, value]) => fd.append(key, value));
 
@@ -579,6 +583,14 @@ export default function IniciarExpedienteRTM() {
 
             {!draftCase && <>
               <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
+              <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f" }}>
+                <Check checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
+                  Quiero valorar una autorización separada y opcional para que un abogado pueda realizar reclamaciones prejudiciales por escrito en este expediente.
+                </Check>
+                <p style={{ margin: "6px 0 0", lineHeight: 1.55 }}>
+                  Esta elección no autoriza todavía al abogado y no es necesaria para que RTM gestione el expediente. El Documento 2 se explicará y firmará aparte; no incluye aceptar acuerdos, renunciar a derechos, someterse a arbitraje, cobrar cantidades ni iniciar actuaciones judiciales. La mediación y cualquier fase judicial requieren un encargo específico.
+                </p>
+              </div>
               <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
               <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : "Crear expediente y descargar autorización"}</button>
             </>}

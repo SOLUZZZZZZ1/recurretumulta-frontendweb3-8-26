@@ -220,6 +220,18 @@ class PublicServicesSurfaceTests(unittest.TestCase):
         self.assertIn("availableCaseTypes.includes(form.case_type)", self.intake)
         self.assertIn("availableCaseTypes.map", self.intake)
 
+    def test_prejudicial_counsel_request_is_optional_and_separate(self):
+        self.assertIn(
+            "prejudicial_counsel_requested: false", self.intake
+        )
+        self.assertIn(
+            "autorización separada y opcional", self.intake
+        )
+        self.assertIn("Esta elección no autoriza todavía", self.intake)
+        self.assertIn("no es necesaria para que RTM gestione", self.intake)
+        self.assertIn("no incluye aceptar acuerdos", self.intake)
+        self.assertIn("La mediación y cualquier fase judicial", self.intake)
+
     def test_old_unpersisted_issue_parameters_are_not_presented(self):
         for path in SRC.rglob("*.jsx"):
             self.assertNotIn("?issue=", read(path), str(path.relative_to(ROOT)))
