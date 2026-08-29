@@ -46,7 +46,7 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         combined = component + api
 
         self.assertIn("Preparar presentación", component)
-        self.assertIn("Permanece en RTM.", component)
+        self.assertIn("Tus documentos permanecen en RTM.", component)
         self.assertIn("solo maneja", component)
         self.assertIn("metadatos", component)
         self.assertIn("ticket de un solo uso", component)
@@ -97,10 +97,10 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
 
         self.assertIn('"presenter.documents.ingest"', model)
         self.assertIn("hasPresenterDocumentIngestCapability", component)
-        self.assertIn("{documentIngestAllowed ? (", component)
-        self.assertIn("Añadir documento externo", component)
-        self.assertIn("Documento nuevo", component)
-        self.assertIn("Nueva versión de un documento existente", component)
+        self.assertIn("documentIngestAllowed && externalPanelOpen", component)
+        self.assertIn("Añadir documento al expediente", component)
+        self.assertIn("Es un documento nuevo", component)
+        self.assertIn("Sustituye o mejora uno existente", component)
         self.assertIn("supersedesDocumentVersionId", component)
         self.assertIn('form.append("supersedes_document_version_id"', api)
         self.assertIn('form.append("purpose"', api)
@@ -128,7 +128,8 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn("if (uploadConfirmed) {", component)
         self.assertIn("setWorkspace(null)", component)
         self.assertIn("copia local del workspace se ha invalidado", component)
-        self.assertIn("scanner y la activación aún no", component)
+        self.assertIn("pendiente de análisis", component)
+        self.assertIn("todavía no podrá seleccionarse", component)
         self.assertNotIn("setExternalFile(", component)
         self.assertNotIn("useState(new File", component)
         self.assertNotIn("createObjectURL", combined)
@@ -140,7 +141,7 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         component = source("RtmPresenterWorkspace.jsx")
         api = source("rtmPresenterApi.js")
         self.assertIn(
-            "Confirmo que es un documento completamente sintético y sin",
+            "Confirmo que es un documento completamente sintético y",
             component,
         )
         self.assertIn("datos reales", component)
@@ -181,7 +182,7 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         )
         self.assertIn("Boolean(busyCommand) || Boolean(frozenPackage)", component)
         self.assertIn("disabled={editingLocked}", component)
-        self.assertIn("Preparar nueva versión", component)
+        self.assertIn("Cambiar la selección", component)
         self.assertIn("supersedesPackageId", component)
         self.assertIn("supersedes_package_id", model)
         self.assertIn("El puente remoto sigue cerrado", component)
@@ -197,6 +198,36 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
             "synthetic_only",
         ):
             self.assertIn(f'"{field}"', component)
+
+    def test_operator_surface_is_a_guided_human_filing_flow(self):
+        component = source("RtmPresenterWorkspace.jsx")
+        css = source("rtmPresenter.css")
+
+        for visible_step in (
+            "¿Dónde vas a presentarlo?",
+            "Documentación solicitada por la sede",
+            "Elegir desde RTM",
+            "Revisar y preparar",
+            "Preparar paquete para presentar",
+        ):
+            self.assertIn(visible_step, component)
+        self.assertIn('className="rtmp-flow-progress"', component)
+        self.assertIn('className="rtmp-technical-details"', component)
+        self.assertIn('className="rtmp-selected-details"', component)
+        self.assertIn("externalPanelOpen", component)
+        self.assertIn("openExternalPanel(preferredExternalPurpose(field))", component)
+        self.assertIn('setProfileId("");', component)
+        self.assertNotIn("setProfileId(next.destinations[0]", component)
+        for document_label in (
+            "Multa o notificación",
+            "Documento de identidad",
+            "Recurso o escrito principal",
+            "Autorización de representación",
+        ):
+            self.assertIn(document_label, component)
+        self.assertIn(".rtmp-flow-progress", css)
+        self.assertIn(".rtmp-ingest-panel", css)
+        self.assertIn(".rtmp-field-status", css)
 
     def test_staging_synthetic_boundary_and_transport_are_fail_closed(self):
         component = source("RtmPresenterWorkspace.jsx")

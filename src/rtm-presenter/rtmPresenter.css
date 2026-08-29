@@ -84,6 +84,80 @@
   line-height: 1.55;
 }
 
+.rtmp-flow-progress {
+  width: min(1180px, 100%);
+  margin: 18px auto 0;
+}
+
+.rtmp-flow-progress ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rtmp-flow-progress li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 13px 14px;
+  color: #64748b;
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid #d7e0eb;
+  border-radius: 15px;
+}
+
+.rtmp-flow-progress li.is-current {
+  color: #133f75;
+  background: #edf6ff;
+  border-color: #8ab8ec;
+}
+
+.rtmp-flow-progress li.is-complete {
+  color: #075f3b;
+  background: #effcf5;
+  border-color: #9ed8b9;
+}
+
+.rtmp-flow-progress li > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.rtmp-flow-progress strong,
+.rtmp-flow-progress small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rtmp-flow-progress small {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.rtmp-progress-number {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: #fff;
+  background: #8a99ad;
+  border-radius: 50%;
+  font-weight: 900;
+}
+
+.rtmp-flow-progress .is-current .rtmp-progress-number {
+  background: var(--rtmp-blue);
+}
+
+.rtmp-flow-progress .is-complete .rtmp-progress-number {
+  background: var(--rtmp-green);
+}
+
 .rtmp-card,
 .rtmp-exception {
   margin-top: 18px;
@@ -105,6 +179,14 @@
   margin: 7px 0 0;
   color: var(--rtmp-muted);
   line-height: 1.5;
+}
+
+.rtmp-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 9px;
 }
 
 .rtmp-form-grid,
@@ -315,6 +397,25 @@
   border-radius: 13px;
 }
 
+.rtmp-technical-details,
+.rtmp-selected-details {
+  margin-top: 14px;
+  color: var(--rtmp-muted);
+}
+
+.rtmp-technical-details > summary,
+.rtmp-selected-details > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #24558e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rtmp-selected-details .rtmp-version-meta {
+  padding-top: 4px;
+}
+
 .rtmp-button-row {
   display: flex;
   flex-wrap: wrap;
@@ -419,6 +520,96 @@
   margin-top: 18px;
 }
 
+.rtmp-ingest-panel {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f6faff;
+  border: 1px solid #a9c9ec;
+  border-radius: 17px;
+  box-shadow: inset 4px 0 0 #4f8bc9;
+}
+
+.rtmp-ingest-heading h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.rtmp-ingest-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rtmp-empty-step {
+  margin: 20px 0 0;
+  padding: 18px;
+  color: #526077;
+  background: #f8fafc;
+  border: 1px dashed #b8c5d6;
+  border-radius: 14px;
+  text-align: center;
+}
+
+.rtmp-requirement-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rtmp-field-status {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  color: #755000;
+  background: #fff5d6;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.rtmp-field-status.is-selected {
+  color: #075f3b;
+  background: #dcfce7;
+}
+
+.rtmp-version-slot.is-selected {
+  background: #f7fff9;
+  border-color: #8ed0ae;
+}
+
+.rtmp-inline-action {
+  margin-top: 12px;
+  padding: 0;
+  color: #164ea4;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.rtmp-inline-action:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.rtmp-ready-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  color: #075f3b;
+  background: #effcf5;
+  border: 1px solid #9ed8b9;
+  border-radius: 14px;
+}
+
 .rtmp-check-line {
   grid-template-columns: auto 1fr !important;
   align-items: start;
@@ -454,8 +645,19 @@
   }
 
   .rtmp-form-grid,
-  .rtmp-document-grid {
+  .rtmp-document-grid,
+  .rtmp-ingest-grid,
+  .rtmp-flow-progress ol {
     grid-template-columns: 1fr;
+  }
+
+  .rtmp-heading-actions {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .rtmp-heading-actions .rtmp-button {
+    width: 100%;
   }
 
   .rtmp-requirement {
