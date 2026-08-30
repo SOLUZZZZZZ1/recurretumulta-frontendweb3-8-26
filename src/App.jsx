@@ -61,6 +61,9 @@ const OpsA1SSyntheticReadOnly = lazy(
   () => import("./pages/OpsA1SSyntheticReadOnly.jsx")
 );
 const OpsPresenterPage = lazy(() => import("./pages/OpsPresenterPage.jsx"));
+const OpsSignerStationPage = lazy(
+  () => import("./pages/OpsSignerStationPage.jsx")
+);
 
 function OpsPresenterFallback() {
   return (
@@ -180,6 +183,14 @@ export default function App() {
 
         <Route path="/ops" element={<OpsDashboard />} />
         <Route path="/ops/followups" element={<OpsFollowups />} />
+        <Route
+          path="/ops/presenter/signer"
+          element={
+            <Suspense fallback={<OpsPresenterFallback />}>
+              <OpsSignerStationPage />
+            </Suspense>
+          }
+        />
         <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
         <Route
           path="/ops/case/:caseId/presenter"

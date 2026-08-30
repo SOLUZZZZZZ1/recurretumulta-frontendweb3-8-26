@@ -4,6 +4,8 @@ import {
   RTM_PRESENTER_EXTERNAL_DOCUMENT_ACCEPT,
   RTM_PRESENTER_EXTERNAL_DOCUMENT_PURPOSES,
   RtmPresenterApiError,
+  validateRtmPresenterAttachmentFilename,
+  validateRtmPresenterDestinationProposal,
   validateRtmPresenterExternalFile,
 } from "./rtmPresenterApi.js";
 import {
@@ -11,6 +13,7 @@ import {
   evaluateRtmPresenterBoundary,
   evaluateRtmPresenterReadiness,
   hasExceptionalExportCapability,
+  hasPresenterDestinationProposeCapability,
   hasPresenterDocumentIngestCapability,
   hasPresenterDeliveryPrepareCapability,
   latestPresenterDocumentVersions,
@@ -22,6 +25,8 @@ import "./rtmPresenter.css";
 const EMPTY_HEADERS = () => ({});
 const EMPTY_CALLBACK = () => {};
 const EMPTY_CAPABILITIES = Object.freeze([]);
+const EXACT_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PACKAGE_LIFETIME_MS = 15 * 60 * 1000;
 const AUTHORIZATION_PURPOSES = new Set([
   "authorization",
@@ -54,6 +59,7 @@ const ALLOWED_DESTINATION_KEYS = new Set([
   "portal_origin",
   "delivery_channels",
   "verified_email",
+  "portal_preparation",
   "representation_modes",
   "authorization_field_code",
   "fields",
@@ -68,6 +74,24 @@ const ALLOWED_DESTINATION_FIELD_KEYS = new Set([
   "media_types",
   "max_files",
   "max_bytes",
+]);
+const ALLOWED_PORTAL_PREPARATION_KEYS = new Set([
+  "enabled",
+  "form_code",
+  "fields",
+  "operator_can_open_portal_session",
+  "signer_local_activation_required",
+  "certificate_stored_by_rtm",
+  "signature_automated",
+  "final_submit_automated",
+]);
+const ALLOWED_PORTAL_PREPARATION_FIELD_KEYS = new Set([
+  "field_code",
+  "label",
+  "required",
+  "multiline",
+  "max_length",
+  "step_order",
 ]);
 const ALLOWED_VERIFIED_EMAIL_KEYS = new Set([
   "recipient",
@@ -88,6 +112,37 @@ const ALLOWED_VERIFIED_EMAIL_KEYS = new Set([
   "subject_template",
   "body_template",
   "matter_codes",
+]);
+const ALLOWED_DIRECTORY_RESULT_KEYS = new Set([
+  "directory_code",
+  "display_name",
+  "administration_level",
+  "autonomous_community",
+  "province",
+  "locality_name",
+  "entity_type_code",
+  "sir_listed",
+  "sir_offices",
+  "source_basis",
+  "directory_snapshot_id",
+  "source_listed_modified_at",
+  "reference_only",
+  "usable_as_destination",
+  "procedure_profile_available",
+  "routing_decision_available",
+]);
+const ALLOWED_DIRECTORY_OFFICE_KEYS = new Set([
+  "office_code",
+  "office_name",
+]);
+const ALLOWED_DIRECTORY_SOURCE_KEYS = new Set([
+  "available",
+  "reason",
+  "snapshot_id",
+  "official_source_url",
+  "official_listing_modified_at",
+  "reference_only",
+  "real_public_directory_data",
 ]);
 const ALLOWED_PACKAGE_KEYS = new Set([
   "package_id",
@@ -138,6 +193,9 @@ const ALLOWED_DELIVERY_KEYS = new Set([
   "state",
   "destination",
   "correspondence",
+  "portal_preparation",
+  "signature_queue_ready",
+  "signing_controls",
   "items",
   "prepared_at",
   "prepared_by_operator_id",
@@ -150,6 +208,46 @@ const ALLOWED_DELIVERY_KEYS = new Set([
   "human_final_submit_required",
   "receipt_required",
   "next_action",
+]);
+const ALLOWED_DELIVERY_PORTAL_PREPARATION_KEYS = new Set([
+  "form_code",
+  "fields",
+  "values",
+  "confirmations",
+]);
+const ALLOWED_SIGNING_CONTROL_KEYS = new Set([
+  "certificate_stored_by_rtm",
+  "certificate_secret_allowed",
+  "browser_session_shared_with_operator",
+  "remote_desktop_required",
+  "local_signer_activation_required",
+  "final_review_required",
+  "signature_automated",
+  "final_submit_automated",
+]);
+const ALLOWED_SIGNATURE_QUEUE_KEYS = new Set([
+  "queue_contract_version",
+  "state",
+  "items",
+  "item_count",
+  "certificate_stored_by_rtm",
+  "browser_session_shared",
+  "local_activation_available",
+]);
+const ALLOWED_SIGNATURE_QUEUE_ITEM_KEYS = new Set([
+  "delivery_id",
+  "case_id",
+  "package_id",
+  "destination_display_name",
+  "prepared_at",
+  "prepared_by_operator_id",
+  "document_count",
+  "state",
+  "authoritative_submission",
+  "local_signer_activation_required",
+  "local_activation_available",
+  "certificate_stored_by_rtm",
+  "browser_session_shared",
 ]);
 const ALLOWED_DELIVERY_ITEM_KEYS = new Set([
   "package_item_id",
@@ -181,6 +279,7 @@ const ALLOWED_DELIVERY_DESTINATION_KEYS = new Set([
 const EXTERNAL_DOCUMENT_PURPOSES = new Set(
   RTM_PRESENTER_EXTERNAL_DOCUMENT_PURPOSES
 );
+const OUTBOUND_EXCLUDED_PURPOSES = new Set(["submission_receipt"]);
 const CORRESPONDENCE_CONFIRMATION_KEYS = Object.freeze([
   "destination_reviewed",
   "interested_confirmed",
@@ -196,6 +295,20 @@ const CORRESPONDENCE_CONFIRMATION_LABELS = Object.freeze({
   text_confirmed: "Asunto, texto y pretensión definitivos",
   attachments_confirmed: "Adjuntos y versiones exactos",
   data_minimization_confirmed: "No se incluyen documentos innecesarios",
+});
+const PORTAL_PREPARATION_CONFIRMATION_KEYS = Object.freeze([
+  "destination_reviewed",
+  "interested_confirmed",
+  "representation_confirmed",
+  "text_confirmed",
+  "attachments_confirmed",
+]);
+const PORTAL_PREPARATION_CONFIRMATION_LABELS = Object.freeze({
+  destination_reviewed: "Sede, procedimiento y órgano de destino revisados",
+  interested_confirmed: "Interesado y datos del expediente correctos",
+  representation_confirmed: "Representación y autorización comprobadas",
+  text_confirmed: "Asunto, Expone y Solicita definitivos",
+  attachments_confirmed: "Documentos y versiones exactos para la sede",
 });
 const ALLOWED_CORRESPONDENCE_KEYS = new Set([
   "sender",
@@ -266,6 +379,12 @@ function emptyCorrespondenceConfirmations() {
   );
 }
 
+function emptyPortalPreparationConfirmations() {
+  return Object.fromEntries(
+    PORTAL_PREPARATION_CONFIRMATION_KEYS.map((key) => [key, false])
+  );
+}
+
 function fillCorrespondenceTemplate(template, { caseId, company }) {
   return String(template || "")
     .replaceAll("[expediente]", String(caseId || ""))
@@ -316,6 +435,51 @@ function assertSafeDocumentProjection(documents, exactCaseId) {
   }
 }
 
+function assertSafePortalPreparationProjection(value) {
+  if (value === null || value === undefined) return;
+  if (
+    typeof value !== "object" ||
+    Object.keys(value).some(
+      (key) => !ALLOWED_PORTAL_PREPARATION_KEYS.has(key)
+    ) ||
+    value.enabled !== true ||
+    !/^[a-z][a-z0-9_.-]{1,127}$/.test(String(value.form_code || "")) ||
+    !Array.isArray(value.fields) ||
+    value.fields.length < 1 ||
+    value.fields.length > 32 ||
+    value.operator_can_open_portal_session !== false ||
+    value.signer_local_activation_required !== true ||
+    value.certificate_stored_by_rtm !== false ||
+    value.signature_automated !== false ||
+    value.final_submit_automated !== false
+  ) {
+    throw new Error("RTM devolvió una hoja de firma fuera del contrato seguro.");
+  }
+  const seen = new Set();
+  for (const [index, field] of value.fields.entries()) {
+    const code = String(field?.field_code || "");
+    if (
+      !field ||
+      typeof field !== "object" ||
+      Object.keys(field).some(
+        (key) => !ALLOWED_PORTAL_PREPARATION_FIELD_KEYS.has(key)
+      ) ||
+      !/^[a-z][a-z0-9_.-]{1,127}$/.test(code) ||
+      seen.has(code) ||
+      !String(field.label || "").trim() ||
+      typeof field.required !== "boolean" ||
+      typeof field.multiline !== "boolean" ||
+      !Number.isInteger(field.max_length) ||
+      field.max_length < 1 ||
+      field.max_length > 12000 ||
+      field.step_order !== index + 1
+    ) {
+      throw new Error("RTM devolvió un campo de firma fuera del contrato seguro.");
+    }
+    seen.add(code);
+  }
+}
+
 function assertSafeDestinationProjection(destinations) {
   for (const destination of destinations) {
     if (
@@ -350,6 +514,7 @@ function assertSafeDestinationProjection(destinations) {
     if (url.protocol !== "https:" || url.origin !== destination.portal_origin) {
       throw new Error("RTM devolvió un origen de sede no verificable.");
     }
+    assertSafePortalPreparationProjection(destination.portal_preparation);
     const verifiedEmail = destination.verified_email;
     if (
       verifiedEmail !== null &&
@@ -382,6 +547,69 @@ function assertSafeDestinationProjection(destinations) {
       )
     ) {
       throw new Error("RTM devolvió un correo de destino no verificable.");
+    }
+  }
+}
+
+function assertSafeDirectoryProjection(results, source) {
+  if (
+    !source ||
+    typeof source !== "object" ||
+    Object.keys(source).some((key) => !ALLOWED_DIRECTORY_SOURCE_KEYS.has(key)) ||
+    source.reference_only !== true ||
+    typeof source.available !== "boolean"
+  ) {
+    throw new Error("RTM devolvió una fuente DIR3/SIR fuera de contrato.");
+  }
+  if (source.available === true) {
+    if (
+      source.real_public_directory_data !== true ||
+      !/^[0-9a-f]{64}$/.test(String(source.snapshot_id || "")) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(
+        String(source.official_listing_modified_at || "")
+      ) ||
+      source.official_source_url !==
+        "https://administracionelectronica.gob.es/ctt/dir3/descargas"
+    ) {
+      throw new Error("RTM devolvió una fuente DIR3/SIR no verificable.");
+    }
+  } else if (
+    source.real_public_directory_data !== false ||
+    !String(source.reason || "").trim()
+  ) {
+    throw new Error("RTM no acreditó el estado del directorio.");
+  }
+  for (const result of results) {
+    if (
+      !result ||
+      typeof result !== "object" ||
+      Object.keys(result).some(
+        (key) => !ALLOWED_DIRECTORY_RESULT_KEYS.has(key)
+      ) ||
+      !/^[A-Z][A-Z0-9]{8}$/.test(String(result.directory_code || "")) ||
+      !String(result.display_name || "").trim() ||
+      !Array.isArray(result.sir_offices) ||
+      result.sir_offices.some(
+        (office) =>
+          !office ||
+          typeof office !== "object" ||
+          Object.keys(office).some(
+            (key) => !ALLOWED_DIRECTORY_OFFICE_KEYS.has(key)
+          ) ||
+          !/^O[A-Z0-9]{8}$/.test(String(office.office_code || "")) ||
+          !String(office.office_name || "").trim()
+      ) ||
+      result.sir_listed !== (result.sir_offices.length > 0) ||
+      result.reference_only !== true ||
+      result.usable_as_destination !== false ||
+      result.procedure_profile_available !== false ||
+      result.routing_decision_available !== false ||
+      !source.available ||
+      result.directory_snapshot_id !== source.snapshot_id ||
+      result.source_listed_modified_at !==
+        source.official_listing_modified_at
+    ) {
+      throw new Error("RTM devolvió un resultado DIR3/SIR fuera de contrato.");
     }
   }
 }
@@ -422,18 +650,86 @@ function destinationsFromSearchResponse(payload, exactCaseId) {
   const destinations = Array.isArray(payload?.destinations)
     ? payload.destinations
     : [];
+  const directoryResults = Array.isArray(payload?.directory_results)
+    ? payload.directory_results
+    : [];
+  const directorySource = payload?.directory_source;
   if (
     String(payload?.case_id || "") !== String(exactCaseId || "") ||
     payload?.synthetic_only !== true ||
     payload?.storage_references_exposed !== false ||
     payload?.unverified_destination_allowed !== false ||
     payload?.operator_supplied_url_allowed !== false ||
-    Number(payload?.result_count) !== destinations.length
+    payload?.operator_url_proposal_allowed !== true ||
+    Number(payload?.result_count) !== destinations.length ||
+    Number(payload?.directory_result_count) !== directoryResults.length ||
+    payload?.directory_results_selectable !== false ||
+    payload?.directory_network_used !== false ||
+    payload?.directory_procedure_inference_performed !== false
   ) {
     throw new Error("La búsqueda de sedes no respeta la frontera verificada.");
   }
   assertSafeDestinationProjection(destinations);
-  return Object.freeze(destinations);
+  assertSafeDirectoryProjection(directoryResults, directorySource);
+  return Object.freeze({
+    destinations: Object.freeze(destinations),
+    directoryResults: Object.freeze(directoryResults),
+    directorySource: Object.freeze({ ...directorySource }),
+  });
+}
+
+function signatureQueueFromResponse(payload) {
+  const queue = payload?.queue;
+  if (
+    payload?.synthetic_only !== true ||
+    payload?.storage_references_exposed !== false ||
+    !queue ||
+    typeof queue !== "object" ||
+    Object.keys(queue).some((key) => !ALLOWED_SIGNATURE_QUEUE_KEYS.has(key)) ||
+    queue.queue_contract_version !== "rtm_presenter_signature_queue_v1_0" ||
+    queue.state !== "awaiting_signature" ||
+    !Array.isArray(queue.items) ||
+    queue.item_count !== queue.items.length ||
+    queue.certificate_stored_by_rtm !== false ||
+    queue.browser_session_shared !== false ||
+    typeof queue.local_activation_available !== "boolean"
+  ) {
+    throw new Error("La cola de firma no respeta el contrato seguro.");
+  }
+  const seen = new Set();
+  for (const item of queue.items) {
+    const preparedAt = String(item?.prepared_at || "");
+    if (
+      !item ||
+      typeof item !== "object" ||
+      Object.keys(item).some(
+        (key) => !ALLOWED_SIGNATURE_QUEUE_ITEM_KEYS.has(key)
+      ) ||
+      !EXACT_UUID_PATTERN.test(String(item.delivery_id || "")) ||
+      !EXACT_UUID_PATTERN.test(String(item.case_id || "")) ||
+      !EXACT_UUID_PATTERN.test(String(item.package_id || "")) ||
+      !EXACT_UUID_PATTERN.test(String(item.prepared_by_operator_id || "")) ||
+      seen.has(item.delivery_id) ||
+      !String(item.destination_display_name || "").trim() ||
+      !/(?:Z|[+-]\d{2}:\d{2})$/.test(preparedAt) ||
+      Number.isNaN(Date.parse(preparedAt)) ||
+      !Number.isInteger(item.document_count) ||
+      item.document_count < 1 ||
+      item.state !== "awaiting_signature" ||
+      item.authoritative_submission !== false ||
+      item.local_signer_activation_required !== true ||
+      item.local_activation_available !== queue.local_activation_available ||
+      item.certificate_stored_by_rtm !== false ||
+      item.browser_session_shared !== false
+    ) {
+      throw new Error("La cola contiene una tarea de firma no verificable.");
+    }
+    seen.add(item.delivery_id);
+  }
+  return Object.freeze({
+    ...queue,
+    items: Object.freeze(queue.items.map((item) => Object.freeze({ ...item }))),
+  });
 }
 
 function packageFromResponse(
@@ -499,6 +795,7 @@ function deliveryFromResponse(
     channel,
     expectedRecipient = "",
     expectedCorrespondence = null,
+    expectedPortalPreparation = null,
   }
 ) {
   const value = payload?.delivery;
@@ -604,15 +901,59 @@ function deliveryFromResponse(
         correspondence.transport_evidence.smtp_response === null &&
         correspondence.transport_evidence.server_accepted === false &&
         correspondence.transport_evidence.delivery_receipt_proven === false;
+  const portalPreparation = value.portal_preparation;
+  const signingControls = value.signing_controls;
+  const portalPreparationMatches =
+    channel === "email"
+      ? portalPreparation === undefined &&
+        value.signature_queue_ready === undefined &&
+        signingControls === undefined
+      : portalPreparation &&
+        typeof portalPreparation === "object" &&
+        !Object.keys(portalPreparation).some(
+          (key) => !ALLOWED_DELIVERY_PORTAL_PREPARATION_KEYS.has(key)
+        ) &&
+        Array.isArray(portalPreparation.fields) &&
+        portalPreparation.fields.every(
+          (field) =>
+            field &&
+            typeof field === "object" &&
+            !Object.keys(field).some(
+              (key) => !ALLOWED_PORTAL_PREPARATION_FIELD_KEYS.has(key)
+            )
+        ) &&
+        JSON.stringify(portalPreparation) ===
+          JSON.stringify(expectedPortalPreparation) &&
+        value.signature_queue_ready === true &&
+        signingControls &&
+        typeof signingControls === "object" &&
+        !Object.keys(signingControls).some(
+          (key) => !ALLOWED_SIGNING_CONTROL_KEYS.has(key)
+        ) &&
+        signingControls.certificate_stored_by_rtm === false &&
+        signingControls.certificate_secret_allowed === false &&
+        signingControls.browser_session_shared_with_operator === false &&
+        signingControls.remote_desktop_required === false &&
+        signingControls.local_signer_activation_required === true &&
+        signingControls.final_review_required === true &&
+        signingControls.signature_automated === false &&
+        signingControls.final_submit_automated === false;
+  const expectedState = channel === "portal" ? "awaiting_signature" : "prepared";
+  const expectedMode =
+    channel === "portal"
+      ? "operator_prepared_signer_local_bridge"
+      : "server_side_email_from_custody";
   if (
     String(value.case_id || "") !== String(caseId || "") ||
     String(value.package_id || "") !== String(frozenPackage?.package_id || "") ||
     String(value.package_manifest_sha256 || "") !==
       String(frozenPackage?.manifest_sha256 || "") ||
     value.channel !== channel ||
-    value.state !== "prepared" ||
+    value.state !== expectedState ||
+    value.mode !== expectedMode ||
     !destinationMatches ||
     !correspondenceMatches ||
+    !portalPreparationMatches ||
     value.external_effects_allowed !== false ||
     value.authoritative_submission !== false ||
     value.local_files_created !== false ||
@@ -620,6 +961,11 @@ function deliveryFromResponse(
     value.automatic_retry_allowed !== false ||
     value.human_final_submit_required !== true ||
     value.receipt_required !== true ||
+    (channel === "portal" &&
+      !new Set([
+        "signer_local_activation_ready",
+        "managed_signing_bridge_activation_required",
+      ]).has(value.next_action)) ||
     JSON.stringify(exactItems) !== JSON.stringify(expectedItems)
   ) {
     throw new Error("La orden no coincide exactamente con la selección fijada.");
@@ -651,6 +997,28 @@ function purposeLabel(value) {
   return normalized
     .replace(/[._-]+/g, " ")
     .replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
+}
+
+function readableFilenameStem(filename) {
+  const value = String(filename || "").trim();
+  const dot = value.lastIndexOf(".");
+  const stem = dot > 0 ? value.slice(0, dot) : value;
+  return stem.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function attachmentFilenameFromLabel(label, sourceFilename) {
+  const source = String(sourceFilename || "").trim();
+  const dot = source.lastIndexOf(".");
+  const extension = dot > 0 ? source.slice(dot).toLowerCase() : "";
+  const safeStem = String(label || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9._() -]+/g, " ")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[._ -]+|[._ -]+$/g, "")
+    .slice(0, Math.max(1, 180 - extension.length));
+  return safeStem ? `${safeStem}${extension}` : "";
 }
 
 function fieldLabel(field) {
@@ -694,15 +1062,13 @@ function ExceptionalExportPanel({ allowed }) {
 function PresenterStatusTimeline({
   channel,
   destinationReady,
-  portalOpened,
   attachmentsFixed,
   draftPrepared,
 }) {
   if (!channel) return null;
 
-  const attachmentsLinked = channel === "email" && attachmentsFixed;
-  const awaitingHumanAction =
-    channel === "portal" ? portalOpened : draftPrepared;
+  const attachmentsLinked = attachmentsFixed;
+  const awaitingHumanAction = draftPrepared;
   const steps = [
     {
       label: "Preparando",
@@ -714,9 +1080,11 @@ function PresenterStatusTimeline({
     {
       label: "Adjuntos vinculados",
       detail: attachmentsLinked
-        ? "Versiones fijadas para revisar la correspondencia."
+        ? channel === "portal"
+          ? "Versiones y huellas fijadas para entrega individual en el puesto local."
+          : "Versiones fijadas para revisar la correspondencia."
         : channel === "portal"
-          ? "Se vincularán uno a uno desde la extensión; el puente sigue pendiente."
+          ? "Falta revisar y fijar qué versión corresponde a cada requisito."
           : "Falta elegir y fijar los adjuntos del correo.",
       state: attachmentsLinked
         ? "complete"
@@ -725,9 +1093,11 @@ function PresenterStatusTimeline({
           : "pending",
     },
     {
-      label: "Pendiente de envío humano",
+      label: channel === "portal" ? "En cola de firma" : "Pendiente de envío humano",
       detail: awaitingHumanAction
-        ? "La persona debe revisar y completar el envío en el canal de destino."
+        ? channel === "portal"
+          ? "Preparado, pero no presentado: el firmante debe abrir su sesión local, revisar y firmar."
+          : "La persona debe revisar y completar el envío en el canal de destino."
         : "Preparar o adjuntar nunca equivale a enviar.",
       state: awaitingHumanAction ? "current" : "pending",
     },
@@ -860,8 +1230,68 @@ function PortalReceiptCapturePanel() {
   );
 }
 
+function SignatureQueuePanel({ queue, currentCaseId, onOpenCase }) {
+  if (!queue) return null;
+  return (
+    <section className="rtmp-card rtmp-signature-queue" aria-labelledby="rtmp-global-signature-queue-title">
+      <div className="rtmp-section-heading">
+        <div>
+          <p className="rtmp-eyebrow">Cola asignada · sin autoridad de firma</p>
+          <h2 id="rtmp-global-signature-queue-title">Tareas preparadas pendientes de firma</h2>
+          <p>
+            Solo aparecen expedientes asignados a esta cuenta. Estar en esta lista
+            significa «preparado», nunca «presentado», y no concede permiso para
+            firmar.
+          </p>
+        </div>
+        <span className={`rtmp-chip ${queue.item_count ? "rtmp-chip-warn" : "rtmp-chip-ok"}`}>
+          {queue.item_count} PENDIENTES
+        </span>
+      </div>
+      {queue.items.length ? (
+        <ol className="rtmp-delivery-list">
+          {queue.items.map((item, index) => {
+            const current = item.case_id === String(currentCaseId || "");
+            return (
+              <li key={item.delivery_id}>
+                <span className="rtmp-delivery-order">{index + 1}</span>
+                <span>
+                  <strong>{item.destination_display_name}</strong>
+                  <small className="rtmp-mono">Expediente {item.case_id}</small>
+                  <small>
+                    {item.document_count} documentos · preparado {new Date(item.prepared_at).toLocaleString("es-ES")}
+                  </small>
+                </span>
+                {current ? (
+                  <span className="rtmp-field-status is-selected">ABIERTO</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-secondary"
+                    onClick={() => onOpenCase(item.case_id)}
+                  >
+                    Abrir sin cerrar sesión
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="rtmp-empty">No hay tareas de firma pendientes asignadas a esta cuenta.</p>
+      )}
+      <p className="rtmp-alert" role="note">
+        {queue.local_activation_available
+          ? "El puesto local gestionado está disponible; la firma y el envío final continúan siendo humanos."
+          : "La cola está operativa, pero el puesto local de firma sigue pendiente de activación en este staging."}
+      </p>
+    </section>
+  );
+}
+
 export default function RtmPresenterWorkspace({
   caseId,
+  onOpenCase = EMPTY_CALLBACK,
   apiClient = null,
   getAuthHeaders = EMPTY_HEADERS,
   onUnauthorized = EMPTY_CALLBACK,
@@ -893,12 +1323,19 @@ export default function RtmPresenterWorkspace({
   ]);
 
   const [workspace, setWorkspace] = useState(null);
+  const [signatureQueue, setSignatureQueue] = useState(null);
   const [deliveryChannel, setDeliveryChannel] = useState("");
   const [profileId, setProfileId] = useState("");
-  const [portalOpened, setPortalOpened] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
   const [destinationOptions, setDestinationOptions] = useState([]);
+  const [directoryResults, setDirectoryResults] = useState([]);
+  const [directorySource, setDirectorySource] = useState(null);
   const [searchingDestinations, setSearchingDestinations] = useState(false);
+  const [destinationSearchMissed, setDestinationSearchMissed] = useState(false);
+  const [destinationProposalOpen, setDestinationProposalOpen] = useState(false);
+  const [destinationProposalLabel, setDestinationProposalLabel] = useState("");
+  const [destinationProposalUrl, setDestinationProposalUrl] = useState("");
+  const [destinationProposalConfirmed, setDestinationProposalConfirmed] = useState(false);
   const [representationMode, setRepresentationMode] = useState("self");
   const [emailRecipientMode, setEmailRecipientMode] = useState("verified");
   const [manualEmail, setManualEmail] = useState("");
@@ -907,6 +1344,10 @@ export default function RtmPresenterWorkspace({
   const [correspondenceBody, setCorrespondenceBody] = useState("");
   const [correspondenceConfirmations, setCorrespondenceConfirmations] = useState(
     emptyCorrespondenceConfirmations
+  );
+  const [portalValues, setPortalValues] = useState({});
+  const [portalConfirmations, setPortalConfirmations] = useState(
+    emptyPortalPreparationConfirmations
   );
   const [selections, setSelections] = useState({});
   const [authorizationVersionId, setAuthorizationVersionId] = useState("");
@@ -918,6 +1359,7 @@ export default function RtmPresenterWorkspace({
   const [message, setMessage] = useState("");
   const [externalMode, setExternalMode] = useState("new");
   const [externalPurpose, setExternalPurpose] = useState("");
+  const [externalDocumentName, setExternalDocumentName] = useState("");
   const [externalSupersedesId, setExternalSupersedesId] = useState("");
   const [externalFileMetadata, setExternalFileMetadata] = useState(null);
   const [syntheticConfirmed, setSyntheticConfirmed] = useState(false);
@@ -936,6 +1378,10 @@ export default function RtmPresenterWorkspace({
     () => hasPresenterDocumentIngestCapability(operatorCapabilities),
     [operatorCapabilities]
   );
+  const destinationProposalAllowed = useMemo(
+    () => hasPresenterDestinationProposeCapability(operatorCapabilities),
+    [operatorCapabilities]
+  );
   const deliveryPrepareAllowed = useMemo(
     () => hasPresenterDeliveryPrepareCapability(operatorCapabilities),
     [operatorCapabilities]
@@ -948,9 +1394,15 @@ export default function RtmPresenterWorkspace({
       setWorkspace(next);
       setDeliveryChannel("");
       setProfileId("");
-      setPortalOpened(false);
       setDestinationQuery("");
       setDestinationOptions(next.destinations);
+      setDirectoryResults([]);
+      setDirectorySource(null);
+      setDestinationSearchMissed(false);
+      setDestinationProposalOpen(false);
+      setDestinationProposalLabel("");
+      setDestinationProposalUrl("");
+      setDestinationProposalConfirmed(false);
       setSelections({});
       setAuthorizationVersionId("");
       setEmailRecipientMode("verified");
@@ -959,12 +1411,15 @@ export default function RtmPresenterWorkspace({
       setCorrespondenceSubject("");
       setCorrespondenceBody("");
       setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
+      setPortalValues({});
+      setPortalConfirmations(emptyPortalPreparationConfirmations());
       setFrozenPackage(null);
       setDelivery(null);
       setSupersedesPackageId(null);
       setExternalPanelOpen(false);
       setExternalMode("new");
       setExternalPurpose("");
+      setExternalDocumentName("");
       setExternalSupersedesId("");
       setExternalFileMetadata(null);
       setSyntheticConfirmed(false);
@@ -981,8 +1436,27 @@ export default function RtmPresenterWorkspace({
       setLoading(true);
       setMessage("");
       try {
-        const payload = await client.loadWorkspace(caseId, { signal });
+        const workspaceRequest = client.loadWorkspace(caseId, { signal });
+        const queueRequest = client.loadSignatureQueue({ signal }).then(
+          (queuePayload) => ({ ok: true, queuePayload }),
+          (queueError) => ({ ok: false, queueError })
+        );
+        const payload = await workspaceRequest;
         applyWorkspace(payload);
+        const queueResult = await queueRequest;
+        if (queueResult.ok) {
+          setSignatureQueue(
+            signatureQueueFromResponse(queueResult.queuePayload)
+          );
+        } else {
+          const queueError = queueResult.queueError;
+          if (queueError?.code !== "presenter.request_aborted") {
+            setSignatureQueue(null);
+            setMessage(
+              `El expediente se cargó, pero la cola de firma no está disponible: ${publicError(queueError)}`
+            );
+          }
+        }
       } catch (error) {
         if (error?.code !== "presenter.request_aborted") {
           setMessage(publicError(error));
@@ -1019,6 +1493,7 @@ export default function RtmPresenterWorkspace({
   useEffect(() => {
     setExternalMode("new");
     setExternalPurpose("");
+    setExternalDocumentName("");
     setExternalSupersedesId("");
     setSyntheticConfirmed(false);
     setExternalPanelOpen(false);
@@ -1027,13 +1502,14 @@ export default function RtmPresenterWorkspace({
     }
     setExternalFileMetadata(null);
     setDeliveryChannel("");
-    setPortalOpened(false);
     setEmailRecipientMode("verified");
     setManualEmail("");
     setManualEmailConfirmed(false);
     setCorrespondenceSubject("");
     setCorrespondenceBody("");
     setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
+    setPortalValues({});
+    setPortalConfirmations(emptyPortalPreparationConfirmations());
   }, [caseId]);
 
   useEffect(() => {
@@ -1041,7 +1517,8 @@ export default function RtmPresenterWorkspace({
     const frame = globalThis.requestAnimationFrame?.(() => {
       globalThis.document
         ?.getElementById("rtmp-external-panel")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        ?.querySelector("input, select, button")
+        ?.focus();
     });
     return () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame?.(frame);
@@ -1055,10 +1532,36 @@ export default function RtmPresenterWorkspace({
       ) || null,
     [destinationOptions, profileId]
   );
+  const availableChannelDestinations = useMemo(
+    () =>
+      (workspace?.destinations || []).filter((item) =>
+        item.delivery_channels?.includes(deliveryChannel)
+      ),
+    [deliveryChannel, workspace]
+  );
 
   const containerDocuments = useMemo(
     () => latestPresenterDocumentVersions(workspace?.documents || []),
     [workspace]
+  );
+  const filingDocuments = useMemo(
+    () =>
+      containerDocuments.filter(
+        (item) =>
+          !OUTBOUND_EXCLUDED_PURPOSES.has(
+            String(item?.purpose || "").trim().toLowerCase()
+          )
+      ),
+    [containerDocuments]
+  );
+  const evidenceDocuments = useMemo(
+    () =>
+      containerDocuments.filter((item) =>
+        OUTBOUND_EXCLUDED_PURPOSES.has(
+          String(item?.purpose || "").trim().toLowerCase()
+        )
+      ),
+    [containerDocuments]
   );
 
   const normalizedManualEmail = manualEmail.trim().toLowerCase();
@@ -1106,6 +1609,19 @@ export default function RtmPresenterWorkspace({
   }, [caseId, deliveryChannel, profile]);
 
   useEffect(() => {
+    const form = profile?.portal_preparation;
+    if (deliveryChannel !== "portal" || form?.enabled !== true) {
+      setPortalValues({});
+      setPortalConfirmations(emptyPortalPreparationConfirmations());
+      return;
+    }
+    setPortalValues(
+      Object.fromEntries(form.fields.map((field) => [field.field_code, ""]))
+    );
+    setPortalConfirmations(emptyPortalPreparationConfirmations());
+  }, [deliveryChannel, profile]);
+
+  useEffect(() => {
     if (!profile) return;
     const modes = Array.isArray(profile.representation_modes)
       ? profile.representation_modes
@@ -1122,6 +1638,19 @@ export default function RtmPresenterWorkspace({
       return [];
     }
   }, [profile, representationMode]);
+  const outboundFields = useMemo(
+    () =>
+      fields.filter(
+        (field) =>
+          field.fieldCode !== "submission_receipt" &&
+          !(field.purposes || []).some((purpose) =>
+            OUTBOUND_EXCLUDED_PURPOSES.has(
+              String(purpose || "").trim().toLowerCase()
+            )
+          )
+      ),
+    [fields]
+  );
 
   const externalPurposeOptions = useMemo(() => {
     const purposes = new Set();
@@ -1130,7 +1659,9 @@ export default function RtmPresenterWorkspace({
         for (const purpose of field?.purposes || []) {
           const normalized = String(purpose || "").trim().toLowerCase();
           if (EXTERNAL_DOCUMENT_PURPOSES.has(normalized)) {
-            purposes.add(normalized);
+            if (!OUTBOUND_EXCLUDED_PURPOSES.has(normalized)) {
+              purposes.add(normalized);
+            }
           }
         }
       }
@@ -1140,7 +1671,9 @@ export default function RtmPresenterWorkspace({
         .trim()
         .toLowerCase();
       if (EXTERNAL_DOCUMENT_PURPOSES.has(normalized)) {
-        purposes.add(normalized);
+        if (!OUTBOUND_EXCLUDED_PURPOSES.has(normalized)) {
+          purposes.add(normalized);
+        }
       }
     }
     return Object.freeze([...purposes].sort());
@@ -1151,6 +1684,9 @@ export default function RtmPresenterWorkspace({
       Object.freeze(
         latestPresenterDocumentVersions(workspace?.documents).filter((item) =>
           EXTERNAL_DOCUMENT_PURPOSES.has(
+            String(item?.purpose || "").trim().toLowerCase()
+          ) &&
+          !OUTBOUND_EXCLUDED_PURPOSES.has(
             String(item?.purpose || "").trim().toLowerCase()
           )
         )
@@ -1171,6 +1707,16 @@ export default function RtmPresenterWorkspace({
       : externalPurposeOptions.includes(externalPurpose)
         ? externalPurpose
         : "";
+  const externalAttachmentFilename = useMemo(
+    () =>
+      externalFileMetadata
+        ? attachmentFilenameFromLabel(
+            externalDocumentName,
+            externalFileMetadata.filename
+          )
+        : "",
+    [externalDocumentName, externalFileMetadata]
+  );
 
   const selectedVersionIds = useMemo(
     () => selectedDocumentVersionIds(selections),
@@ -1223,8 +1769,66 @@ export default function RtmPresenterWorkspace({
     supersedesPackageId,
     workspace,
   ]);
+  const portalPreparationSnapshot = useMemo(() => {
+    const form = profile?.portal_preparation;
+    if (deliveryChannel !== "portal" || form?.enabled !== true) return null;
+    const values = Object.fromEntries(
+      form.fields.map((field) => {
+        const raw = String(portalValues[field.field_code] || "")
+          .replace(/\r\n?/g, "\n")
+          .trim();
+        return [
+          field.field_code,
+          field.multiline ? raw : raw.replace(/\s+/g, " "),
+        ];
+      })
+    );
+    return {
+      form_code: form.form_code,
+      fields: form.fields.map((field) => ({
+        field_code: field.field_code,
+        label: field.label,
+        required: field.required,
+        multiline: field.multiline,
+        max_length: field.max_length,
+        step_order: field.step_order,
+      })),
+      values,
+      confirmations: Object.fromEntries(
+        PORTAL_PREPARATION_CONFIRMATION_KEYS.map((key) => [
+          key,
+          portalConfirmations[key] === true,
+        ])
+      ),
+    };
+  }, [deliveryChannel, portalConfirmations, portalValues, profile]);
+  const portalFormValuesReady = Boolean(
+    portalPreparationSnapshot &&
+      portalPreparationSnapshot.fields.every((field) => {
+        const value = portalPreparationSnapshot.values[field.field_code];
+        return (
+          (!field.required || value.length > 0) &&
+          value.length <= field.max_length &&
+          !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) &&
+          (field.multiline || !value.includes("\n"))
+        );
+      })
+  );
+  const portalConfirmed = PORTAL_PREPARATION_CONFIRMATION_KEYS.every(
+    (key) => portalConfirmations[key] === true
+  );
+  const portalPreparationReady = portalFormValuesReady && portalConfirmed;
+  const receiptCaptureAvailable = new Set([
+    "awaiting_receipt",
+    "completed",
+  ]).has(String(delivery?.state || ""));
   const outputReady =
-    deliveryChannel === "email" && readiness.ready && emailDestinationReady;
+    readiness.ready &&
+    (deliveryChannel === "email"
+      ? emailDestinationReady
+      : deliveryChannel === "portal"
+        ? portalPreparationReady
+        : false);
   const correspondenceConfirmed = CORRESPONDENCE_CONFIRMATION_KEYS.every(
     (key) => correspondenceConfirmations[key] === true
   );
@@ -1239,6 +1843,12 @@ export default function RtmPresenterWorkspace({
     ? "Elige primero si vas a una sede o a RTM Correspondencia."
     : !profile
       ? "Selecciona un destino del Centro de destinos."
+      : deliveryChannel === "portal" && !profile.portal_preparation
+        ? "Este perfil todavía no admite una preparación segura para la cola de firma."
+        : deliveryChannel === "portal" && !portalFormValuesReady
+          ? "Completa Asunto, Expone y Solicita antes de continuar."
+          : deliveryChannel === "portal" && !portalConfirmed
+            ? "Revisa y confirma destino, interesado, representación, texto y documentos."
       : !emailDestinationReady
         ? "Selecciona un correo verificado o confirma una dirección sintética manual."
         : readiness.message;
@@ -1260,6 +1870,7 @@ export default function RtmPresenterWorkspace({
     pendingFreezeRef.current = null;
     setFrozenPackage(null);
     setCorrespondenceConfirmations(emptyCorrespondenceConfirmations());
+    setPortalConfirmations(emptyPortalPreparationConfirmations());
     resetPreparedDelivery();
   }
 
@@ -1267,12 +1878,33 @@ export default function RtmPresenterWorkspace({
     if (!new Set(["portal", "email"]).has(channel) || editingLocked) return;
     setDeliveryChannel(channel);
     setProfileId("");
-    setPortalOpened(false);
+    setDestinationQuery("");
+    setDestinationOptions(workspace?.destinations || []);
+    setDirectoryResults([]);
+    setDirectorySource(null);
+    setDestinationSearchMissed(false);
+    setDestinationProposalOpen(false);
+    setDestinationProposalLabel("");
+    setDestinationProposalUrl("");
+    setDestinationProposalConfirmed(false);
     setSelections({});
     setAuthorizationVersionId("");
     setEmailRecipientMode("verified");
     setManualEmail("");
     setManualEmailConfirmed(false);
+    setPortalValues({});
+    setPortalConfirmations(emptyPortalPreparationConfirmations());
+    resetFrozenState();
+  }
+
+  function chooseDestinationProfile(nextProfileId) {
+    setProfileId(nextProfileId);
+    setSelections({});
+    setAuthorizationVersionId("");
+    setEmailRecipientMode("verified");
+    setManualEmail("");
+    setManualEmailConfirmed(false);
+    setPortalConfirmations(emptyPortalPreparationConfirmations());
     resetFrozenState();
   }
 
@@ -1289,21 +1921,20 @@ export default function RtmPresenterWorkspace({
     event.preventDefault();
     if (!client || !workspace || searchingDestinations || busyCommand) return;
     setSearchingDestinations(true);
+    setDestinationSearchMissed(false);
     setMessage("");
     try {
       const result = await client.searchDestinations(caseId, destinationQuery, {
-        limit: 20,
+        limit: 12,
       });
-      const matches = destinationsFromSearchResponse(result, caseId);
+      const searchResult = destinationsFromSearchResponse(result, caseId);
+      const matches = searchResult.destinations;
       const selected = profile;
-      const emailFallbacks =
-        deliveryChannel === "email"
-          ? workspace.destinations.filter((item) =>
-              item.delivery_channels?.includes("email")
-            )
-          : [];
+      const channelFallbacks = workspace.destinations.filter((item) =>
+        item.delivery_channels?.includes(deliveryChannel)
+      );
       const nextOptions = Object.freeze(
-        [selected, ...matches, ...emailFallbacks]
+        [selected, ...matches, ...channelFallbacks]
           .filter(Boolean)
           .filter(
             (item, index, values) =>
@@ -1315,17 +1946,82 @@ export default function RtmPresenterWorkspace({
           )
       );
       setDestinationOptions(nextOptions);
+      setDirectoryResults(searchResult.directoryResults);
+      setDirectorySource(searchResult.directorySource);
+      setDestinationSearchMissed(matches.length === 0);
       if (matches.length === 0) {
         setMessage(
           deliveryChannel === "email"
             ? "RTM no ha encontrado todavía esa empresa en el Centro de destinos. Puedes elegir el perfil sintético de correspondencia e introducir una dirección manual; quedará pendiente de verificación independiente."
-            : "Este staging no contiene un perfil sintético con ese nombre. Los perfiles reales de DGT y ayuntamientos todavía no están cargados; deberán darse de alta y verificarse antes de usarlos."
+            : searchResult.directoryResults.length > 0
+              ? "RTM ha identificado el organismo en DIR3/SIR. Si constaba en SIR puede ser candidato para el REG cuando no haya una vía específica, pero el perfil REG aún no está activo y el resultado no se ha convertido en destino."
+              : "RTM no ha identificado ese organismo en el snapshot disponible. Puedes continuar con el recorrido sintético para probar la operativa o proponer un enlace para revisión."
         );
       }
     } catch (error) {
       setMessage(publicError(error));
     } finally {
       setSearchingDestinations(false);
+    }
+  }
+
+  async function proposeDestinationLink(event) {
+    event.preventDefault();
+    if (
+      !client ||
+      !workspace ||
+      deliveryChannel !== "portal" ||
+      !destinationProposalAllowed ||
+      !destinationProposalConfirmed ||
+      busyCommand ||
+      commandLockRef.current
+    ) {
+      return;
+    }
+    let exactProposal;
+    try {
+      exactProposal = validateRtmPresenterDestinationProposal(
+        destinationProposalLabel,
+        destinationProposalUrl
+      );
+    } catch (error) {
+      setMessage(publicError(error));
+      return;
+    }
+    commandLockRef.current = true;
+    setBusyCommand("propose-destination");
+    setMessage("");
+    try {
+      const result = await client.proposeDestinationLink(caseId, {
+        label: exactProposal.label,
+        portalUrl: exactProposal.portalUrl,
+      });
+      if (
+        result?.case_id !== caseId ||
+        result?.label !== exactProposal.label ||
+        result?.portal_url !== exactProposal.portalUrl ||
+        result?.status !== "pending_independent_verification" ||
+        result?.usable_as_destination !== false ||
+        result?.profile_created !== false ||
+        result?.portal_opened !== false ||
+        result?.network_used !== false ||
+        result?.external_effects_executed !== false ||
+        result?.synthetic_only !== true
+      ) {
+        throw new Error("RTM devolvió una propuesta de sede fuera del contrato seguro.");
+      }
+      setDestinationProposalOpen(false);
+      setDestinationProposalLabel("");
+      setDestinationProposalUrl("");
+      setDestinationProposalConfirmed(false);
+      setMessage(
+        `Enlace propuesto con referencia ${result.proposal_id}. Queda pendiente de verificación y todavía no puede abrirse ni utilizarse para presentar.`
+      );
+    } catch (error) {
+      setMessage(publicError(error));
+    } finally {
+      commandLockRef.current = false;
+      setBusyCommand("");
     }
   }
 
@@ -1337,7 +2033,7 @@ export default function RtmPresenterWorkspace({
     setSyntheticConfirmed(false);
   }
 
-  function openExternalPanel(purpose = "") {
+  function openExternalPanel(purpose = "", suggestedName = "") {
     setExternalMode("new");
     setExternalSupersedesId("");
     setExternalPurpose(
@@ -1345,6 +2041,7 @@ export default function RtmPresenterWorkspace({
         ? String(purpose).toLowerCase()
         : ""
     );
+    setExternalDocumentName(String(suggestedName || "").trim());
     clearExternalFileInput();
     setExternalPanelOpen(true);
     setMessage("");
@@ -1355,6 +2052,7 @@ export default function RtmPresenterWorkspace({
     setExternalPanelOpen(false);
     setExternalMode("new");
     setExternalPurpose("");
+    setExternalDocumentName("");
     setExternalSupersedesId("");
     clearExternalFileInput();
   }
@@ -1368,6 +2066,9 @@ export default function RtmPresenterWorkspace({
     try {
       const metadata = validateRtmPresenterExternalFile(file);
       setExternalFileMetadata(metadata);
+      setExternalDocumentName((current) =>
+        current.trim() || readableFilenameStem(metadata.filename)
+      );
       setMessage("");
     } catch (error) {
       input.value = "";
@@ -1388,8 +2089,19 @@ export default function RtmPresenterWorkspace({
     }
     const file = externalFileInputRef.current?.files?.[0] || null;
     let metadata;
+    let exactAttachmentFilename;
     try {
       metadata = validateRtmPresenterExternalFile(file);
+      const exactDocumentName = externalDocumentName.trim().replace(/\s+/g, " ");
+      if (exactDocumentName.length < 3 || exactDocumentName.length > 120) {
+        throw new Error(
+          "Escribe un nombre reconocible de entre 3 y 120 caracteres."
+        );
+      }
+      exactAttachmentFilename = validateRtmPresenterAttachmentFilename(
+        externalAttachmentFilename,
+        metadata.mediaType
+      );
       if (!effectiveExternalPurpose) {
         throw new Error("Selecciona la finalidad del documento.");
       }
@@ -1417,6 +2129,7 @@ export default function RtmPresenterWorkspace({
       await client.uploadExternalDocument(caseId, {
         purpose: effectiveExternalPurpose,
         file,
+        attachmentFilename: exactAttachmentFilename,
         syntheticConfirmed,
         supersedesDocumentVersionId:
           externalMode === "version"
@@ -1428,13 +2141,16 @@ export default function RtmPresenterWorkspace({
       const refreshed = await client.loadWorkspace(caseId, {
         signal: controller.signal,
       });
-      applyWorkspace(refreshed);
+      const nextWorkspace = normalizeWorkspace(refreshed, caseId);
+      setWorkspace(nextWorkspace);
+      setDestinationOptions(nextWorkspace.destinations);
       setExternalMode("new");
       setExternalPurpose("");
+      setExternalDocumentName("");
       setExternalSupersedesId("");
       setExternalPanelOpen(false);
       setMessage(
-        `${metadata.filename} queda custodiado en RTM y pendiente de análisis. En este corte el scanner y la activación aún no están conectados, por lo que todavía no será seleccionable.`
+        `${exactAttachmentFilename} queda custodiado en RTM y pendiente de análisis. Conservamos también el nombre de origen ${metadata.filename}. En este corte el scanner y la activación aún no están conectados, por lo que todavía no será seleccionable.`
       );
     } catch (error) {
       if (uploadConfirmed) {
@@ -1463,7 +2179,7 @@ export default function RtmPresenterWorkspace({
 
   async function freezePackage() {
     if (
-      deliveryChannel !== "email" ||
+      !new Set(["portal", "email"]).has(deliveryChannel) ||
       !profile ||
       !workspace ||
       !outputReady ||
@@ -1520,11 +2236,12 @@ export default function RtmPresenterWorkspace({
 
   async function prepareSelectedDelivery() {
     if (
-      deliveryChannel !== "email" ||
+      !new Set(["portal", "email"]).has(deliveryChannel) ||
       !frozenPackage ||
       !deliveryPrepareAllowed ||
       !emailDestinationReady ||
       !correspondenceDraftReady ||
+      (deliveryChannel === "portal" && !portalPreparationReady) ||
       busyCommand ||
       commandLockRef.current
     ) {
@@ -1558,6 +2275,14 @@ export default function RtmPresenterWorkspace({
                   confirmations: correspondenceConfirmations,
                 }
               : null,
+          portalPreparation:
+            deliveryChannel === "portal" && portalPreparationSnapshot
+              ? {
+                  formCode: portalPreparationSnapshot.form_code,
+                  values: portalPreparationSnapshot.values,
+                  confirmations: portalPreparationSnapshot.confirmations,
+                }
+              : null,
           idempotencyKey: pendingDeliveryRef.current,
         }
       );
@@ -1580,15 +2305,23 @@ export default function RtmPresenterWorkspace({
                   confirmations: correspondenceConfirmations,
                 }
               : null,
+          expectedPortalPreparation:
+            deliveryChannel === "portal" ? portalPreparationSnapshot : null,
         })
       );
       pendingDeliveryRef.current = null;
+      try {
+        const queuePayload = await client.loadSignatureQueue();
+        setSignatureQueue(signatureQueueFromResponse(queuePayload));
+      } catch {
+        setSignatureQueue(null);
+      }
       setMessage(
         deliveryChannel === "email"
           ? emailRecipientMode === "manual"
             ? "Borrador de RTM Correspondencia guardado y pendiente de verificar el destinatario. No se ha enviado nada."
             : "Borrador de RTM Correspondencia auditado con destinatario verificado. El envío real continúa bloqueado en staging."
-          : "Orden de presentación preparada y auditada. Todavía no se ha cargado ni enviado ningún documento fuera de RTM."
+          : "Tarea añadida a la cola de firma. El certificado y la sesión siguen únicamente en el puesto local del firmante; no se ha presentado nada."
       );
     } catch (error) {
       if (error instanceof RtmPresenterApiError && error.status && error.status < 500) {
@@ -1669,6 +2402,11 @@ export default function RtmPresenterWorkspace({
 
       {workspace ? (
         <>
+          <SignatureQueuePanel
+            queue={signatureQueue}
+            currentCaseId={caseId}
+            onOpenCase={onOpenCase}
+          />
           <section className="rtmp-card rtmp-container-card" aria-labelledby="rtmp-container-title">
             <div className="rtmp-section-heading">
               <div>
@@ -1700,12 +2438,12 @@ export default function RtmPresenterWorkspace({
                   </button>
                 ) : null}
                 <span className="rtmp-chip rtmp-chip-ok">
-                  {containerDocuments.length} EN RTM
+                  {filingDocuments.length} PARA USAR
                 </span>
               </div>
             </div>
             <ul className="rtmp-container-list">
-              {containerDocuments.map((documentVersion) => {
+              {filingDocuments.map((documentVersion) => {
                 const ready =
                   documentVersion.state === "active" &&
                   documentVersion.scan_status === "clean";
@@ -1730,6 +2468,35 @@ export default function RtmPresenterWorkspace({
                 );
               })}
             </ul>
+            {evidenceDocuments.length > 0 ? (
+              <div className="rtmp-evidence-zone" aria-labelledby="rtmp-evidence-title">
+                <div>
+                  <p className="rtmp-eyebrow">Evidencias posteriores</p>
+                  <h3 id="rtmp-evidence-title">Justificantes y acuses</h3>
+                  <p>
+                    Se conservan en el expediente, pero nunca aparecen como
+                    documentos para enviar.
+                  </p>
+                </div>
+                <ul className="rtmp-container-list">
+                  {evidenceDocuments.map((documentVersion) => (
+                    <li key={documentVersion.document_version_id}>
+                      <span className="rtmp-document-icon" aria-hidden="true">
+                        {mediaTypeLabel(documentVersion.media_type)}
+                      </span>
+                      <span className="rtmp-container-document-main">
+                        <strong>{purposeLabel(documentVersion.purpose)}</strong>
+                        <span>{documentVersion.original_filename}</span>
+                        <small>
+                          Versión {documentVersion.version_number} · {formatBytes(documentVersion.size_bytes)}
+                        </small>
+                      </span>
+                      <span className="rtmp-field-status is-evidence">EVIDENCIA</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
 
           <section className="rtmp-card" aria-labelledby="rtmp-channel-title">
@@ -1757,8 +2524,8 @@ export default function RtmPresenterWorkspace({
                 <span className="rtmp-channel-kicker">SEDE O PORTAL</span>
                 <strong>Presentar un escrito o recurso</strong>
                 <span>
-                  Elige un perfil disponible, abre la sede y atiende sus
-                  casillas una a una con los documentos sueltos del contenedor.
+                  El operador prepara texto y documentos; el firmante abre la
+                  sede en su propio PC y conserva siempre su certificado y sesión.
                 </span>
               </button>
               <button
@@ -1785,7 +2552,7 @@ export default function RtmPresenterWorkspace({
                   <span className="rtmp-progress-number">1</span>
                   <span>
                     <strong>Contenedor</strong>
-                    <small>{containerDocuments.length} documentos sueltos</small>
+                    <small>{filingDocuments.length} documentos sueltos</small>
                   </span>
                 </li>
                 <li className={profile ? "is-complete" : "is-current"}>
@@ -1795,25 +2562,25 @@ export default function RtmPresenterWorkspace({
                     <small>{profile ? "Elegidos" : "Pendiente"}</small>
                   </span>
                 </li>
-                <li className={portalOpened ? "is-complete" : profile ? "is-current" : ""}>
+                <li className={portalFormValuesReady ? "is-complete" : profile ? "is-current" : ""}>
                   <span className="rtmp-progress-number">3</span>
                   <span>
-                    <strong>Abrir sede</strong>
-                    <small>{portalOpened ? "Apertura solicitada" : "Pendiente"}</small>
+                    <strong>Completar solicitud</strong>
+                    <small>{portalFormValuesReady ? "Texto completo" : "Pendiente"}</small>
                   </span>
                 </li>
-                <li className={portalOpened ? "is-current" : ""}>
+                <li className={frozenPackage ? "is-complete" : portalFormValuesReady ? "is-current" : ""}>
                   <span className="rtmp-progress-number">4</span>
                   <span>
-                    <strong>Adjuntar uno a uno</strong>
-                    <small>Puente pendiente</small>
+                    <strong>Fijar documentos</strong>
+                    <small>{frozenPackage ? "Huellas fijadas" : "Pendiente"}</small>
                   </span>
                 </li>
-                <li>
+                <li className={delivery ? "is-complete" : frozenPackage ? "is-current" : ""}>
                   <span className="rtmp-progress-number">5</span>
                   <span>
-                    <strong>Envío humano</strong>
-                    <small>Sin acreditar</small>
+                    <strong>Cola de firma</strong>
+                    <small>{delivery ? "Preparado, no presentado" : "Pendiente"}</small>
                   </span>
                 </li>
               </ol>
@@ -1823,7 +2590,7 @@ export default function RtmPresenterWorkspace({
                   <span className="rtmp-progress-number">1</span>
                   <span>
                     <strong>Contenedor</strong>
-                    <small>{containerDocuments.length} documentos</small>
+                    <small>{filingDocuments.length} documentos</small>
                   </span>
                 </li>
                 <li className={profile ? "is-complete" : deliveryChannel ? "is-current" : ""}>
@@ -1882,7 +2649,7 @@ export default function RtmPresenterWorkspace({
               <label>
                 {deliveryChannel === "email"
                   ? "Buscar empresa, organismo o correo verificado"
-                  : "Buscar sede por organismo o municipio"}
+                  : "Buscar organismo o procedimiento"}
                 <input
                   type="search"
                   value={destinationQuery}
@@ -1891,10 +2658,16 @@ export default function RtmPresenterWorkspace({
                   placeholder={
                     deliveryChannel === "email"
                       ? "Ej. empresa sintética, atención al cliente…"
-                      : "Ej. destino sintético de sede…"
+                      : "Ej. DGT, alegaciones, ayuntamiento…"
                   }
                   disabled={profileLocked || searchingDestinations}
-                  onChange={(event) => setDestinationQuery(event.target.value)}
+                  onChange={(event) => {
+                    setDestinationQuery(event.target.value);
+                    setDestinationSearchMissed(false);
+                    setDirectoryResults([]);
+                    setDirectorySource(null);
+                    setDestinationProposalOpen(false);
+                  }}
                 />
               </label>
               <button
@@ -1911,25 +2684,201 @@ export default function RtmPresenterWorkspace({
             </form>
             <p className="rtmp-help">
               {deliveryChannel === "email"
-                ? "OPS busca primero en el directorio verificado. Si no está, puedes escribir un correo manual y solicitar su confirmación."
-                : "Este staging consulta únicamente perfiles sintéticos cargados en RTM. Todavía no contiene el catálogo real de DGT o ayuntamientos, y el operador no puede pegar una URL."}
+                ? "OPS busca primero en el Centro de destinos verificados. Si no está, puedes escribir un correo manual y solicitar su confirmación."
+                : "DIR3 identifica el organismo. Si constaba en SIR, puede ser candidato para el REG cuando no exista un procedimiento o formulario específico. RTM todavía debe verificar la integración, la competencia y la vía correcta."}
             </p>
+            {deliveryChannel === "portal" && directoryResults.length > 0 ? (
+              <section className="rtmp-directory-results" aria-labelledby="rtmp-directory-results-title">
+                <div className="rtmp-directory-results-heading">
+                  <div>
+                    <p className="rtmp-eyebrow">Directorio administrativo</p>
+                    <h3 id="rtmp-directory-results-title">Organismos encontrados</h3>
+                  </div>
+                  <span className="rtmp-directory-date">
+                    Snapshot {directorySource?.official_listing_modified_at}
+                  </span>
+                </div>
+                <p className="rtmp-help">
+                  Sirven para identificar el organismo. No son todavía una sede
+                  ni un procedimiento seleccionable.
+                </p>
+                <ul className="rtmp-directory-list">
+                  {directoryResults.map((result) => (
+                    <li key={result.directory_code}>
+                      <div className="rtmp-directory-primary">
+                        <strong>{result.display_name}</strong>
+                        <span>
+                          {[result.locality_name, result.province, result.autonomous_community]
+                            .filter(Boolean)
+                            .filter((value, index, values) => values.indexOf(value) === index)
+                            .join(" · ")}
+                        </span>
+                      </div>
+                      <div className="rtmp-directory-badges">
+                        <span>DIR3 {result.directory_code}</span>
+                        <span className={result.sir_listed ? "is-sir" : "is-pending"}>
+                          {result.sir_listed
+                            ? "Constaba en SIR · candidato REG"
+                            : "Sin oficina SIR en el snapshot"}
+                        </span>
+                      </div>
+                      {result.sir_offices.length > 0 ? (
+                        <details>
+                          <summary>Ver oficina registral de referencia</summary>
+                          <ul>
+                            {result.sir_offices.map((office) => (
+                              <li key={office.office_code}>
+                                <span className="rtmp-mono">{office.office_code}</span>
+                                {" · "}{office.office_name}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
+                      <p>
+                        {result.sir_listed
+                          ? "Puede encajar en el REG si la integración sigue vigente y no existe una vía específica. Falta verificar competencia, procedimiento y destino antes de abrirlo."
+                          : "Falta verificar el procedimiento, su enlace y si esta unidad es competente para este expediente."}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {deliveryChannel === "portal" &&
+            destinationSearchMissed &&
+            destinationProposalAllowed ? (
+              <section className="rtmp-destination-proposal" aria-labelledby="rtmp-destination-proposal-title">
+                <div>
+                  <h3 id="rtmp-destination-proposal-title">¿La sede no aparece?</h3>
+                  <p>
+                    Puedes proponer su enlace para que el Centro de destinos lo
+                    revise. La propuesta no se abrirá ni podrá utilizarse hasta
+                    superar una verificación independiente.
+                  </p>
+                </div>
+                {!destinationProposalOpen ? (
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-muted"
+                    disabled={Boolean(busyCommand)}
+                    onClick={() => {
+                      setDestinationProposalLabel(destinationQuery.trim());
+                      setDestinationProposalOpen(true);
+                      setDestinationProposalConfirmed(false);
+                    }}
+                  >
+                    Proponer enlace de sede
+                  </button>
+                ) : (
+                  <form className="rtmp-form-stack" onSubmit={proposeDestinationLink}>
+                    <label>
+                      Nombre reconocible
+                      <input
+                        type="text"
+                        value={destinationProposalLabel}
+                        minLength={3}
+                        maxLength={120}
+                        required
+                        disabled={Boolean(busyCommand)}
+                        placeholder="Ej.: Trámite sintético de alegaciones"
+                        onChange={(event) =>
+                          setDestinationProposalLabel(event.target.value)
+                        }
+                      />
+                    </label>
+                    <label>
+                      Enlace de la sede
+                      <input
+                        type="url"
+                        value={destinationProposalUrl}
+                        minLength={9}
+                        maxLength={1024}
+                        required
+                        disabled={Boolean(busyCommand)}
+                        placeholder="https://tramite.synthetic.example/recurso"
+                        onChange={(event) => {
+                          setDestinationProposalUrl(event.target.value);
+                          setDestinationProposalConfirmed(false);
+                        }}
+                      />
+                    </label>
+                    <label className="rtmp-check-line">
+                      <input
+                        type="checkbox"
+                        checked={destinationProposalConfirmed}
+                        required
+                        disabled={Boolean(busyCommand)}
+                        onChange={(event) =>
+                          setDestinationProposalConfirmed(event.target.checked)
+                        }
+                      />
+                      <span>
+                        <strong>Entiendo que es una propuesta, no una sede verificada</strong>
+                        <span className="rtmp-help">
+                          Staging solo admite enlaces sintéticos y no realiza ninguna conexión.
+                        </span>
+                      </span>
+                    </label>
+                    <div className="rtmp-button-row">
+                      <button
+                        type="submit"
+                        className="rtmp-button rtmp-button-primary"
+                        disabled={
+                          Boolean(busyCommand) ||
+                          !destinationProposalConfirmed ||
+                          destinationProposalLabel.trim().length < 3 ||
+                          destinationProposalUrl.trim().length < 9
+                        }
+                      >
+                        {busyCommand === "propose-destination"
+                          ? "Registrando propuesta…"
+                          : "Enviar para verificar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rtmp-button rtmp-button-muted"
+                        disabled={Boolean(busyCommand)}
+                        onClick={() => {
+                          setDestinationProposalOpen(false);
+                          setDestinationProposalUrl("");
+                          setDestinationProposalConfirmed(false);
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </section>
+            ) : null}
+            {availableChannelDestinations.length > 0 ? (
+              <div className="rtmp-synthetic-routes" role="group" aria-label="Recorridos sintéticos disponibles">
+                <span>Para continuar la prueba ahora:</span>
+                {availableChannelDestinations.map((item) => (
+                  <button
+                    key={item.destination_profile_id}
+                    type="button"
+                    className="rtmp-inline-action"
+                    disabled={profileLocked}
+                    onClick={() =>
+                      chooseDestinationProfile(item.destination_profile_id)
+                    }
+                  >
+                    Usar {item.display_name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <label className="rtmp-single-field">
               {deliveryChannel === "email"
                 ? "Empresa u organismo"
                 : "Sede o procedimiento verificado"}
               <select
                 value={profileId}
-                onChange={(event) => {
-                  setProfileId(event.target.value);
-                  setPortalOpened(false);
-                  setSelections({});
-                  setAuthorizationVersionId("");
-                  setEmailRecipientMode("verified");
-                  setManualEmail("");
-                  setManualEmailConfirmed(false);
-                  resetFrozenState();
-                }}
+                onChange={(event) =>
+                  chooseDestinationProfile(event.target.value)
+                }
                 disabled={profileLocked}
               >
                 <option value="">
@@ -1999,7 +2948,6 @@ export default function RtmPresenterWorkspace({
                       disabled={editingLocked}
                       onChange={(event) => {
                         setRepresentationMode(event.target.value);
-                        setPortalOpened(false);
                         setSelections({});
                         setAuthorizationVersionId("");
                         resetFrozenState();
@@ -2162,157 +3110,97 @@ export default function RtmPresenterWorkspace({
           ) : null}
 
           {deliveryChannel === "portal" && profile ? (
-            <>
-              <section
-                className="rtmp-card rtmp-portal-open-card"
-                aria-labelledby="rtmp-portal-open-title"
-              >
-                <div className="rtmp-section-heading">
-                  <div>
-                    <p className="rtmp-eyebrow">Paso 3 · Abrir sede</p>
-                    <h2 id="rtmp-portal-open-title">
-                      Entra en la sede y sigue lo que vaya solicitando
-                    </h2>
-                    <p>
-                      No elijas ni fijes documentos antes de entrar. El contenedor
-                      permanece suelto en RTM y la sede determinará qué archivo
-                      necesita en cada casilla.
-                    </p>
-                  </div>
-                  <span className={`rtmp-chip ${portalOpened ? "rtmp-chip-ok" : ""}`}>
-                    {portalOpened ? "APERTURA SOLICITADA" : "PENDIENTE"}
-                  </span>
+            <section
+              className="rtmp-card rtmp-portal-open-card"
+              aria-labelledby="rtmp-portal-preparation-title"
+            >
+              <div className="rtmp-section-heading">
+                <div>
+                  <p className="rtmp-eyebrow">Paso 3 · Hoja del trámite</p>
+                  <h2 id="rtmp-portal-preparation-title">
+                    Deja completa la solicitud para el firmante
+                  </h2>
+                  <p>
+                    El operador prepara los datos que verá el puesto de firma. No
+                    abre la sesión de la sede ni utiliza el certificado del firmante.
+                  </p>
                 </div>
-                <div className="rtmp-portal-origin-box">
-                  <span>
-                    <strong>{profile.display_name}</strong>
-                    <small className="rtmp-mono">{profile.portal_origin}</small>
-                  </span>
-                  <a
-                    className="rtmp-button rtmp-button-secondary"
-                    href={profile.portal_origin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setPortalOpened(true)}
-                  >
-                    Abrir sede en otra pestaña
-                  </a>
+                <span className={`rtmp-chip ${portalFormValuesReady ? "rtmp-chip-ok" : "rtmp-chip-warn"}`}>
+                  {portalFormValuesReady ? "TEXTO COMPLETO" : "PENDIENTE"}
+                </span>
+              </div>
+              <div className="rtmp-portal-origin-box">
+                <span>
+                  <strong>{profile.display_name}</strong>
+                  <small className="rtmp-mono">{profile.portal_origin}</small>
+                </span>
+                <span className="rtmp-field-status">SESIÓN DEL FIRMANTE</span>
+              </div>
+              {profile.portal_preparation ? (
+                <div className="rtmp-form-stack">
+                  {profile.portal_preparation.fields.map((field) => {
+                    const value = portalValues[field.field_code] || "";
+                    const controlProps = {
+                      value,
+                      maxLength: field.max_length,
+                      required: field.required,
+                      disabled: editingLocked || Boolean(delivery),
+                      onChange: (event) => {
+                        setPortalValues((current) => ({
+                          ...current,
+                          [field.field_code]: event.target.value,
+                        }));
+                        resetFrozenState();
+                      },
+                    };
+                    return (
+                      <label key={field.field_code}>
+                        {field.label}{field.required ? " *" : ""}
+                        {field.multiline ? (
+                          <textarea rows={field.field_code === "subject" ? 2 : 6} {...controlProps} />
+                        ) : (
+                          <input type="text" {...controlProps} />
+                        )}
+                        <span className="rtmp-help">
+                          {value.trim().length}/{field.max_length} caracteres
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
-                <p className="rtmp-alert" role="note">
-                  Este enlace pertenece a un perfil sintético de staging. Abrirlo
-                  no adjunta documentos, no firma y no presenta nada.
-                </p>
-              </section>
-
-              <section
-                className="rtmp-card rtmp-portal-attach-card"
-                aria-labelledby="rtmp-portal-attach-title"
-              >
-                <div className="rtmp-section-heading">
-                  <div>
-                    <p className="rtmp-eyebrow">Paso 4 · Documento a documento</p>
-                    <h2 id="rtmp-portal-attach-title">
-                      La sede pide el archivo; tú lo eliges desde RTM
-                    </h2>
-                    <p>
-                      No se prepara un paquete ni una carpeta en el PC. Cada
-                      documento se vincula únicamente cuando aparece su casilla
-                      en la sede.
-                    </p>
-                  </div>
-                  <span className="rtmp-chip rtmp-chip-warn">PUENTE PENDIENTE</span>
-                </div>
-                <ol className="rtmp-portal-attach-steps">
-                  <li>
-                    <span className="rtmp-step-number" aria-hidden="true">1</span>
-                    <span>
-                      <strong>La sede muestra «Elegir archivo»</strong>
-                      <small>
-                        Puede pedir DNI, multa, escrito, autorización u otro
-                        documento, en su propio orden.
-                      </small>
-                    </span>
-                  </li>
-                  <li>
-                    <span className="rtmp-step-number" aria-hidden="true">2</span>
-                    <span>
-                      <strong>La extensión ofrece «Adjuntar desde RTM»</strong>
-                      <small>
-                        El panel enseñará los documentos sueltos del contenedor y
-                        elegirás solo el que corresponde a esa casilla.
-                      </small>
-                    </span>
-                  </li>
-                  <li>
-                    <span className="rtmp-step-number" aria-hidden="true">3</span>
-                    <span>
-                      <strong>RTM lo coloca en memoria</strong>
-                      <small>
-                        Sin descarga permanente ni carpeta local. El gesto se
-                        repetirá para cada archivo solicitado por la sede.
-                      </small>
-                    </span>
-                  </li>
-                </ol>
-                <div className="rtmp-bridge-preview" role="note">
-                  <span>
-                    <strong>Adjuntar desde RTM</strong>
-                    <small>Acción prevista en la extensión de Edge/Chrome</small>
-                  </span>
-                  <button type="button" className="rtmp-button rtmp-button-primary" disabled>
-                    Puente aún no activado
-                  </button>
-                </div>
+              ) : (
                 <p className="rtmp-alert rtmp-alert-error" role="alert">
-                  El puente gestionado continúa cerrado en este staging. Cuando
-                  se active, cada archivo exigirá un ticket de un solo uso. No se han entregado bytes.
-                  Si se abre el explorador de Windows, esta
-                  versión aún no puede sustituirlo por el contenedor RTM.
+                  Este perfil aún no define una hoja segura para la cola de firma.
+                  No se puede preparar con datos inventados.
                 </p>
-              </section>
-
-              <PortalReceiptCapturePanel />
-            </>
+              )}
+              <p className="rtmp-alert" role="note">
+                El puesto local abrirá la sede y completará los pasos previos. La
+                firma final siempre requerirá tu certificado y una revisión humana.
+              </p>
+            </section>
           ) : null}
 
-          {(deliveryChannel === "email" && profile) || externalPanelOpen ? (
+          {(profile && deliveryChannel) || externalPanelOpen ? (
           <section className="rtmp-card" aria-labelledby="rtmp-checklist-title">
-            {deliveryChannel === "email" && profile ? (
+            {profile && deliveryChannel ? (
             <div className="rtmp-section-heading">
               <div>
-                <p className="rtmp-eyebrow">Paso 3 · Elegir documentos</p>
+                <p className="rtmp-eyebrow">
+                  {deliveryChannel === "portal" ? "Paso 4 · Documentos exactos" : "Paso 3 · Elegir documentos"}
+                </p>
                 <h2 id="rtmp-checklist-title">
                   {deliveryChannel === "email"
                     ? "Documentos que acompañarán al correo"
-                    : "Documentación solicitada por la sede"}
+                    : "Documentos que el puente entregará uno a uno"}
                 </h2>
                 <p>
                   {deliveryChannel === "email"
                     ? "Selecciona desde el contenedor lo que acredita el problema o reclamación."
-                    : "Las casillas aparecen en el mismo orden que la sede. En cada una eliges el fichero correspondiente del contenedor."}
+                    : "Fija qué versión corresponde a cada requisito. En el puesto de firma, el puente la entregará solo cuando la sede muestre su casilla."}
                 </p>
               </div>
               <div className="rtmp-heading-actions">
-                {documentIngestAllowed ? (
-                  <button
-                    type="button"
-                    className="rtmp-button rtmp-button-muted"
-                    onClick={() =>
-                      externalPanelOpen
-                        ? closeExternalPanel()
-                        : openExternalPanel()
-                    }
-                    disabled={
-                      externalIngestLocked && !externalPanelOpen
-                    }
-                    aria-expanded={externalPanelOpen}
-                    aria-controls="rtmp-external-panel"
-                  >
-                    {externalPanelOpen
-                      ? "Cerrar"
-                      : "+ Añadir documento al expediente"}
-                  </button>
-                ) : null}
                 <span
                   className={`rtmp-chip ${
                     outputReady ? "rtmp-chip-ok" : "rtmp-chip-warn"
@@ -2325,20 +3213,30 @@ export default function RtmPresenterWorkspace({
             ) : null}
 
             {documentIngestAllowed && externalPanelOpen ? (
+              <>
+              <button
+                type="button"
+                className="rtmp-modal-backdrop"
+                aria-label="Cerrar alta de documento"
+                onClick={closeExternalPanel}
+                disabled={busyCommand === "upload-external"}
+              />
               <section
                 id="rtmp-external-panel"
                 className="rtmp-ingest-panel"
+                role="dialog"
+                aria-modal="true"
                 aria-labelledby="rtmp-external-title"
               >
                 <div className="rtmp-section-heading rtmp-ingest-heading">
                   <div>
                     <p className="rtmp-eyebrow">Documento externo</p>
                     <h3 id="rtmp-external-title">
-                      Añadir documento al expediente
+                      Añadir documento al contenedor
                     </h3>
                     <p>
-                      RTM lo custodiará directamente. En este staging quedará
-                      pendiente de análisis y todavía no podrá seleccionarse.
+                      Ponle un nombre claro para reconocerlo. RTM conservará
+                      el tipo interno, el nombre de origen, la versión y la huella.
                     </p>
                   </div>
                   <span className="rtmp-chip rtmp-chip-warn">
@@ -2383,6 +3281,24 @@ export default function RtmPresenterWorkspace({
                   </fieldset>
 
                   <div className="rtmp-ingest-grid">
+                    <label className="rtmp-ingest-name-field">
+                      Nombre reconocible para el operador
+                      <input
+                        type="text"
+                        value={externalDocumentName}
+                        minLength={3}
+                        maxLength={120}
+                        required
+                        disabled={externalIngestLocked}
+                        placeholder="Ej.: Resolución sancionadora DGT"
+                        onChange={(event) =>
+                          setExternalDocumentName(event.target.value)
+                        }
+                      />
+                      <span className="rtmp-help">
+                        Es libre, pero el tipo documental seguirá controlado por RTM.
+                      </span>
+                    </label>
                     {externalMode === "new" ? (
                       <label>
                         ¿Qué documento es?
@@ -2454,10 +3370,12 @@ export default function RtmPresenterWorkspace({
                   </p>
                   {externalFileMetadata ? (
                     <p className="rtmp-version-summary" role="status">
-                      <strong>{externalFileMetadata.filename}</strong>
+                      <strong>
+                        Se adjuntará como: {externalAttachmentFilename || "—"}
+                      </strong>
                       <span>
-                        {externalFileMetadata.mediaType} ·{" "}
-                        {formatBytes(externalFileMetadata.size)}
+                        Origen conservado: {externalFileMetadata.filename} ·{" "}
+                        {externalFileMetadata.mediaType} · {formatBytes(externalFileMetadata.size)}
                       </span>
                     </p>
                   ) : null}
@@ -2493,6 +3411,8 @@ export default function RtmPresenterWorkspace({
                       disabled={
                         externalIngestLocked ||
                         !externalFileMetadata ||
+                        externalDocumentName.trim().length < 3 ||
+                        !externalAttachmentFilename ||
                         !effectiveExternalPurpose ||
                         !syntheticConfirmed ||
                         (externalMode === "version" &&
@@ -2514,12 +3434,13 @@ export default function RtmPresenterWorkspace({
                   </div>
                 </form>
               </section>
+              </>
             ) : null}
 
-            {deliveryChannel === "email" && profile ? (
+            {deliveryChannel && profile ? (
             <>
             <ol className="rtmp-requirements">
-              {fields.map((field, index) => {
+              {outboundFields.map((field, index) => {
                 const candidates = matchingPresenterDocumentVersions(
                   workspace.documents,
                   field
@@ -2635,7 +3556,10 @@ export default function RtmPresenterWorkspace({
                           type="button"
                           className="rtmp-inline-action"
                           onClick={() =>
-                            openExternalPanel(preferredExternalPurpose(field))
+                            openExternalPanel(
+                              preferredExternalPurpose(field),
+                              fieldLabel(field)
+                            )
                           }
                           disabled={externalIngestLocked}
                         >
@@ -2677,12 +3601,18 @@ export default function RtmPresenterWorkspace({
           </section>
           ) : null}
 
-          {deliveryChannel === "email" && profile ? (
+          {deliveryChannel && profile ? (
           <section className="rtmp-card" aria-labelledby="rtmp-freeze-title">
             <div className="rtmp-section-heading">
               <div>
-                <p className="rtmp-eyebrow">Paso 4 · Revisar selección</p>
-                <h2 id="rtmp-freeze-title">Revisar los adjuntos de Correspondencia</h2>
+                <p className="rtmp-eyebrow">
+                  {deliveryChannel === "portal" ? "Paso 4 · Revisar y fijar" : "Paso 4 · Revisar selección"}
+                </p>
+                <h2 id="rtmp-freeze-title">
+                  {deliveryChannel === "portal"
+                    ? "Revisar la tarea antes de enviarla a firma"
+                    : "Revisar los adjuntos de Correspondencia"}
+                </h2>
                 <p>
                   {frozenPackage
                     ? "La selección ha quedado fijada sin sacar documentos de RTM."
@@ -2693,10 +3623,36 @@ export default function RtmPresenterWorkspace({
                 <span className="rtmp-chip rtmp-chip-ok">SELECCIÓN FIJADA</span>
               ) : null}
             </div>
+            {deliveryChannel === "portal" && !frozenPackage ? (
+              <fieldset className="rtmp-correspondence-confirmations">
+                <legend>Comprobaciones obligatorias del operador</legend>
+                {PORTAL_PREPARATION_CONFIRMATION_KEYS.map((key) => (
+                  <label key={key} className="rtmp-check-line">
+                    <input
+                      type="checkbox"
+                      checked={portalConfirmations[key] === true}
+                      disabled={Boolean(busyCommand) || !portalFormValuesReady || !readiness.ready}
+                      onChange={(event) => {
+                        setPortalConfirmations((current) => ({
+                          ...current,
+                          [key]: event.target.checked,
+                        }));
+                        resetPreparedDelivery();
+                      }}
+                    />
+                    <span>{PORTAL_PREPARATION_CONFIRMATION_LABELS[key]}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
             {frozenPackage ? (
               <>
                 <div className="rtmp-ready-summary" role="status">
-                  <strong>Adjuntos fijados para redactar la correspondencia.</strong>
+                  <strong>
+                    {deliveryChannel === "portal"
+                      ? "Texto y documentos fijados para el puesto de firma."
+                      : "Adjuntos fijados para redactar la correspondencia."}
+                  </strong>
                   <span>
                     {frozenPackage.items.length}{" "}
                     {frozenPackage.items.length === 1
@@ -2737,6 +3693,9 @@ export default function RtmPresenterWorkspace({
                     setCorrespondenceConfirmations(
                       emptyCorrespondenceConfirmations()
                     );
+                    setPortalConfirmations(
+                      emptyPortalPreparationConfirmations()
+                    );
                     pendingDeliveryRef.current = null;
                     setMessage(
                       "Puedes cambiar la selección y preparar una nueva versión; la anterior no se modifica."
@@ -2755,10 +3714,109 @@ export default function RtmPresenterWorkspace({
               >
                 {busyCommand === "freeze"
                   ? "Fijando selección…"
-                  : "Fijar adjuntos elegidos"}
+                  : deliveryChannel === "portal"
+                    ? "Fijar tarea para firma"
+                    : "Fijar adjuntos elegidos"}
               </button>
             )}
           </section>
+          ) : null}
+
+          {deliveryChannel === "portal" && frozenPackage ? (
+            <>
+              <section
+                className="rtmp-card rtmp-extension-card"
+                aria-labelledby="rtmp-signature-queue-title"
+              >
+                <div className="rtmp-section-heading">
+                  <div>
+                    <p className="rtmp-eyebrow">Paso 5 · Cola de firma</p>
+                    <h2 id="rtmp-signature-queue-title">
+                      {delivery ? "Preparado para tu revisión y firma" : "Dejar la tarea al firmante"}
+                    </h2>
+                    <p>
+                      Se fijan el texto y las huellas de cada documento. La cola no
+                      guarda el certificado, no comparte la sesión y no presenta nada.
+                    </p>
+                  </div>
+                  <span className={`rtmp-chip ${delivery ? "rtmp-chip-ok" : "rtmp-chip-warn"}`}>
+                    {delivery ? "EN COLA · NO PRESENTADO" : "PENDIENTE"}
+                  </span>
+                </div>
+                <dl className="rtmp-correspondence-routing">
+                  <div>
+                    <dt>Destino</dt>
+                    <dd>{profile.display_name}</dd>
+                  </div>
+                  <div>
+                    <dt>Firmante</dt>
+                    <dd>Puesto local autorizado</dd>
+                  </div>
+                  <div>
+                    <dt>Certificado en RTM/Render</dt>
+                    <dd>No permitido</dd>
+                  </div>
+                  <div>
+                    <dt>Sesión compartida</dt>
+                    <dd>No</dd>
+                  </div>
+                </dl>
+                <ol className="rtmp-delivery-list">
+                  {frozenPackage.items.map((item) => (
+                    <li key={item.item_id}>
+                      <span className="rtmp-delivery-order">{item.item_order}</span>
+                      <span>
+                        <strong>{FIELD_LABELS[item.field_code] || item.field_code}</strong>
+                        <small>{item.portal_filename}</small>
+                      </span>
+                      <span className="rtmp-field-status">
+                        {delivery ? "EN COLA" : "FIJADO"}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                {delivery ? (
+                  <>
+                    <div className="rtmp-delivery-state" role="status">
+                      <strong>Tarea preparada; presentación no realizada.</strong>
+                      <span>
+                        El puesto local deberá abrir la sede, completar los pasos,
+                        entregar cada archivo y detenerse en la firma final.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="rtmp-button rtmp-button-primary"
+                      disabled
+                    >
+                      Abrir para revisar y firmar · puesto local pendiente
+                    </button>
+                  </>
+                ) : deliveryPrepareAllowed ? (
+                  <button
+                    type="button"
+                    className="rtmp-button rtmp-button-primary"
+                    onClick={() => void prepareSelectedDelivery()}
+                    disabled={Boolean(busyCommand) || !portalPreparationReady}
+                  >
+                    {busyCommand === "prepare-delivery"
+                      ? "Añadiendo a la cola…"
+                      : "Dejar preparado para firma"}
+                  </button>
+                ) : (
+                  <p className="rtmp-alert" role="note">
+                    Esta cuenta no tiene permiso para preparar tareas de firma.
+                  </p>
+                )}
+                <p className="rtmp-alert rtmp-alert-error" role="alert">
+                  El puente gestionado continúa cerrado en este staging. La cola
+                  puede registrarse, pero cada entrega individual requerirá un
+                  ticket de un solo uso. No se han entregado bytes. No intentes
+                  resolverlo guardando el certificado en Render.
+                </p>
+              </section>
+              {receiptCaptureAvailable ? <PortalReceiptCapturePanel /> : null}
+            </>
           ) : null}
 
           {deliveryChannel === "email" && frozenPackage ? (
@@ -2928,7 +3986,6 @@ export default function RtmPresenterWorkspace({
           <PresenterStatusTimeline
             channel={deliveryChannel}
             destinationReady={Boolean(profile)}
-            portalOpened={portalOpened}
             attachmentsFixed={Boolean(frozenPackage)}
             draftPrepared={Boolean(delivery)}
           />

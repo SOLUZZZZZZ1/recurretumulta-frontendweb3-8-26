@@ -5,6 +5,7 @@ import {
   buildRtmPresenterFreezePayload,
   evaluateRtmPresenterBoundary,
   hasExceptionalExportCapability,
+  hasPresenterDestinationProposeCapability,
   hasPresenterDocumentIngestCapability,
   hasPresenterDeliveryPrepareCapability,
   latestPresenterDocumentVersions,
@@ -14,6 +15,8 @@ import {
 import {
   createRtmPresenterClient,
   RTM_PRESENTER_MAX_EXTERNAL_DOCUMENT_BYTES,
+  validateRtmPresenterAttachmentFilename,
+  validateRtmPresenterDestinationProposal,
   validateRtmPresenterExternalFile,
 } from "../src/rtm-presenter/rtmPresenterApi.js";
 
@@ -335,6 +338,18 @@ test("external document ingress depends on its exact capability", () => {
   );
 });
 
+test("destination proposals depend on their exact capability", () => {
+  assert.equal(hasPresenterDestinationProposeCapability(["rtm.admin"]), false);
+  assert.equal(
+    hasPresenterDestinationProposeCapability(["presenter.destination.propose"]),
+    true
+  );
+  assert.equal(
+    hasPresenterDestinationProposeCapability(["presenter.destination.verify"]),
+    false
+  );
+});
+
 test("controlled delivery preparation depends on its exact capability", () => {
   assert.equal(hasPresenterDeliveryPrepareCapability(["rtm.admin"]), false);
   assert.equal(
@@ -412,12 +427,33 @@ test("normal client only loads workspace and freezes by case", async () => {
     "Bearer synthetic-operator"
   );
 
+  await client.loadSignatureQueue({ limit: 25 });
+  assert.equal(
+    calls.at(-1).path,
+    "/api/ops/presenter/signature-queue?limit=25"
+  );
+  assert.equal(calls.at(-1).options.method, "GET");
+
   await client.searchDestinations(CASE_ID, "Ayuntamiento de Madrid");
   assert.equal(
     calls.at(-1).path,
     `/api/ops/presenter/cases/${CASE_ID}/destinations/search?q=Ayuntamiento%20de%20Madrid&limit=20`
   );
   assert.equal(calls.at(-1).options.method, "GET");
+
+  await client.proposeDestinationLink(CASE_ID, {
+    label: " Recurso de tráfico sintético ",
+    portalUrl: "https://tramite.synthetic.example/recurso",
+  });
+  assert.equal(
+    calls.at(-1).path,
+    `/api/ops/presenter/cases/${CASE_ID}/destinations/proposals`
+  );
+  assert.equal(calls.at(-1).options.method, "POST");
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), {
+    label: "Recurso de tráfico sintético",
+    portal_url: "https://tramite.synthetic.example/recurso",
+  });
 
   const body = { destination_profile_id: PROFILE_ID, items: [] };
   await client.freezePackage(CASE_ID, body, {
@@ -431,8 +467,25 @@ test("normal client only loads workspace and freezes by case", async () => {
   assert.equal(calls.at(-1).options.headers["Idempotency-Key"], "idem-presenter-1");
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), body);
   const packageId = "55555555-5555-5555-5555-555555555555";
+  const portalConfirmations = {
+    destination_reviewed: true,
+    interested_confirmed: true,
+    representation_confirmed: true,
+    text_confirmed: true,
+    attachments_confirmed: true,
+  };
+  const portalPreparation = {
+    formCode: "reg_general_v1",
+    values: {
+      subject: " Recurso sintético ",
+      facts: "Hechos sintéticos.",
+      request: "Solicitud sintética.",
+    },
+    confirmations: portalConfirmations,
+  };
   await client.prepareDelivery(CASE_ID, packageId, {
     channel: "portal",
+    portalPreparation,
     idempotencyKey: "idem-delivery-0001",
   });
   assert.equal(
@@ -449,6 +502,15 @@ test("normal client only loads workspace and freezes by case", async () => {
     recipient_email: null,
     recipient_confirmed: false,
     correspondence: null,
+    portal_preparation: {
+      form_code: "reg_general_v1",
+      values: {
+        subject: "Recurso sintético",
+        facts: "Hechos sintéticos.",
+        request: "Solicitud sintética.",
+      },
+      confirmations: portalConfirmations,
+    },
   });
   const correspondenceDraft = {
     subject: "Reclamación sintética",
@@ -474,9 +536,36 @@ test("normal client only loads workspace and freezes by case", async () => {
     recipient_email: "manual@synthetic.example",
     recipient_confirmed: true,
     correspondence: correspondenceDraft,
+    portal_preparation: null,
   });
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 7);
   assert.ok(calls.every((call) => !call.path.endsWith("/documents/external")));
+});
+
+test("destination proposal validation remains synthetic and pending-only", () => {
+  assert.deepEqual(
+    validateRtmPresenterDestinationProposal(
+      "  Recurso DGT sintético  ",
+      "https://tramite.synthetic.example/recurso"
+    ),
+    {
+      label: "Recurso DGT sintético",
+      portalUrl: "https://tramite.synthetic.example/recurso",
+    }
+  );
+  for (const portalUrl of [
+    "https://sede.dgt.gob.es/recurso",
+    "http://tramite.synthetic.example/recurso",
+    "https://user:secret@tramite.synthetic.example/recurso",
+    "https://tramite.synthetic.example/recurso?session=secret",
+    "https://tramite.synthetic.example/recurso#paso",
+    "https://tramite.synthetic.example/a/%2e%2e/b",
+  ]) {
+    assert.throws(
+      () => validateRtmPresenterDestinationProposal("Sede sintética", portalUrl),
+      /enlace|Staging/
+    );
+  }
 });
 
 test("external ingress validates the file and sends the exact multipart contract", async () => {
@@ -500,6 +589,7 @@ test("external ingress validates the file and sends the exact multipart contract
   await client.uploadExternalDocument(CASE_ID, {
     purpose: "supporting_evidence",
     file,
+    attachmentFilename: "Resolucion_sancionadora_DGT.pdf",
     syntheticConfirmed: true,
   });
   const first = calls.at(-1);
@@ -512,9 +602,16 @@ test("external ingress validates the file and sends the exact multipart contract
   assert.equal(first.options.headers["Content-Type"], undefined);
   assert.ok(first.options.body instanceof FormData);
   assert.equal(first.options.body.get("purpose"), "supporting_evidence");
+  assert.equal(
+    first.options.body.get("source_original_filename"),
+    "prueba-sintetica.pdf"
+  );
   assert.equal(first.options.body.get("synthetic_confirmed"), "true");
   assert.equal(first.options.body.get("supersedes_document_version_id"), null);
-  assert.equal(first.options.body.get("file").name, "prueba-sintetica.pdf");
+  assert.equal(
+    first.options.body.get("file").name,
+    "Resolucion_sancionadora_DGT.pdf"
+  );
 
   await client.uploadExternalDocument(CASE_ID, {
     purpose: "representation_authorization",
@@ -569,6 +666,14 @@ test("external ingress rejects unconfirmed, mismatched and oversized files befor
   assert.throws(() => validateRtmPresenterExternalFile(mismatched), /Solo se admiten/);
   assert.throws(() => validateRtmPresenterExternalFile(oversized), /25 MiB/);
   assert.equal(calls, 0);
+  assert.equal(
+    validateRtmPresenterAttachmentFilename("DNI_Ramon.pdf", "application/pdf"),
+    "DNI_Ramon.pdf"
+  );
+  assert.throws(
+    () => validateRtmPresenterAttachmentFilename("DNI_Ramon.png", "application/pdf"),
+    /conservar la extensión/
+  );
 });
 
 test("external ingress file allowlist accepts only matching PDF, DOCX, JPEG and PNG", () => {

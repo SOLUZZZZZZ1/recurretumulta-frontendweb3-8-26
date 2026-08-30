@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { RtmPresenterWorkspace } from "../rtm-presenter/index.js";
 
 const API = "/api";
+const EXACT_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function readJson(response) {
   const text = await response.text().catch(() => "");
@@ -39,6 +41,18 @@ export default function OpsPresenterPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [activeCaseId, setActiveCaseId] = useState(caseId || "");
+
+  useEffect(() => {
+    setActiveCaseId(caseId || "");
+  }, [caseId]);
+
+  const openPresenterCase = useCallback((nextCaseId) => {
+    const exact = String(nextCaseId || "").trim();
+    if (!EXACT_UUID_PATTERN.test(exact)) return;
+    setActiveCaseId(exact);
+    globalThis.scrollTo?.({ top: 0, behavior: "smooth" });
+  }, []);
 
   const getAuthHeaders = useCallback(() => {
     const token = bearerRef.current;
@@ -219,14 +233,22 @@ export default function OpsPresenterPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <Link
-            to={`/ops/case/${encodeURIComponent(caseId || "")}`}
+            to={`/ops/case/${encodeURIComponent(activeCaseId || "")}`}
             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700"
           >
             ← Volver al expediente
           </Link>
-          <span className="rounded-full bg-amber-100 px-4 py-2 text-xs font-black uppercase tracking-wide text-amber-900">
-            Staging · synthetic only · sin efecto jurídico
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              to="/ops/presenter/signer"
+              className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-900"
+            >
+              Puesto local de firma
+            </Link>
+            <span className="rounded-full bg-amber-100 px-4 py-2 text-xs font-black uppercase tracking-wide text-amber-900">
+              Staging · synthetic only · sin efecto jurídico
+            </span>
+          </div>
         </div>
 
         {!session ? (
@@ -309,8 +331,9 @@ export default function OpsPresenterPage() {
               </button>
             </header>
             <RtmPresenterWorkspace
-              key={`${session.sessionId}:${caseId || ""}`}
-              caseId={caseId}
+              key={`${session.sessionId}:${activeCaseId || ""}`}
+              caseId={activeCaseId}
+              onOpenCase={openPresenterCase}
               getAuthHeaders={getAuthHeaders}
               onUnauthorized={presenterUnauthorized}
               operatorCapabilities={session.operator.permissions || []}

@@ -1,6 +1,6 @@
 import { evaluateRtmPresenterBoundary } from "./rtmPresenterModel.js";
 
-export const RTM_PRESENTER_API_VERSION = "rtm.presenter.api.client.v3";
+export const RTM_PRESENTER_API_VERSION = "rtm.presenter.api.client.v5";
 export const RTM_PRESENTER_API_PREFIX = "/api/ops/presenter";
 
 const MAX_JSON_CHARACTERS = 1_000_000;
@@ -35,6 +35,13 @@ const CORRESPONDENCE_CONFIRMATION_KEYS = Object.freeze([
   "text_confirmed",
   "attachments_confirmed",
   "data_minimization_confirmed",
+]);
+const PORTAL_PREPARATION_CONFIRMATION_KEYS = Object.freeze([
+  "destination_reviewed",
+  "interested_confirmed",
+  "representation_confirmed",
+  "text_confirmed",
+  "attachments_confirmed",
 ]);
 
 export class RtmPresenterApiError extends Error {
@@ -108,6 +115,58 @@ function normalizeCorrespondenceDraft(value) {
   };
 }
 
+function normalizePortalPreparation(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail(
+      "presenter.portal_preparation_required",
+      "Completa la hoja del trámite antes de dejarlo para firma."
+    );
+  }
+  const formCode = String(value.formCode || "").trim().toLowerCase();
+  const rawValues = value.values;
+  const confirmations = value.confirmations;
+  if (
+    !/^[a-z][a-z0-9_.-]{1,127}$/.test(formCode) ||
+    !rawValues ||
+    typeof rawValues !== "object" ||
+    Array.isArray(rawValues) ||
+    Object.keys(rawValues).length < 1 ||
+    Object.keys(rawValues).length > 32 ||
+    Object.entries(rawValues).some(
+      ([key, text]) =>
+        !/^[a-z][a-z0-9_.-]{1,127}$/.test(key) ||
+        typeof text !== "string" ||
+        text.length > 12000 ||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text)
+    ) ||
+    !confirmations ||
+    typeof confirmations !== "object" ||
+    Array.isArray(confirmations) ||
+    Object.keys(confirmations).length !==
+      PORTAL_PREPARATION_CONFIRMATION_KEYS.length ||
+    PORTAL_PREPARATION_CONFIRMATION_KEYS.some(
+      (key) => confirmations[key] !== true
+    )
+  ) {
+    fail(
+      "presenter.portal_preparation_confirmation_required",
+      "Revisa destino, interesado, representación, texto y adjuntos."
+    );
+  }
+  return {
+    form_code: formCode,
+    values: Object.fromEntries(
+      Object.entries(rawValues).map(([key, text]) => [
+        key,
+        text.replace(/\r\n?/g, "\n").trim(),
+      ])
+    ),
+    confirmations: Object.fromEntries(
+      PORTAL_PREPARATION_CONFIRMATION_KEYS.map((key) => [key, true])
+    ),
+  };
+}
+
 export function validateRtmPresenterExternalFile(file) {
   if (
     !file ||
@@ -150,6 +209,97 @@ export function validateRtmPresenterExternalFile(file) {
     );
   }
   return Object.freeze({ filename, mediaType, size });
+}
+
+export function validateRtmPresenterAttachmentFilename(value, mediaType) {
+  const filename = String(value || "").trim();
+  const exactMediaType = String(mediaType || "").trim().toLowerCase();
+  const allowedExtensions = EXTERNAL_DOCUMENT_EXTENSIONS[exactMediaType];
+  if (
+    !filename ||
+    filename.length > 180 ||
+    /[\\/\u0000-\u001f\u007f]/.test(filename) ||
+    !allowedExtensions?.some((extension) =>
+      filename.toLowerCase().endsWith(extension)
+    )
+  ) {
+    fail(
+      "presenter.external_attachment_filename_invalid",
+      "El nombre para adjuntar debe ser seguro y conservar la extensión del archivo."
+    );
+  }
+  return filename;
+}
+
+export function validateRtmPresenterDestinationProposal(label, portalUrl) {
+  const cleanLabel = String(label || "").trim().replace(/\s+/g, " ");
+  const cleanUrl = String(portalUrl || "").trim();
+  if (cleanLabel.length < 3 || cleanLabel.length > 120) {
+    fail(
+      "presenter.destination_proposal_label_invalid",
+      "Escribe un nombre de sede de entre 3 y 120 caracteres."
+    );
+  }
+  if (
+    cleanUrl.length < 9 ||
+    cleanUrl.length > 1024 ||
+    /[\u0000-\u001f\u007f]/.test(cleanUrl)
+  ) {
+    fail(
+      "presenter.destination_proposal_url_invalid",
+      "El enlace de sede no es válido."
+    );
+  }
+  let url;
+  try {
+    url = new URL(cleanUrl);
+  } catch {
+    fail(
+      "presenter.destination_proposal_url_invalid",
+      "El enlace de sede no es válido."
+    );
+  }
+  const host = url.hostname.toLowerCase();
+  const syntheticHost =
+    host === "synthetic.example" || host.endsWith(".synthetic.example");
+  if (
+    url.protocol !== "https:" ||
+    !syntheticHost ||
+    url.username ||
+    url.password ||
+    (url.port && url.port !== "443") ||
+    url.search ||
+    url.hash
+  ) {
+    fail(
+      "presenter.destination_proposal_url_not_synthetic",
+      "Staging solo admite enlaces HTTPS sintéticos sin credenciales, parámetros ni fragmentos."
+    );
+  }
+  const authorityOffset = cleanUrl.indexOf("://") + 3;
+  const pathOffset = cleanUrl.indexOf("/", authorityOffset);
+  const rawPath = pathOffset >= 0 ? cleanUrl.slice(pathOffset) : "/";
+  let decodedSegments;
+  try {
+    decodedSegments = rawPath
+      .split("/")
+      .map((segment) => decodeURIComponent(segment).trim().toLowerCase());
+  } catch {
+    fail(
+      "presenter.destination_proposal_url_invalid",
+      "El enlace de sede no es válido."
+    );
+  }
+  if (decodedSegments.some((segment) => segment === "." || segment === "..")) {
+    fail(
+      "presenter.destination_proposal_url_invalid",
+      "El enlace de sede no es válido."
+    );
+  }
+  return Object.freeze({
+    label: cleanLabel,
+    portalUrl: `${url.origin}${url.pathname || "/"}`,
+  });
 }
 
 function requireFetch(fetchImpl) {
@@ -288,6 +438,19 @@ export function createRtmPresenterClient({
       });
     },
 
+    async loadSignatureQueue({ signal = null, limit = 50 } = {}) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        fail(
+          "presenter.signature_queue_limit_invalid",
+          "El límite de la cola de firma no es válido."
+        );
+      }
+      return jsonRequest(
+        `${RTM_PRESENTER_API_PREFIX}/signature-queue?limit=${limit}`,
+        { method: "GET", signal }
+      );
+    },
+
     async searchDestinations(caseId, query, { signal = null, limit = 20 } = {}) {
       const id = safeSegment(caseId, "caseId");
       const cleanQuery = String(query || "").trim().replace(/\s+/g, " ");
@@ -306,6 +469,26 @@ export function createRtmPresenterClient({
       return jsonRequest(
         `${RTM_PRESENTER_API_PREFIX}/cases/${id}/destinations/search?q=${encodeURIComponent(cleanQuery)}&limit=${limit}`,
         { method: "GET", signal }
+      );
+    },
+
+    async proposeDestinationLink(
+      caseId,
+      { label, portalUrl, signal = null } = {}
+    ) {
+      const id = safeSegment(caseId, "caseId");
+      const proposal = validateRtmPresenterDestinationProposal(label, portalUrl);
+      return jsonRequest(
+        `${RTM_PRESENTER_API_PREFIX}/cases/${id}/destinations/proposals`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: proposal.label,
+            portal_url: proposal.portalUrl,
+          }),
+          signal,
+        }
       );
     },
 
@@ -337,6 +520,7 @@ export function createRtmPresenterClient({
         recipientEmail = "",
         recipientConfirmed = false,
         correspondenceDraft = null,
+        portalPreparation = null,
         signal = null,
         idempotencyKey = "",
       } = {}
@@ -362,9 +546,19 @@ export function createRtmPresenterClient({
           "Una presentación en sede no admite datos de correspondencia."
         );
       }
+      if (channel === "email" && portalPreparation !== null) {
+        fail(
+          "presenter.portal_preparation_not_allowed_for_email",
+          "RTM Correspondencia no admite una hoja de sede."
+        );
+      }
       const correspondence =
         channel === "email"
           ? normalizeCorrespondenceDraft(correspondenceDraft)
+          : null;
+      const portalPreparationPayload =
+        channel === "portal"
+          ? normalizePortalPreparation(portalPreparation)
           : null;
       return jsonRequest(
         `${RTM_PRESENTER_API_PREFIX}/cases/${id}/packages/${exactPackageId}/deliveries/prepare`,
@@ -382,6 +576,7 @@ export function createRtmPresenterClient({
                 ? recipientConfirmed === true
                 : false,
             correspondence,
+            portal_preparation: portalPreparationPayload,
           }),
           signal,
         }
@@ -408,6 +603,7 @@ export function createRtmPresenterClient({
       {
         purpose,
         file,
+        attachmentFilename = null,
         syntheticConfirmed = false,
         supersedesDocumentVersionId = null,
         signal = null,
@@ -416,6 +612,10 @@ export function createRtmPresenterClient({
       const id = safeSegment(caseId, "caseId");
       const exactPurpose = safePurpose(purpose);
       const fileMetadata = validateRtmPresenterExternalFile(file);
+      const exactAttachmentFilename = validateRtmPresenterAttachmentFilename(
+        attachmentFilename || fileMetadata.filename,
+        fileMetadata.mediaType
+      );
       if (syntheticConfirmed !== true) {
         fail(
           "presenter.synthetic_confirmation_required",
@@ -430,11 +630,12 @@ export function createRtmPresenterClient({
         : null;
       const form = new FormData();
       form.append("purpose", exactPurpose);
+      form.append("source_original_filename", fileMetadata.filename);
       form.append("synthetic_confirmed", "true");
       if (supersedesId) {
         form.append("supersedes_document_version_id", supersedesId);
       }
-      form.append("file", file, fileMetadata.filename);
+      form.append("file", file, exactAttachmentFilename);
       return jsonRequest(
         `${RTM_PRESENTER_API_PREFIX}/cases/${id}/documents/external`,
         {
