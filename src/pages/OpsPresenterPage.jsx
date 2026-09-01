@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { RtmPresenterWorkspace } from "../rtm-presenter/index.js";
+import { changeTemporaryOperatorPassword } from "../rtm-presenter/rtmOperatorOnboardingApi.js";
 
 const API = "/api";
 const EXACT_UUID_PATTERN =
@@ -28,19 +29,124 @@ async function readJson(response) {
   return payload;
 }
 
+function TemporaryPasswordChangeCard({
+  operator,
+  currentPassword,
+  newPassword,
+  confirmation,
+  busy,
+  error,
+  onCurrentPasswordChange,
+  onNewPasswordChange,
+  onConfirmationChange,
+  onSubmit,
+  onCancel,
+}) {
+  return (
+    <section className="mx-auto max-w-xl rounded-3xl border border-blue-200 bg-white p-6 shadow-xl">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">
+        RTM Presenter · primera entrada
+      </p>
+      <h1 className="mt-2 text-3xl font-black">Cambia la contraseña temporal</h1>
+      <p className="mt-3 text-sm leading-6 text-slate-600">
+        La cuenta <strong>{operator?.email || "de operador"}</strong> está
+        activa, pero aún no puede abrir expedientes. Elige una contraseña
+        propia de entre 12 y 256 caracteres y distinta de la temporal.
+      </p>
+      <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
+        RTM no guardará estas contraseñas en el navegador. Tras el cambio tendrás
+        que identificarte de nuevo con la contraseña nueva.
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-5 grid gap-4">
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Contraseña temporal
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={onCurrentPasswordChange}
+            autoComplete="current-password"
+            minLength={1}
+            maxLength={256}
+            required
+            className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal"
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Nueva contraseña
+          <input
+            type="password"
+            value={newPassword}
+            onChange={onNewPasswordChange}
+            autoComplete="new-password"
+            minLength={12}
+            maxLength={256}
+            required
+            className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal"
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Repite la nueva contraseña
+          <input
+            type="password"
+            value={confirmation}
+            onChange={onConfirmationChange}
+            autoComplete="new-password"
+            minLength={12}
+            maxLength={256}
+            required
+            className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal"
+          />
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            disabled={busy}
+            className="min-h-11 flex-1 rounded-xl bg-blue-800 px-5 font-black text-white disabled:bg-slate-400"
+          >
+            {busy ? "Cambiando…" : "Guardar contraseña nueva"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="min-h-11 rounded-xl border border-slate-300 px-5 font-bold text-slate-700 disabled:text-slate-400"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+      {error ? (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export default function OpsPresenterPage() {
   const { caseId } = useParams();
   const bearerRef = useRef("");
   const activeSessionIdRef = useRef("");
   const loginLockRef = useRef(false);
   const loginAbortRef = useRef(null);
+  const passwordChangeLockRef = useRef(false);
+  const passwordChangeAbortRef = useRef(null);
   const mountedRef = useRef(true);
   const [authStatus, setAuthStatus] = useState(null);
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordChangeOperator, setPasswordChangeOperator] = useState(null);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [replacementPassword, setReplacementPassword] = useState("");
+  const [replacementPasswordConfirmation, setReplacementPasswordConfirmation] =
+    useState("");
+  const [passwordChangeBusy, setPasswordChangeBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [activeCaseId, setActiveCaseId] = useState(caseId || "");
 
   useEffect(() => {
@@ -68,8 +174,17 @@ export default function OpsPresenterPage() {
     }
     bearerRef.current = "";
     activeSessionIdRef.current = "";
+    passwordChangeAbortRef.current?.abort();
+    passwordChangeAbortRef.current = null;
+    passwordChangeLockRef.current = false;
     setEmail("");
     setSession(null);
+    setPasswordChangeOperator(null);
+    setTemporaryPassword("");
+    setReplacementPassword("");
+    setReplacementPasswordConfirmation("");
+    setPasswordChangeBusy(false);
+    setNotice("");
     setError("La sesión individual ha caducado. Vuelve a identificarte.");
   }, []);
 
@@ -102,6 +217,7 @@ export default function OpsPresenterPage() {
     return () => {
       mountedRef.current = false;
       loginAbortRef.current?.abort();
+      passwordChangeAbortRef.current?.abort();
       const token = bearerRef.current;
       bearerRef.current = "";
       activeSessionIdRef.current = "";
@@ -132,6 +248,7 @@ export default function OpsPresenterPage() {
     loginAbortRef.current = controller;
     setBusy(true);
     setError("");
+    setNotice("");
     const submittedPassword = password;
     setPassword("");
     try {
@@ -159,8 +276,9 @@ export default function OpsPresenterPage() {
       ) {
         throw new Error("El backend no identificó la sesión individual.");
       }
+      const mustChangePassword = payload?.operator?.must_change_password;
       if (
-        payload?.operator?.must_change_password !== false ||
+        typeof mustChangePassword !== "boolean" ||
         payload?.operator?.mfa_required !== false
       ) {
         await fetch(`${API}/ops/auth/logout`, {
@@ -184,6 +302,14 @@ export default function OpsPresenterPage() {
           redirect: "error",
           referrerPolicy: "same-origin",
         }).catch(() => {});
+        return;
+      }
+      if (mustChangePassword) {
+        bearerRef.current = payload.token;
+        activeSessionIdRef.current = payload.session_id;
+        setEmail(payload?.operator?.email || email.trim());
+        setPasswordChangeOperator(payload.operator || {});
+        setSession(null);
         return;
       }
       bearerRef.current = payload.token;
@@ -210,13 +336,99 @@ export default function OpsPresenterPage() {
     }
   }
 
+  async function changeTemporaryPassword(event) {
+    event.preventDefault();
+    if (passwordChangeLockRef.current) return;
+
+    const token = bearerRef.current;
+    const expectedSessionId = activeSessionIdRef.current;
+    const submittedCurrentPassword = temporaryPassword;
+    const submittedNewPassword = replacementPassword;
+    const submittedConfirmation = replacementPasswordConfirmation;
+    setTemporaryPassword("");
+    setReplacementPassword("");
+    setReplacementPasswordConfirmation("");
+    setError("");
+    setNotice("");
+
+    if (submittedNewPassword !== submittedConfirmation) {
+      setError("Las dos copias de la contraseña nueva no coinciden.");
+      return;
+    }
+
+    passwordChangeLockRef.current = true;
+    const controller = new AbortController();
+    passwordChangeAbortRef.current = controller;
+    setPasswordChangeBusy(true);
+    try {
+      await changeTemporaryOperatorPassword({
+        bearerToken: token,
+        currentPassword: submittedCurrentPassword,
+        newPassword: submittedNewPassword,
+        signal: controller.signal,
+      });
+      if (
+        controller.signal.aborted ||
+        !mountedRef.current ||
+        activeSessionIdRef.current !== expectedSessionId
+      ) {
+        return;
+      }
+      bearerRef.current = "";
+      activeSessionIdRef.current = "";
+      setPasswordChangeOperator(null);
+      setNotice(
+        "Contraseña actualizada. Identifícate de nuevo con la contraseña nueva."
+      );
+    } catch (changeError) {
+      if (!controller.signal.aborted && mountedRef.current) {
+        if (
+          changeError?.status === 401 &&
+          activeSessionIdRef.current === expectedSessionId
+        ) {
+          if (token) {
+            await fetch(`${API}/ops/auth/logout`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+              credentials: "same-origin",
+              redirect: "error",
+              referrerPolicy: "same-origin",
+            }).catch(() => {});
+          }
+          bearerRef.current = "";
+          activeSessionIdRef.current = "";
+          setPasswordChangeOperator(null);
+        }
+        setError(
+          changeError?.message || "No se pudo cambiar la contraseña temporal."
+        );
+      }
+    } finally {
+      if (passwordChangeAbortRef.current === controller) {
+        passwordChangeAbortRef.current = null;
+        passwordChangeLockRef.current = false;
+      }
+      if (mountedRef.current) setPasswordChangeBusy(false);
+    }
+  }
+
   async function logout() {
+    passwordChangeAbortRef.current?.abort();
+    passwordChangeAbortRef.current = null;
+    passwordChangeLockRef.current = false;
     const token = bearerRef.current;
     bearerRef.current = "";
     activeSessionIdRef.current = "";
     setEmail("");
     setSession(null);
+    setPasswordChangeOperator(null);
+    setTemporaryPassword("");
+    setReplacementPassword("");
+    setReplacementPasswordConfirmation("");
+    setPasswordChangeBusy(false);
     setError("");
+    setNotice("");
     if (!token) return;
     await fetch(`${API}/ops/auth/logout`, {
       method: "POST",
@@ -251,7 +463,27 @@ export default function OpsPresenterPage() {
           </div>
         </div>
 
-        {!session ? (
+        {passwordChangeOperator ? (
+          <TemporaryPasswordChangeCard
+            operator={passwordChangeOperator}
+            currentPassword={temporaryPassword}
+            newPassword={replacementPassword}
+            confirmation={replacementPasswordConfirmation}
+            busy={passwordChangeBusy}
+            error={error}
+            onCurrentPasswordChange={(event) =>
+              setTemporaryPassword(event.target.value)
+            }
+            onNewPasswordChange={(event) =>
+              setReplacementPassword(event.target.value)
+            }
+            onConfirmationChange={(event) =>
+              setReplacementPasswordConfirmation(event.target.value)
+            }
+            onSubmit={changeTemporaryPassword}
+            onCancel={logout}
+          />
+        ) : !session ? (
           <section className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">
               RTM Presenter · acceso individual
@@ -266,6 +498,12 @@ export default function OpsPresenterPage() {
             {authStatus && !authStatus.individual_login_enabled ? (
               <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
                 La autenticación individual de staging está cerrada en este despliegue.
+              </p>
+            ) : null}
+
+            {notice ? (
+              <p role="status" className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
+                {notice}
               </p>
             ) : null}
 

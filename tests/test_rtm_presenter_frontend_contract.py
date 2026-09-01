@@ -32,7 +32,8 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertIn("activeSessionIdRef.current !== expectedSessionId", page)
         self.assertIn('key={`${session.sessionId}:${activeCaseId || ""}`}', page)
         self.assertIn("onOpenCase={openPresenterCase}", page)
-        self.assertIn("must_change_password !== false", page)
+        self.assertIn('typeof mustChangePassword !== "boolean"', page)
+        self.assertIn("if (mustChangePassword)", page)
         self.assertIn("mfa_required !== false", page)
         self.assertIn('`${API}/ops/auth/logout`', page)
         self.assertIn("authStatus?.individual_login_enabled !== true", page)
@@ -40,6 +41,33 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
             "La autenticación individual de RTM Presenter no está habilitada.",
             page,
         )
+
+    def test_temporary_password_onboarding_is_memory_only_and_requires_relogin(self):
+        page = (ROOT / "src" / "pages" / "OpsPresenterPage.jsx").read_text(
+            encoding="utf-8"
+        )
+        onboarding = source("rtmOperatorOnboardingApi.js")
+        combined = page + onboarding
+
+        self.assertIn("TemporaryPasswordChangeCard", page)
+        self.assertIn("changeTemporaryOperatorPassword", page)
+        self.assertIn("setPassword(\"\")", page)
+        self.assertIn("setTemporaryPassword(\"\")", page)
+        self.assertIn("setReplacementPassword(\"\")", page)
+        self.assertIn("setReplacementPasswordConfirmation(\"\")", page)
+        self.assertIn('if (mustChangePassword)', page)
+        self.assertIn('payload?.operator?.mfa_required !== false', page)
+        self.assertIn('"/api/ops/auth/password/change"', onboarding)
+        self.assertIn("current_password: current", onboarding)
+        self.assertIn("new_password: next", onboarding)
+        self.assertIn("payload?.password_returned !== false", onboarding)
+        self.assertIn("payload?.reauthentication_required !== true", onboarding)
+        self.assertIn("payload?.operator?.must_change_password !== false", onboarding)
+        self.assertIn("bearerRef.current = \"\"", page)
+        self.assertIn("Identifícate de nuevo con la contraseña nueva", page)
+        self.assertNotIn("localStorage", combined)
+        self.assertNotIn("sessionStorage", combined)
+        self.assertNotIn("document.cookie", combined)
 
     def test_signer_station_is_a_separate_closed_local_surface(self):
         app = (ROOT / "src" / "App.jsx").read_text(encoding="utf-8")
