@@ -43,6 +43,20 @@ operativa deberá conciliar evidencia confiable en backend antes de emitir un
 evento separado con `receipt_verified`; solo esa verificación podrá alimentar
 el seguimiento temporal. Este corte no implementa ese verificador.
 
+## Contrato de recuperación de sesión REG
+
+`lib/reg-session-recovery.js` modela, solo en memoria, la pérdida completa del
+formulario de REG por caducidad. La instantánea liga perfil y destino, modo de
+representación, manifiesto, origen, campos y valores, documentos, versiones,
+orden y SHA-256 a una huella única de tarea RTM.
+
+El paso a `reg_session_expired` conserva esa instantánea, pero declara siempre
+`regDraftPersisted=false` y elimina cualquier suposición de sesión reutilizable.
+Volver a `rtm_ready` exige una reautenticación REG explícita y la misma huella de
+tarea. No abre el portal, no rellena un formulario, no guarda cookies y no
+entrega bytes: es el contrato fail-closed que deberá respetar el futuro
+adaptador gestionado.
+
 ## Seguridad deliberada
 
 - Orígenes exactos: `http://localhost:8765` y `http://127.0.0.1:8765`.

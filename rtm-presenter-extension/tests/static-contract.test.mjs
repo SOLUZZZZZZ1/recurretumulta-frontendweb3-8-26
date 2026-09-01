@@ -23,6 +23,7 @@ test("extension code has no persistent storage or browser submission automation"
       "lib/ticket-client.js",
       "lib/portal-attach.js",
       "lib/synthetic-audit.js",
+      "lib/reg-session-recovery.js",
     ].map(source))
   ).join("\n");
 

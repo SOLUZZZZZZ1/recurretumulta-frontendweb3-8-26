@@ -1,0 +1,14 @@
+{
+  "name": "rtm-signer-station-client",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "init": "node cli.mjs init",
+    "show": "node cli.mjs show"
+  }
+}

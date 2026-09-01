@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import {
   createRtmSignerStationClient,
   newSignerCommandKey,
+  parseRtmSignerStationDescriptorText,
 } from "../rtm-presenter/rtmSignerStationApi.js";
 
 const API = "/api";
@@ -194,8 +195,92 @@ function QueueTaskCard({ task, busy, onClaim, onReview }) {
   );
 }
 
-function ClaimReview({ claim, busy, onRelease }) {
-  const task = claim.task || {};
+function StationCandidateCard({ station, busy, onDescriptorSelected }) {
+  const installation = station?.installation || null;
+  return (
+    <section className="mb-5 rounded-3xl border border-blue-200 bg-blue-50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-3xl">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-800">
+            Cliente Windows · candidato local
+          </p>
+          <h2 className="mt-2 text-xl font-black">
+            {installation ? installation.station_label : "Vincula el descriptor de este PC"}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-blue-950">
+            Selecciona el archivo <strong>station-candidate.json</strong> creado
+            por el cliente local. Solo contiene una identidad pública sintética;
+            no contiene contraseñas, certificado ni datos de expedientes.
+          </p>
+          <p className="mt-1 break-all text-xs font-semibold text-blue-900">
+            Ruta habitual: %LOCALAPPDATA%\RTM\SignerStation\station-candidate.json
+          </p>
+        </div>
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-black uppercase ${
+            installation
+              ? "bg-amber-100 text-amber-900"
+              : "bg-slate-200 text-slate-700"
+          }`}
+        >
+          {installation ? "Candidato registrado" : "Sin vincular"}
+        </span>
+      </div>
+
+      {installation ? (
+        <dl className="mt-4 grid gap-3 rounded-2xl border border-blue-200 bg-white p-4 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="font-bold text-slate-600">Versión</dt>
+            <dd>{installation.client_version}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-600">Estado</dt>
+            <dd>{installation.status}</dd>
+          </div>
+          <div>
+            <dt className="font-bold text-slate-600">Huella pública</dt>
+            <dd title={installation.client_binding_sha256}>
+              {shortHash(installation.client_binding_sha256)}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <label className="cursor-pointer rounded-xl bg-blue-800 px-4 py-2 text-sm font-black text-white">
+          {busy
+            ? "Registrando candidato…"
+            : installation
+              ? "Comprobar el mismo descriptor"
+              : "Seleccionar descriptor local"}
+          <input
+            type="file"
+            accept="application/json,.json"
+            disabled={busy}
+            onChange={onDescriptorSelected}
+            className="sr-only"
+          />
+        </label>
+        <p className="text-xs font-semibold text-blue-950">
+          La atestación gestionada sigue pendiente: este candidato no puede abrir
+          REG ni recibir documentos.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ClaimReview({
+  claim,
+  workspace,
+  station,
+  busy,
+  onRelease,
+  onPrepareWorkspace,
+  onMarkExpired,
+  onResumeWorkspace,
+}) {
+  const task = workspace?.task || claim.task || {};
   const fields = task.portal_preparation?.fields || [];
   const items = task.items || [];
   return (
@@ -277,6 +362,69 @@ function ClaimReview({ claim, busy, onRelease }) {
         </ol>
       </section>
 
+      <section className="mt-6 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-800">
+          Borrador recuperable
+        </p>
+        {!workspace ? (
+          <>
+            <h3 className="mt-2 text-lg font-black">Guarda primero la tarea en RTM</h3>
+            <p className="mt-2 text-sm leading-6 text-violet-950">
+              RTM conservará destino, textos, versiones, huellas y orden. REG no
+              guarda el formulario: si su sesión caduca, habrá que autenticarse
+              otra vez y reconstruirlo desde esta copia exacta.
+            </p>
+            <button
+              type="button"
+              onClick={() => onPrepareWorkspace(task.delivery_id, claim.claim_id)}
+              disabled={busy || !station}
+              className="mt-4 rounded-xl bg-violet-800 px-4 py-2 text-sm font-black text-white disabled:bg-slate-400"
+            >
+              {station
+                ? "Preparar borrador recuperable en RTM"
+                : "Vincula antes el candidato Windows"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-black">
+                {workspace.state === "reg_session_expired"
+                  ? "Sesión REG caducada · el trabajo sigue en RTM"
+                  : "Borrador RTM listo para reconstrucción"}
+              </h3>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-violet-900">
+                Intento {workspace.attempt_number}
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-violet-950">
+              Borrador RTM: <strong>guardado</strong> · borrador REG:{" "}
+              <strong>no existe</strong>. No se ha abierto la sede, entregado
+              documentos, firmado ni presentado.
+            </p>
+            {workspace.state === "reg_session_expired" ? (
+              <button
+                type="button"
+                onClick={() => onResumeWorkspace(task.delivery_id, claim.claim_id, workspace)}
+                disabled={busy}
+                className="mt-4 rounded-xl bg-violet-800 px-4 py-2 text-sm font-black text-white disabled:bg-slate-400"
+              >
+                Preparar recuperación desde RTM
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onMarkExpired(task.delivery_id, claim.claim_id, workspace)}
+                disabled={busy}
+                className="mt-4 rounded-xl border border-violet-400 bg-white px-4 py-2 text-sm font-black text-violet-900 disabled:opacity-50"
+              >
+                Registrar prueba sintética de caducidad REG
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         <button
           type="button"
@@ -287,8 +435,8 @@ function ClaimReview({ claim, busy, onRelease }) {
           Abrir sede · activación local pendiente
         </button>
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
-          El certificado se elegirá y la firma final se confirmará únicamente
-          en este PC cuando el cliente local esté disponible.
+          El certificado nunca saldrá de este PC. Se elegirá y la firma final se
+          confirmará aquí cuando exista un cliente gestionado y atestado.
         </div>
       </div>
     </section>
@@ -301,16 +449,20 @@ export default function OpsSignerStationPage() {
   const loginLockRef = useRef(false);
   const loginAbortRef = useRef(null);
   const mountedRef = useRef(true);
+  const commandKeysRef = useRef(new Map());
   const [authStatus, setAuthStatus] = useState(null);
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [queueBusy, setQueueBusy] = useState(false);
+  const [stationBusy, setStationBusy] = useState(false);
   const [busyDeliveryId, setBusyDeliveryId] = useState("");
   const [error, setError] = useState("");
   const [queue, setQueue] = useState([]);
   const [claims, setClaims] = useState({});
+  const [station, setStation] = useState(null);
+  const [workspaces, setWorkspaces] = useState({});
   const [activeDeliveryId, setActiveDeliveryId] = useState("");
 
   const getAuthHeaders = useCallback(() => {
@@ -327,9 +479,15 @@ export default function OpsSignerStationPage() {
     }
     bearerRef.current = "";
     activeSessionIdRef.current = "";
+    commandKeysRef.current.clear();
     setSession(null);
     setQueue([]);
     setClaims({});
+    setStation(null);
+    setWorkspaces({});
+    setQueueBusy(false);
+    setStationBusy(false);
+    setBusyDeliveryId("");
     setActiveDeliveryId("");
     setError("La sesión individual ha caducado. Vuelve a identificarte.");
   }, []);
@@ -377,6 +535,7 @@ export default function OpsSignerStationPage() {
       const token = bearerRef.current;
       bearerRef.current = "";
       activeSessionIdRef.current = "";
+      commandKeysRef.current.clear();
       if (token) {
         void fetch(`${API}/ops/auth/logout`, {
           method: "POST",
@@ -393,6 +552,8 @@ export default function OpsSignerStationPage() {
 
   const loadQueue = useCallback(
     async ({ signal = null } = {}) => {
+      const expectedSessionId = activeSessionIdRef.current;
+      if (!expectedSessionId) return;
       setQueueBusy(true);
       setError("");
       try {
@@ -414,20 +575,41 @@ export default function OpsSignerStationPage() {
             nextClaims[result.value.claim.task.delivery_id] = result.value.claim;
           }
         });
-        if (signal?.aborted) return;
+        if (
+          signal?.aborted ||
+          activeSessionIdRef.current !== expectedSessionId
+        ) {
+          return;
+        }
         setQueue(entries);
         setClaims(nextClaims);
+        setWorkspaces((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(
+              ([deliveryId, workspace]) =>
+                nextClaims[deliveryId]?.claim_id === workspace?.claim_id
+            )
+          )
+        );
         setActiveDeliveryId((current) =>
           nextClaims[current]
             ? current
             : Object.keys(nextClaims)[0] || ""
         );
       } catch (loadError) {
-        if (!signal?.aborted) {
+        if (
+          !signal?.aborted &&
+          activeSessionIdRef.current === expectedSessionId
+        ) {
           setError(loadError.message || "No se pudo cargar la cola de firma.");
         }
       } finally {
-        if (!signal?.aborted) setQueueBusy(false);
+        if (
+          !signal?.aborted &&
+          activeSessionIdRef.current === expectedSessionId
+        ) {
+          setQueueBusy(false);
+        }
       }
     },
     [client]
@@ -515,7 +697,10 @@ export default function OpsSignerStationPage() {
       }
       bearerRef.current = payload.token;
       activeSessionIdRef.current = payload.session_id;
+      commandKeysRef.current.clear();
       setEmail("");
+      setStation(null);
+      setWorkspaces({});
       setSession({
         sessionId: payload.session_id,
         expiresAt: payload.expires_at,
@@ -541,10 +726,16 @@ export default function OpsSignerStationPage() {
     const token = bearerRef.current;
     bearerRef.current = "";
     activeSessionIdRef.current = "";
+    commandKeysRef.current.clear();
     setEmail("");
     setSession(null);
     setQueue([]);
     setClaims({});
+    setStation(null);
+    setWorkspaces({});
+    setQueueBusy(false);
+    setStationBusy(false);
+    setBusyDeliveryId("");
     setActiveDeliveryId("");
     setError("");
     if (!token) return;
@@ -558,13 +749,30 @@ export default function OpsSignerStationPage() {
     }).catch(() => {});
   }
 
+  function retainedCommandKey(scope, prefix) {
+    const existing = commandKeysRef.current.get(scope);
+    if (existing) return existing;
+    const created = newSignerCommandKey(prefix);
+    commandKeysRef.current.set(scope, created);
+    return created;
+  }
+
+  function forgetCommandKey(scope) {
+    commandKeysRef.current.delete(scope);
+  }
+
   async function claimTask(deliveryId) {
+    const expectedSessionId = activeSessionIdRef.current;
+    if (!expectedSessionId) return;
     setBusyDeliveryId(deliveryId);
     setError("");
+    const commandScope = `claim:${deliveryId}`;
     try {
       const payload = await client.claimTask(deliveryId, {
-        idempotencyKey: newSignerCommandKey("signer-claim"),
+        idempotencyKey: retainedCommandKey(commandScope, "signer-claim"),
       });
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      forgetCommandKey(commandScope);
       setClaims((current) => ({
         ...current,
         [deliveryId]: payload.claim,
@@ -572,20 +780,33 @@ export default function OpsSignerStationPage() {
       setActiveDeliveryId(deliveryId);
       await loadQueue();
     } catch (claimError) {
+      if (activeSessionIdRef.current !== expectedSessionId) return;
       setError(claimError.message || "No se pudo tomar la tarea.");
     } finally {
-      setBusyDeliveryId("");
+      if (activeSessionIdRef.current === expectedSessionId) {
+        setBusyDeliveryId("");
+      }
     }
   }
 
   async function releaseTask(deliveryId, claimId) {
+    const expectedSessionId = activeSessionIdRef.current;
+    if (!expectedSessionId) return;
     setBusyDeliveryId(deliveryId);
     setError("");
+    const commandScope = `release:${claimId}`;
     try {
       await client.releaseTask(deliveryId, claimId, {
-        idempotencyKey: newSignerCommandKey("signer-release"),
+        idempotencyKey: retainedCommandKey(commandScope, "signer-release"),
       });
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      forgetCommandKey(commandScope);
       setClaims((current) => {
+        const next = { ...current };
+        delete next[deliveryId];
+        return next;
+      });
+      setWorkspaces((current) => {
         const next = { ...current };
         delete next[deliveryId];
         return next;
@@ -593,13 +814,158 @@ export default function OpsSignerStationPage() {
       setActiveDeliveryId("");
       await loadQueue();
     } catch (releaseError) {
+      if (activeSessionIdRef.current !== expectedSessionId) return;
       setError(releaseError.message || "No se pudo liberar la tarea.");
     } finally {
-      setBusyDeliveryId("");
+      if (activeSessionIdRef.current === expectedSessionId) {
+        setBusyDeliveryId("");
+      }
+    }
+  }
+
+  async function registerStationDescriptor(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] || null;
+    input.value = "";
+    if (!file || stationBusy) return;
+    const expectedSessionId = activeSessionIdRef.current;
+    if (!expectedSessionId) return;
+    setStationBusy(true);
+    setError("");
+    try {
+      if (file.size > 16_384) {
+        throw new Error("El descriptor del puesto supera 16 KB.");
+      }
+      const descriptor = parseRtmSignerStationDescriptorText(await file.text());
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      if (
+        station?.installation &&
+        (station.installation.client_instance_id !== descriptor.clientInstanceId ||
+          station.installation.client_binding_sha256 !==
+            descriptor.clientBindingSha256)
+      ) {
+        throw new Error(
+          "Esta sesión ya está vinculada a otro candidato. Cierra la sesión antes de cambiar de PC."
+        );
+      }
+      const payload = await client.registerInstallation({
+        clientInstanceId: descriptor.clientInstanceId,
+        clientBindingSha256: descriptor.clientBindingSha256,
+        stationLabel: descriptor.stationLabel,
+        platform: descriptor.platform,
+        clientVersion: descriptor.clientVersion,
+      });
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      setStation(payload.station);
+    } catch (stationError) {
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      if (!station) {
+        setStation(null);
+        setWorkspaces({});
+      }
+      setError(
+        stationError.message || "No se pudo registrar el candidato de este PC."
+      );
+    } finally {
+      if (activeSessionIdRef.current === expectedSessionId) {
+        setStationBusy(false);
+      }
+    }
+  }
+
+  async function prepareWorkspace(deliveryId, claimId) {
+    const installationId = station?.installation?.installation_id || "";
+    if (!installationId) {
+      setError("Vincula primero el descriptor candidato de este PC.");
+      return;
+    }
+    const expectedSessionId = activeSessionIdRef.current;
+    if (!expectedSessionId) return;
+    setBusyDeliveryId(deliveryId);
+    setError("");
+    const commandScope = `prepare:${claimId}:${installationId}`;
+    try {
+      const payload = await client.prepareWorkspace(
+        deliveryId,
+        claimId,
+        installationId,
+        {
+          idempotencyKey: retainedCommandKey(
+            commandScope,
+            "workspace-prepare"
+          ),
+        }
+      );
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      forgetCommandKey(commandScope);
+      setWorkspaces((current) => ({
+        ...current,
+        [deliveryId]: payload.workspace,
+      }));
+    } catch (workspaceError) {
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      setError(
+        workspaceError.message || "No se pudo preparar el borrador recuperable."
+      );
+    } finally {
+      if (activeSessionIdRef.current === expectedSessionId) {
+        setBusyDeliveryId("");
+      }
+    }
+  }
+
+  async function transitionWorkspace(deliveryId, claimId, workspace, action) {
+    const installationId = station?.installation?.installation_id || "";
+    if (!installationId || !workspace?.workspace_id) {
+      setError("La tarea recuperable no está ligada a este candidato Windows.");
+      return;
+    }
+    const expectedSessionId = activeSessionIdRef.current;
+    if (!expectedSessionId) return;
+    setBusyDeliveryId(deliveryId);
+    setError("");
+    const commandScope =
+      `workspace:${workspace.workspace_id}:${action}:` +
+      `${workspace.attempt_number}`;
+    try {
+      const command =
+        action === "expire"
+          ? client.markRegSessionExpired.bind(client)
+          : client.resumeWorkspace.bind(client);
+      const payload = await command(
+        deliveryId,
+        claimId,
+        workspace.workspace_id,
+        installationId,
+        {
+          idempotencyKey: retainedCommandKey(
+            commandScope,
+            action === "expire" ? "workspace-expired" : "workspace-resume"
+          ),
+        }
+      );
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      forgetCommandKey(commandScope);
+      setWorkspaces((current) => ({
+        ...current,
+        [deliveryId]: payload.workspace,
+      }));
+    } catch (workspaceError) {
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      setError(
+        workspaceError.message || "No se pudo actualizar la recuperación de REG."
+      );
+    } finally {
+      if (activeSessionIdRef.current === expectedSessionId) {
+        setBusyDeliveryId("");
+      }
     }
   }
 
   const activeClaim = activeDeliveryId ? claims[activeDeliveryId] : null;
+  const activeWorkspace = activeDeliveryId
+    ? workspaces[activeDeliveryId] || null
+    : null;
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
@@ -656,16 +1022,24 @@ export default function OpsSignerStationPage() {
 
             <section className="mb-5 rounded-3xl border border-amber-300 bg-amber-50 p-5">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-900">
-                Corte v1 · frontera cerrada
+                Corte v1.1 · recuperación RTM · frontera cerrada
               </p>
-              <h2 className="mt-2 text-xl font-black">Cola y reserva, todavía sin abrir la sede</h2>
+              <h2 className="mt-2 text-xl font-black">
+                Cola, reserva y borrador recuperable; todavía sin abrir la sede
+              </h2>
               <p className="mt-2 text-sm leading-6 text-amber-950">
-                Esta versión prueba identidad separada, asignación y toma exclusiva.
-                El siguiente corte instalará el cliente local que abre REG y entrega
-                cada documento cuando la sede lo pide. El certificado nunca saldrá de
-                este PC.
+                Esta versión registra un candidato Windows y conserva en RTM una
+                copia exacta para reconstruir el formulario si REG cierra la sesión
+                por inactividad. No afirma que REG guarde borradores y aún no abre la
+                sede ni entrega documentos.
               </p>
             </section>
+
+            <StationCandidateCard
+              station={station}
+              busy={stationBusy}
+              onDescriptorSelected={registerStationDescriptor}
+            />
 
             {error ? (
               <p
@@ -721,8 +1095,17 @@ export default function OpsSignerStationPage() {
               <div className="mt-6" id="signer-active-claim">
                 <ClaimReview
                   claim={activeClaim}
-                  busy={busyDeliveryId === activeDeliveryId}
+                  workspace={activeWorkspace}
+                  station={station}
+                  busy={busyDeliveryId === activeDeliveryId || stationBusy}
                   onRelease={releaseTask}
+                  onPrepareWorkspace={prepareWorkspace}
+                  onMarkExpired={(deliveryId, claimId, workspace) =>
+                    transitionWorkspace(deliveryId, claimId, workspace, "expire")
+                  }
+                  onResumeWorkspace={(deliveryId, claimId, workspace) =>
+                    transitionWorkspace(deliveryId, claimId, workspace, "resume")
+                  }
                 />
               </div>
             ) : null}
