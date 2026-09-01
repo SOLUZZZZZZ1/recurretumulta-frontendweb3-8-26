@@ -5,6 +5,8 @@ export const RTM_SIGNER_STATION_API_PREFIX = "/api/ops/presenter/signer";
 export const RTM_LOCAL_STATION_CONTRACT_VERSION = "rtm_presenter_local_station_v1_0";
 export const RTM_SIGNER_WORKSPACE_CONTRACT_VERSION =
   "rtm_presenter_signer_workspace_v1_0";
+export const RTM_WORKSPACE_RECOVERY_CONTRACT_VERSION =
+  "rtm_presenter_workspace_recovery_v1_0";
 export const RTM_LOCAL_STATION_DESCRIPTOR_VERSION =
   "rtm.local.signer.station.descriptor.v1";
 
@@ -15,6 +17,155 @@ const EXACT_UUID_PATTERN =
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const CLIENT_VERSION_PATTERN =
   /^[0-9]+[.][0-9]+[.][0-9]+(?:[-+][A-Za-z0-9.-]+)?$/;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
+const CODE_PATTERN = /^[a-z][a-z0-9._-]{1,127}$/;
+const MEDIA_TYPE_PATTERN =
+  /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]{0,126}$/;
+const ISO_TIMESTAMP_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const RECOVERY_STATUSES = new Set([
+  "current_session",
+  "adoptable",
+  "adoptable_supersession",
+  "blocked_active_claim",
+  "blocked_session_rollback",
+]);
+const RECOVERY_ITEM_KEYS = new Set([
+  "workspace_id",
+  "delivery_id",
+  "case_id",
+  "package_id",
+  "claim_id",
+  "state",
+  "attempt_number",
+  "updated_at",
+  "destination_display_name",
+  "document_count",
+  "task_fingerprint_sha256",
+  "recovery_status",
+  "adoption_available",
+  "rtm_draft_persisted",
+  "reg_draft_persisted",
+  "browser_storage_required",
+  "document_bytes_available",
+  "external_effects_executed",
+  "active_claim_expires_at",
+]);
+const INSTALLATION_KEYS = new Set([
+  "installation_id",
+  "operator_id",
+  "operator_device_id",
+  "client_instance_id",
+  "client_binding_sha256",
+  "station_label",
+  "platform",
+  "client_version",
+  "status",
+  "registered_at",
+]);
+const WORKSPACE_KEYS = new Set([
+  "workspace_contract_version",
+  "workspace_id",
+  "state",
+  "attempt_number",
+  "updated_at",
+  "replayed",
+  "claim_id",
+  "claim_expires_at",
+  "installation",
+  "task",
+  "rtm_draft_persisted",
+  "reg_draft_persisted",
+  "reg_session_recovery_available",
+  "reg_session_expired",
+  "managed_attestation_verified",
+  "local_activation_available",
+  "browser_open_available",
+  "document_bytes_available",
+  "certificate_stored_by_rtm",
+  "signature_automated",
+  "final_submit_automated",
+  "external_effects_executed",
+  "next_action",
+  "recovery_adopted",
+  "recovered_from",
+]);
+const REQUIRED_WORKSPACE_KEYS = new Set(
+  [...WORKSPACE_KEYS].filter((key) => key !== "recovered_from")
+);
+const SIGNER_TASK_KEYS = new Set([
+  "delivery_id",
+  "case_id",
+  "package_id",
+  "package_manifest_sha256",
+  "destination_profile_id",
+  "destination_profile_code",
+  "destination_profile_version",
+  "destination_profile_sha256",
+  "prepared_by_operator_id",
+  "prepared_at",
+  "destination_display_name",
+  "portal_origin",
+  "representation_mode",
+  "portal_preparation",
+  "items",
+  "document_count",
+  "task_fingerprint_sha256",
+]);
+const PORTAL_PREPARATION_KEYS = new Set(["form_code", "fields"]);
+const PORTAL_FIELD_KEYS = new Set([
+  "field_code",
+  "label",
+  "required",
+  "multiline",
+  "max_length",
+  "step_order",
+  "value",
+]);
+const TASK_ITEM_KEYS = new Set([
+  "package_item_id",
+  "document_version_id",
+  "document_sha256",
+  "item_order",
+  "field_code",
+  "portal_filename",
+  "media_type",
+  "size_bytes",
+]);
+const RECOVERY_COLLECTION_KEYS = new Set([
+  "recovery_contract_version",
+  "installation_id",
+  "items",
+  "item_count",
+  "metadata_only",
+  "browser_storage_required",
+  "document_bytes_available",
+  "cookie_material_available",
+  "certificate_material_available",
+  "external_effects_executed",
+]);
+const RECOVERY_ENVELOPE_BASE_KEYS = [
+  "ok",
+  "request_id",
+  "storage_references_exposed",
+  "document_bytes_exposed",
+  "cookie_material_exposed",
+  "certificate_material_exposed",
+  "synthetic_only",
+];
+const RECOVERY_DISCOVERY_ENVELOPE_KEYS = new Set([
+  ...RECOVERY_ENVELOPE_BASE_KEYS,
+  "workspace_recoveries",
+]);
+const RECOVERY_WORKSPACE_ENVELOPE_KEYS = new Set([
+  ...RECOVERY_ENVELOPE_BASE_KEYS,
+  "workspace",
+]);
+const RECOVERED_FROM_KEYS = new Set([
+  "workspace_id",
+  "claim_id",
+  "attempt_number",
+]);
 const FORBIDDEN_KEYS = new Set([
   "b2_bucket",
   "b2_key",
@@ -27,22 +178,118 @@ const FORBIDDEN_KEYS = new Set([
   "cookie",
   "certificate",
   "certificate_bytes",
+  "document_content_base64",
+  "document_content",
+  "document_bytes",
+  "file_bytes",
+  "raw_bytes",
+  "content_base64",
+  "blob",
   "private_key",
   "raw_pairing_code",
   "station_token",
 ]);
 
 export class RtmSignerStationApiError extends Error {
-  constructor(code, message, status = null) {
+  constructor(
+    code,
+    message,
+    status = null,
+    requestId = null,
+    retryable = null
+  ) {
     super(message);
     this.name = "RtmSignerStationApiError";
     this.code = code;
     this.status = status;
+    this.requestId = requestId;
+    this.retryable = retryable;
   }
 }
 
-function fail(code, message, status = null) {
-  throw new RtmSignerStationApiError(code, message, status);
+function fail(
+  code,
+  message,
+  status = null,
+  requestId = null,
+  retryable = null
+) {
+  throw new RtmSignerStationApiError(
+    code,
+    message,
+    status,
+    requestId,
+    retryable
+  );
+}
+
+function hasExactKeys(value, allowed, required = allowed) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.every((key) => allowed.has(key)) &&
+    [...required].every((key) => Object.hasOwn(value, key))
+  );
+}
+
+function validTimestamp(value) {
+  return (
+    typeof value === "string" &&
+    ISO_TIMESTAMP_PATTERN.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+function canonicalJson(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return JSON.stringify(value);
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  fail(
+    "signer.task_fingerprint_unavailable",
+    "La tarea contiene material que no puede canonizarse."
+  );
+}
+
+async function canonicalTaskSha256(task) {
+  const subtle = globalThis.crypto?.subtle;
+  const Encoder = globalThis.TextEncoder;
+  if (!subtle || typeof subtle.digest !== "function" || typeof Encoder !== "function") {
+    fail(
+      "signer.task_fingerprint_unavailable",
+      "El navegador no puede verificar la huella criptográfica de la tarea."
+    );
+  }
+  const material = Object.fromEntries(
+    Object.entries(task).filter(([key]) => key !== "task_fingerprint_sha256")
+  );
+  let digest;
+  try {
+    digest = await subtle.digest(
+      "SHA-256",
+      new Encoder().encode(canonicalJson(material))
+    );
+  } catch {
+    fail(
+      "signer.task_fingerprint_unavailable",
+      "No se pudo verificar la huella criptográfica de la tarea."
+    );
+  }
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
 }
 
 function exactUuid(value, field) {
@@ -122,17 +369,34 @@ async function readJson(response) {
     );
   }
   if (!response.ok) {
+    const remoteError = payload?.detail?.error || payload?.error;
     const detail =
-      payload?.detail?.error?.message ||
+      remoteError?.message ||
       payload?.detail?.message ||
       payload?.detail ||
-      payload?.error?.message;
+      remoteError;
+    const remoteCode =
+      typeof remoteError?.code === "string" && remoteError.code.trim()
+        ? remoteError.code.trim().slice(0, 120)
+        : "signer.request_failed";
+    const requestId =
+      typeof payload?.detail?.request_id === "string"
+        ? payload.detail.request_id.slice(0, 120)
+        : typeof payload?.request_id === "string"
+          ? payload.request_id.slice(0, 120)
+          : null;
+    const retryable =
+      typeof remoteError?.retryable === "boolean"
+        ? remoteError.retryable
+        : null;
     fail(
-      "signer.request_failed",
+      remoteCode,
       typeof detail === "string" && detail.trim()
         ? detail.slice(0, 320)
         : "No se pudo completar la operación del puesto local.",
-      response.status
+      response.status,
+      requestId,
+      retryable
     );
   }
   assertNoRestrictedMaterial(payload);
@@ -172,6 +436,26 @@ function validateMetadataOnlyEnvelope(value, label) {
   return value;
 }
 
+function validateRecoveryEnvelope(value, label, allowedKeys) {
+  validateMetadataOnlyEnvelope(value, label);
+  if (
+    value.ok !== true ||
+    !hasExactKeys(
+      value,
+      allowedKeys,
+      new Set([...allowedKeys].filter((key) => key !== "request_id"))
+    ) ||
+    value.cookie_material_exposed !== false ||
+    value.certificate_material_exposed !== false
+  ) {
+    fail(
+      "signer.workspace_recovery_envelope_invalid",
+      `${label} intentó ampliar el sobre de recuperación.`
+    );
+  }
+  return value;
+}
+
 function validateInstallationPayload(value, label = "El puesto local") {
   if (
     !value ||
@@ -195,14 +479,16 @@ function validateInstallationPayload(value, label = "El puesto local") {
   }
   const installation = value.installation;
   if (
-    !installation ||
-    typeof installation !== "object" ||
+    !hasExactKeys(installation, INSTALLATION_KEYS) ||
     installation.platform !== "windows" ||
     installation.status !== "candidate" ||
     !SHA256_PATTERN.test(String(installation.client_binding_sha256 || "")) ||
     !CLIENT_VERSION_PATTERN.test(String(installation.client_version || "")) ||
     String(installation.client_version || "").length > 48 ||
-    String(installation.station_label || "").trim().length < 3
+    String(installation.station_label || "").trim().length < 3 ||
+    String(installation.station_label || "").trim().length > 80 ||
+    /[\u0000-\u001f]/.test(String(installation.station_label || "")) ||
+    !validTimestamp(installation.registered_at)
   ) {
     fail(
       "signer.installation_contract_invalid",
@@ -216,10 +502,147 @@ function validateInstallationPayload(value, label = "El puesto local") {
   return value;
 }
 
-function validateWorkspacePayload(value, label = "La tarea recuperable") {
+async function validateSignerTaskPayload(task, label = "La tarea") {
+  if (!hasExactKeys(task, SIGNER_TASK_KEYS)) {
+    fail(
+      "signer.task_contract_invalid",
+      `${label} contiene campos inesperados o incompletos.`
+    );
+  }
+  for (const [field, value] of [
+    ["deliveryId", task.delivery_id],
+    ["caseId", task.case_id],
+    ["packageId", task.package_id],
+    ["destinationProfileId", task.destination_profile_id],
+    ["preparedByOperatorId", task.prepared_by_operator_id],
+  ]) {
+    exactUuid(value, field);
+  }
   if (
-    !value ||
-    typeof value !== "object" ||
+    !SHA256_PATTERN.test(String(task.package_manifest_sha256 || "")) ||
+    !SHA256_PATTERN.test(String(task.destination_profile_sha256 || "")) ||
+    !SHA256_PATTERN.test(String(task.task_fingerprint_sha256 || "")) ||
+    !CODE_PATTERN.test(String(task.destination_profile_code || "")) ||
+    !Number.isInteger(task.destination_profile_version) ||
+    task.destination_profile_version < 1 ||
+    !validTimestamp(task.prepared_at) ||
+    typeof task.destination_display_name !== "string" ||
+    task.destination_display_name.trim().length < 2 ||
+    task.destination_display_name.length > 240 ||
+    !["self", "representative"].includes(task.representation_mode) ||
+    !Number.isInteger(task.document_count) ||
+    task.document_count < 1 ||
+    !Array.isArray(task.items) ||
+    task.items.length !== task.document_count ||
+    task.items.length > 32
+  ) {
+    fail(
+      "signer.task_contract_invalid",
+      `${label} no conserva los identificadores y metadatos exactos.`
+    );
+  }
+  try {
+    const origin = new URL(task.portal_origin);
+    if (
+      origin.protocol !== "https:" ||
+      origin.username ||
+      origin.password ||
+      origin.origin !== task.portal_origin
+    ) {
+      throw new Error("origin");
+    }
+  } catch {
+    fail(
+      "signer.task_contract_invalid",
+      `${label} devolvió un origen de sede no válido.`
+    );
+  }
+
+  const preparation = task.portal_preparation;
+  if (
+    !hasExactKeys(preparation, PORTAL_PREPARATION_KEYS) ||
+    !CODE_PATTERN.test(String(preparation.form_code || "")) ||
+    !Array.isArray(preparation.fields) ||
+    preparation.fields.length < 1 ||
+    preparation.fields.length > 32
+  ) {
+    fail(
+      "signer.task_contract_invalid",
+      `${label} devolvió una hoja de sede no válida.`
+    );
+  }
+  const fieldCodes = new Set();
+  preparation.fields.forEach((field, index) => {
+    if (
+      !hasExactKeys(field, PORTAL_FIELD_KEYS) ||
+      !CODE_PATTERN.test(String(field.field_code || "")) ||
+      fieldCodes.has(field.field_code) ||
+      typeof field.label !== "string" ||
+      field.label.trim().length < 2 ||
+      field.label.length > 120 ||
+      typeof field.required !== "boolean" ||
+      typeof field.multiline !== "boolean" ||
+      !Number.isInteger(field.max_length) ||
+      field.max_length < 1 ||
+      field.max_length > 12_000 ||
+      field.step_order !== index + 1 ||
+      typeof field.value !== "string" ||
+      field.value.length > field.max_length ||
+      (field.required && !field.value.trim()) ||
+      (!field.multiline && field.value.includes("\n")) ||
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(field.value)
+    ) {
+      fail(
+        "signer.task_contract_invalid",
+        `${label} devolvió un campo de sede no verificable.`
+      );
+    }
+    fieldCodes.add(field.field_code);
+  });
+
+  const versionIds = new Set();
+  task.items.forEach((item, index) => {
+    if (!hasExactKeys(item, TASK_ITEM_KEYS)) {
+      fail(
+        "signer.task_contract_invalid",
+        `${label} devolvió metadatos documentales expandidos.`
+      );
+    }
+    exactUuid(item.package_item_id, "packageItemId");
+    const versionId = exactUuid(item.document_version_id, "documentVersionId");
+    if (
+      versionIds.has(versionId) ||
+      !SHA256_PATTERN.test(String(item.document_sha256 || "")) ||
+      item.item_order !== index + 1 ||
+      !CODE_PATTERN.test(String(item.field_code || "")) ||
+      typeof item.portal_filename !== "string" ||
+      !item.portal_filename ||
+      item.portal_filename.length > 180 ||
+      /[\\/\u0000-\u001f]/.test(item.portal_filename) ||
+      !MEDIA_TYPE_PATTERN.test(String(item.media_type || "")) ||
+      !Number.isInteger(item.size_bytes) ||
+      item.size_bytes < 1 ||
+      item.size_bytes > 25 * 1024 * 1024
+    ) {
+      fail(
+        "signer.task_contract_invalid",
+        `${label} devolvió un documento no verificable.`
+      );
+    }
+    versionIds.add(versionId);
+  });
+  if ((await canonicalTaskSha256(task)) !== task.task_fingerprint_sha256) {
+    fail(
+      "signer.task_fingerprint_mismatch",
+      `${label} no coincide con su huella criptográfica.`
+    );
+  }
+  return task;
+}
+
+async function validateWorkspacePayload(value, label = "La tarea recuperable") {
+  if (
+    !hasExactKeys(value, WORKSPACE_KEYS, REQUIRED_WORKSPACE_KEYS) ||
     value.workspace_contract_version !== RTM_SIGNER_WORKSPACE_CONTRACT_VERSION ||
     !["ready", "reg_session_expired"].includes(value.state) ||
     !Number.isInteger(value.attempt_number) ||
@@ -234,7 +657,15 @@ function validateWorkspacePayload(value, label = "La tarea recuperable") {
     value.certificate_stored_by_rtm !== false ||
     value.signature_automated !== false ||
     value.final_submit_automated !== false ||
-    value.external_effects_executed !== false
+    value.external_effects_executed !== false ||
+    typeof value.replayed !== "boolean" ||
+    typeof value.recovery_adopted !== "boolean" ||
+    !validTimestamp(value.updated_at) ||
+    !validTimestamp(value.claim_expires_at) ||
+    value.next_action !==
+      (value.state === "reg_session_expired"
+        ? "reauthenticate_reg_then_resume_from_rtm"
+        : "authenticate_reg_manually_when_local_bridge_is_authorized")
   ) {
     fail(
       "signer.workspace_contract_invalid",
@@ -254,6 +685,7 @@ function validateWorkspacePayload(value, label = "La tarea recuperable") {
   }
   exactUuid(value.workspace_id, "workspaceId");
   exactUuid(value.claim_id, "claimId");
+  await validateSignerTaskPayload(value.task, label);
   validateInstallationPayload(
     {
       station_contract_version: RTM_LOCAL_STATION_CONTRACT_VERSION,
@@ -271,6 +703,117 @@ function validateWorkspacePayload(value, label = "La tarea recuperable") {
     },
     label
   );
+  const hasRecoveredFrom = Object.hasOwn(value, "recovered_from");
+  if (hasRecoveredFrom !== value.recovery_adopted) {
+    fail(
+      "signer.workspace_contract_invalid",
+      `${label} devolvió un linaje de recuperación incoherente.`
+    );
+  }
+  if (hasRecoveredFrom) {
+    if (!hasExactKeys(value.recovered_from, RECOVERED_FROM_KEYS)) {
+      fail(
+        "signer.workspace_contract_invalid",
+        `${label} expandió el linaje de recuperación.`
+      );
+    }
+    const sourceWorkspaceId = exactUuid(
+      value.recovered_from.workspace_id,
+      "sourceWorkspaceId"
+    );
+    const sourceClaimId = exactUuid(
+      value.recovered_from.claim_id,
+      "sourceClaimId"
+    );
+    if (
+      sourceWorkspaceId === value.workspace_id ||
+      sourceClaimId === value.claim_id ||
+      !Number.isInteger(value.recovered_from.attempt_number) ||
+      value.recovered_from.attempt_number < 1 ||
+      value.recovered_from.attempt_number >= value.attempt_number
+    ) {
+      fail(
+        "signer.workspace_contract_invalid",
+        `${label} devolvió un linaje de recuperación imposible.`
+      );
+    }
+  }
+  return value;
+}
+
+function validateWorkspaceRecoveryCollection(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    value.recovery_contract_version !==
+      RTM_WORKSPACE_RECOVERY_CONTRACT_VERSION ||
+    !hasExactKeys(value, RECOVERY_COLLECTION_KEYS) ||
+    !Array.isArray(value.items) ||
+    value.items.length > 50 ||
+    value.item_count !== value.items.length ||
+    value.metadata_only !== true ||
+    value.browser_storage_required !== false ||
+    value.document_bytes_available !== false ||
+    value.cookie_material_available !== false ||
+    value.certificate_material_available !== false ||
+    value.external_effects_executed !== false
+  ) {
+    fail(
+      "signer.workspace_recovery_contract_invalid",
+      "La búsqueda recuperable no conserva el contrato durable y solo de metadatos."
+    );
+  }
+  exactUuid(value.installation_id, "installationId");
+  const workspaceIds = new Set();
+  const deliveryIds = new Set();
+  for (const item of value.items) {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      Array.isArray(item) ||
+      Object.keys(item).some((key) => !RECOVERY_ITEM_KEYS.has(key)) ||
+      !["ready", "reg_session_expired"].includes(item.state) ||
+      !Number.isInteger(item.attempt_number) ||
+      item.attempt_number < 1 ||
+      !Number.isInteger(item.document_count) ||
+      item.document_count < 1 ||
+      !validTimestamp(item.updated_at) ||
+      typeof item.destination_display_name !== "string" ||
+      !item.destination_display_name.trim() ||
+      item.destination_display_name.length > 240 ||
+      !SHA256_PATTERN.test(String(item.task_fingerprint_sha256 || "")) ||
+      !RECOVERY_STATUSES.has(item.recovery_status) ||
+      item.adoption_available !==
+        ["adoptable", "adoptable_supersession"].includes(
+          item.recovery_status
+        ) ||
+      item.rtm_draft_persisted !== true ||
+      item.reg_draft_persisted !== false ||
+      item.browser_storage_required !== false ||
+      item.document_bytes_available !== false ||
+      item.external_effects_executed !== false ||
+      (Object.hasOwn(item, "active_claim_expires_at") &&
+        !validTimestamp(item.active_claim_expires_at))
+    ) {
+      fail(
+        "signer.workspace_recovery_item_invalid",
+        "La búsqueda devolvió un borrador recuperable no verificable."
+      );
+    }
+    const workspaceId = exactUuid(item.workspace_id, "workspaceId");
+    const deliveryId = exactUuid(item.delivery_id, "deliveryId");
+    exactUuid(item.case_id, "caseId");
+    exactUuid(item.package_id, "packageId");
+    exactUuid(item.claim_id, "claimId");
+    if (workspaceIds.has(workspaceId) || deliveryIds.has(deliveryId)) {
+      fail(
+        "signer.workspace_recovery_item_invalid",
+        "La búsqueda devolvió borradores recuperables duplicados."
+      );
+    }
+    workspaceIds.add(workspaceId);
+    deliveryIds.add(deliveryId);
+  }
   return value;
 }
 
@@ -462,6 +1005,7 @@ export function createRtmSignerStationClient({
           "La toma no conserva la frontera local cerrada."
         );
       }
+      await validateSignerTaskPayload(claim.task, "La toma");
       return payload;
     },
 
@@ -477,6 +1021,7 @@ export function createRtmSignerStationClient({
         claim.local_activation_available !== false ||
         claim.browser_open_available !== false ||
         claim.certificate_stored_by_rtm !== false ||
+        claim.browser_session_shared !== false ||
         claim.external_effects_executed !== false
       ) {
         fail(
@@ -484,6 +1029,7 @@ export function createRtmSignerStationClient({
           "La toma recuperada no conserva la frontera local cerrada."
         );
       }
+      await validateSignerTaskPayload(claim.task, "La toma recuperada");
       return payload;
     },
 
@@ -590,6 +1136,136 @@ export function createRtmSignerStationClient({
       return payload;
     },
 
+    async discoverWorkspaceRecoveries(
+      installationId,
+      { signal = null, limit = 20 } = {}
+    ) {
+      const installation = safeUuid(installationId, "installationId");
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        fail(
+          "signer.workspace_recovery_limit_invalid",
+          "El límite de recuperación no es válido."
+        );
+      }
+      const payload = await jsonRequest(
+        `${RTM_SIGNER_STATION_API_PREFIX}/installations/${installation}` +
+          `/workspace-recoveries?limit=${limit}`,
+        { method: "GET", signal }
+      );
+      validateRecoveryEnvelope(
+        payload,
+        "La búsqueda recuperable",
+        RECOVERY_DISCOVERY_ENVELOPE_KEYS
+      );
+      validateWorkspaceRecoveryCollection(payload?.workspace_recoveries);
+      if (payload.workspace_recoveries.installation_id !== installation) {
+        fail(
+          "signer.workspace_recovery_binding_mismatch",
+          "La búsqueda recuperable pertenece a otro puesto local."
+        );
+      }
+      return payload;
+    },
+
+    async recoverWorkspace(
+      deliveryId,
+      installationId,
+      sourceWorkspaceId,
+      expectedTaskFingerprintSha256,
+      {
+        sourceClaimId,
+        sourceAttemptNumber,
+        signal = null,
+        idempotencyKey = "",
+      } = {}
+    ) {
+      const delivery = safeUuid(deliveryId, "deliveryId");
+      const installation = exactUuid(installationId, "installationId");
+      const sourceWorkspace = exactUuid(sourceWorkspaceId, "sourceWorkspaceId");
+      const sourceClaim = exactUuid(sourceClaimId, "sourceClaimId");
+      if (!Number.isInteger(sourceAttemptNumber) || sourceAttemptNumber < 1) {
+        fail(
+          "signer.workspace_recovery_attempt_invalid",
+          "La recuperación exige el intento exacto del borrador de origen."
+        );
+      }
+      const fingerprint = String(expectedTaskFingerprintSha256 || "")
+        .trim()
+        .toLowerCase();
+      if (!SHA256_PATTERN.test(fingerprint)) {
+        fail(
+          "signer.workspace_recovery_fingerprint_invalid",
+          "La recuperación exige la huella exacta de la tarea."
+        );
+      }
+      if (!IDEMPOTENCY_KEY_PATTERN.test(String(idempotencyKey))) {
+        fail(
+          "signer.idempotency_key_required",
+          "La adopción recuperable exige una clave válida."
+        );
+      }
+      const payload = await jsonRequest(
+        `${RTM_SIGNER_STATION_API_PREFIX}/tasks/${delivery}/workspace-recovery`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": String(idempotencyKey),
+          },
+          body: JSON.stringify({
+            installation_id: installation,
+            source_workspace_id: sourceWorkspace,
+            expected_task_fingerprint_sha256: fingerprint,
+          }),
+          signal,
+        }
+      );
+      validateRecoveryEnvelope(
+        payload,
+        "La adopción recuperable",
+        RECOVERY_WORKSPACE_ENVELOPE_KEYS
+      );
+      await validateWorkspacePayload(payload?.workspace);
+      validateWorkspaceBinding(payload.workspace, {
+        deliveryId: delivery,
+        claimId: payload.workspace.claim_id,
+        installationId: installation,
+      });
+      if (payload.workspace.task.task_fingerprint_sha256 !== fingerprint) {
+        fail(
+          "signer.workspace_recovery_binding_mismatch",
+          "La recuperación devolvió otra huella de tarea."
+        );
+      }
+      const sameWorkspace = payload.workspace.workspace_id === sourceWorkspace;
+      const recoveredFrom = payload.workspace.recovered_from;
+      const recoveryAdopted = payload.workspace.recovery_adopted;
+      if (
+        typeof recoveryAdopted !== "boolean" ||
+        (!sameWorkspace && recoveryAdopted !== true) ||
+        (recoveryAdopted === false && recoveredFrom !== undefined) ||
+        (sameWorkspace &&
+          (payload.workspace.claim_id !== sourceClaim ||
+            payload.workspace.attempt_number !== sourceAttemptNumber)) ||
+        (recoveryAdopted === true &&
+          (!recoveredFrom ||
+            !Number.isInteger(recoveredFrom.attempt_number) ||
+            recoveredFrom.attempt_number < 1 ||
+            recoveredFrom.attempt_number >= payload.workspace.attempt_number ||
+            (!sameWorkspace &&
+              (recoveredFrom.workspace_id !== sourceWorkspace ||
+                recoveredFrom.claim_id !== sourceClaim ||
+                recoveredFrom.attempt_number !== sourceAttemptNumber ||
+                payload.workspace.attempt_number !== sourceAttemptNumber + 1))))
+      ) {
+        fail(
+          "signer.workspace_recovery_binding_mismatch",
+          "La recuperación no acredita el borrador de origen solicitado."
+        );
+      }
+      return payload;
+    },
+
     async prepareWorkspace(
       deliveryId,
       claimId,
@@ -615,7 +1291,7 @@ export function createRtmSignerStationClient({
         }
       );
       validateMetadataOnlyEnvelope(payload, "La preparación recuperable");
-      validateWorkspacePayload(payload?.workspace);
+      await validateWorkspacePayload(payload?.workspace);
       validateWorkspaceBinding(payload.workspace, {
         deliveryId: delivery,
         claimId: claim,
@@ -641,7 +1317,7 @@ export function createRtmSignerStationClient({
         { method: "GET", signal }
       );
       validateMetadataOnlyEnvelope(payload, "La consulta recuperable");
-      validateWorkspacePayload(payload?.workspace);
+      await validateWorkspacePayload(payload?.workspace);
       validateWorkspaceBinding(payload.workspace, {
         deliveryId: delivery,
         claimId: claim,
@@ -721,7 +1397,7 @@ export function createRtmSignerStationClient({
       }
     );
     validateMetadataOnlyEnvelope(payload, "La transición recuperable");
-    validateWorkspacePayload(payload?.workspace);
+    await validateWorkspacePayload(payload?.workspace);
     validateWorkspaceBinding(payload.workspace, {
       deliveryId: delivery,
       claimId: claim,

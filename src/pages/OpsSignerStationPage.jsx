@@ -270,6 +270,131 @@ function StationCandidateCard({ station, busy, onDescriptorSelected }) {
   );
 }
 
+function WorkspaceRecoveryCard({
+  station,
+  recoveries,
+  loading,
+  busyWorkspaceId,
+  onRefresh,
+  onRecover,
+}) {
+  if (!station?.installation) return null;
+  const statusCopy = {
+    current_session: "Disponible en esta sesión",
+    adoptable: "Reserva anterior finalizada",
+    adoptable_supersession: "Reserva anterior del mismo puesto",
+    blocked_active_claim: "Bloqueado por otra reserva activa",
+    blocked_session_rollback: "Sesión anterior sustituida",
+  };
+  return (
+    <section className="mb-5 rounded-3xl border border-violet-200 bg-violet-50 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-3xl">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-800">
+            Recuperación durable · sin storage de recuperación
+          </p>
+          <h2 className="mt-2 text-xl font-black">
+            Borradores guardados en RTM para este PC
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-violet-950">
+            Al volver a entrar, selecciona el mismo descriptor local. RTM busca
+            el borrador por firmante, dispositivo, instalación y huella; el
+            flujo no escribe almacenamiento web de recuperación ni guarda
+            bearer, contraseña, documentos o certificado.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading || Boolean(busyWorkspaceId)}
+          className="rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-black text-violet-900 disabled:opacity-50"
+        >
+          {loading ? "Buscando…" : "Buscar borradores"}
+        </button>
+      </div>
+
+      {recoveries === null ? (
+        <p className="mt-4 text-sm text-violet-950">
+          La búsqueda se ejecutará al comprobar el descriptor de este puesto.
+        </p>
+      ) : recoveries.length ? (
+        <div className="mt-4 grid gap-3">
+          {recoveries.map((recovery) => {
+            const blocked =
+              recovery.recovery_status === "blocked_active_claim" ||
+              recovery.recovery_status === "blocked_session_rollback";
+            const rollbackBlocked =
+              recovery.recovery_status === "blocked_session_rollback";
+            const supersedes =
+              recovery.recovery_status === "adoptable_supersession";
+            const current = recovery.recovery_status === "current_session";
+            return (
+              <article
+                key={recovery.workspace_id}
+                className="rounded-2xl border border-violet-200 bg-white p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-black text-slate-950">
+                      {recovery.destination_display_name}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Intento {recovery.attempt_number} · {recovery.document_count}{" "}
+                      {recovery.document_count === 1 ? "documento" : "documentos"}
+                    </p>
+                    <p
+                      className="mt-1 text-xs text-slate-500"
+                      title={recovery.task_fingerprint_sha256}
+                    >
+                      Huella: {shortHash(recovery.task_fingerprint_sha256)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-900">
+                    {statusCopy[recovery.recovery_status]}
+                  </span>
+                </div>
+                {supersedes ? (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-950">
+                    La reserva anterior pertenece al mismo firmante y a este
+                    mismo puesto. Recuperarla la sustituirá de forma auditada.
+                  </p>
+                ) : null}
+                {blocked ? (
+                  <p className="mt-3 text-sm font-semibold text-red-800">
+                    {rollbackBlocked
+                      ? "Esta sesión ya fue sustituida por una recuperación posterior. Inicia una sesión nueva para continuar sin retroceder el historial."
+                      : "RTM no permite adoptar este borrador mientras exista una reserva activa de otro contexto."}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onRecover(recovery)}
+                  disabled={blocked || loading || Boolean(busyWorkspaceId)}
+                  className="mt-4 rounded-xl bg-violet-800 px-4 py-2 text-sm font-black text-white disabled:bg-slate-400"
+                >
+                  {busyWorkspaceId === recovery.workspace_id
+                    ? "Recuperando…"
+                    : blocked
+                      ? "Recuperación bloqueada"
+                      : current
+                        ? "Reabrir borrador"
+                        : supersedes
+                          ? "Recuperar y sustituir reserva anterior"
+                          : "Recuperar borrador"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-2xl border border-violet-200 bg-white p-4 text-sm text-violet-950">
+          No hay borradores recuperables para este firmante y este puesto.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function ClaimReview({
   claim,
   workspace,
@@ -448,6 +573,7 @@ export default function OpsSignerStationPage() {
   const activeSessionIdRef = useRef("");
   const loginLockRef = useRef(false);
   const loginAbortRef = useRef(null);
+  const recoveryAbortRef = useRef(null);
   const mountedRef = useRef(true);
   const commandKeysRef = useRef(new Map());
   const [authStatus, setAuthStatus] = useState(null);
@@ -457,12 +583,15 @@ export default function OpsSignerStationPage() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [queueBusy, setQueueBusy] = useState(false);
   const [stationBusy, setStationBusy] = useState(false);
+  const [recoveriesBusy, setRecoveriesBusy] = useState(false);
+  const [recoveryBusyWorkspaceId, setRecoveryBusyWorkspaceId] = useState("");
   const [busyDeliveryId, setBusyDeliveryId] = useState("");
   const [error, setError] = useState("");
   const [queue, setQueue] = useState([]);
   const [claims, setClaims] = useState({});
   const [station, setStation] = useState(null);
   const [workspaces, setWorkspaces] = useState({});
+  const [workspaceRecoveries, setWorkspaceRecoveries] = useState(null);
   const [activeDeliveryId, setActiveDeliveryId] = useState("");
 
   const getAuthHeaders = useCallback(() => {
@@ -479,14 +608,19 @@ export default function OpsSignerStationPage() {
     }
     bearerRef.current = "";
     activeSessionIdRef.current = "";
+    recoveryAbortRef.current?.abort();
+    recoveryAbortRef.current = null;
     commandKeysRef.current.clear();
     setSession(null);
     setQueue([]);
     setClaims({});
     setStation(null);
     setWorkspaces({});
+    setWorkspaceRecoveries(null);
     setQueueBusy(false);
     setStationBusy(false);
+    setRecoveriesBusy(false);
+    setRecoveryBusyWorkspaceId("");
     setBusyDeliveryId("");
     setActiveDeliveryId("");
     setError("La sesión individual ha caducado. Vuelve a identificarte.");
@@ -532,6 +666,7 @@ export default function OpsSignerStationPage() {
     return () => {
       mountedRef.current = false;
       loginAbortRef.current?.abort();
+      recoveryAbortRef.current?.abort();
       const token = bearerRef.current;
       bearerRef.current = "";
       activeSessionIdRef.current = "";
@@ -596,6 +731,7 @@ export default function OpsSignerStationPage() {
             ? current
             : Object.keys(nextClaims)[0] || ""
         );
+        return nextClaims;
       } catch (loadError) {
         if (
           !signal?.aborted &&
@@ -603,12 +739,54 @@ export default function OpsSignerStationPage() {
         ) {
           setError(loadError.message || "No se pudo cargar la cola de firma.");
         }
+        return null;
       } finally {
         if (
           !signal?.aborted &&
           activeSessionIdRef.current === expectedSessionId
         ) {
           setQueueBusy(false);
+        }
+      }
+    },
+    [client]
+  );
+
+  const loadWorkspaceRecoveries = useCallback(
+    async (installationId, { signal = null } = {}) => {
+      const expectedSessionId = activeSessionIdRef.current;
+      if (!expectedSessionId || !installationId) return;
+      setRecoveriesBusy(true);
+      setError("");
+      try {
+        const payload = await client.discoverWorkspaceRecoveries(
+          installationId,
+          { signal, limit: 20 }
+        );
+        if (
+          signal?.aborted ||
+          activeSessionIdRef.current !== expectedSessionId
+        ) {
+          return;
+        }
+        setWorkspaceRecoveries(payload.workspace_recoveries.items);
+      } catch (recoveryError) {
+        if (
+          !signal?.aborted &&
+          activeSessionIdRef.current === expectedSessionId
+        ) {
+          setWorkspaceRecoveries(null);
+          setError(
+            recoveryError.message ||
+              "No se pudieron buscar los borradores recuperables de este PC."
+          );
+        }
+      } finally {
+        if (
+          !signal?.aborted &&
+          activeSessionIdRef.current === expectedSessionId
+        ) {
+          setRecoveriesBusy(false);
         }
       }
     },
@@ -681,7 +859,7 @@ export default function OpsSignerStationPage() {
           }).catch(() => {});
         }
         throw new Error(
-          "Esta pantalla exige la cuenta separada rtm.signer con sus dos permisos mínimos."
+          "Esta pantalla exige la cuenta separada rtm.signer con sus tres permisos exactos."
         );
       }
       if (controller.signal.aborted || !mountedRef.current) {
@@ -701,6 +879,7 @@ export default function OpsSignerStationPage() {
       setEmail("");
       setStation(null);
       setWorkspaces({});
+      setWorkspaceRecoveries(null);
       setSession({
         sessionId: payload.session_id,
         expiresAt: payload.expires_at,
@@ -723,6 +902,8 @@ export default function OpsSignerStationPage() {
   }
 
   async function logout() {
+    recoveryAbortRef.current?.abort();
+    recoveryAbortRef.current = null;
     const token = bearerRef.current;
     bearerRef.current = "";
     activeSessionIdRef.current = "";
@@ -733,8 +914,11 @@ export default function OpsSignerStationPage() {
     setClaims({});
     setStation(null);
     setWorkspaces({});
+    setWorkspaceRecoveries(null);
     setQueueBusy(false);
     setStationBusy(false);
+    setRecoveriesBusy(false);
+    setRecoveryBusyWorkspaceId("");
     setBusyDeliveryId("");
     setActiveDeliveryId("");
     setError("");
@@ -857,11 +1041,16 @@ export default function OpsSignerStationPage() {
       });
       if (activeSessionIdRef.current !== expectedSessionId) return;
       setStation(payload.station);
+      setWorkspaceRecoveries(null);
+      await loadWorkspaceRecoveries(
+        payload.station.installation.installation_id
+      );
     } catch (stationError) {
       if (activeSessionIdRef.current !== expectedSessionId) return;
       if (!station) {
         setStation(null);
         setWorkspaces({});
+        setWorkspaceRecoveries(null);
       }
       setError(
         stationError.message || "No se pudo registrar el candidato de este PC."
@@ -869,6 +1058,107 @@ export default function OpsSignerStationPage() {
     } finally {
       if (activeSessionIdRef.current === expectedSessionId) {
         setStationBusy(false);
+      }
+    }
+  }
+
+  async function recoverDurableWorkspace(recovery) {
+    const installationId = station?.installation?.installation_id || "";
+    if (!installationId) {
+      setError("Vincula primero el descriptor candidato de este PC.");
+      return;
+    }
+    if (
+      recovery?.recovery_status !== "current_session" &&
+      recovery?.adoption_available !== true
+    ) {
+      setError(
+        "Este borrador mantiene una reserva activa que RTM no permite sustituir."
+      );
+      return;
+    }
+    const expectedSessionId = activeSessionIdRef.current;
+    if (!expectedSessionId || recoveryAbortRef.current) return;
+    const controller = new AbortController();
+    recoveryAbortRef.current = controller;
+    const deliveryId = recovery.delivery_id;
+    const sourceWorkspaceId = recovery.workspace_id;
+    const fingerprint = recovery.task_fingerprint_sha256;
+    const commandScope = `recover:${sourceWorkspaceId}:${fingerprint}`;
+    setRecoveryBusyWorkspaceId(sourceWorkspaceId);
+    setBusyDeliveryId(deliveryId);
+    setError("");
+    try {
+      const payload = await client.recoverWorkspace(
+        deliveryId,
+        installationId,
+        sourceWorkspaceId,
+        fingerprint,
+        {
+          sourceClaimId: recovery.claim_id,
+          sourceAttemptNumber: recovery.attempt_number,
+          signal: controller.signal,
+          idempotencyKey: retainedCommandKey(
+            commandScope,
+            "workspace-adopt"
+          ),
+        }
+      );
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      const claimPayload = await client.loadCurrentClaim(deliveryId, {
+        signal: controller.signal,
+      });
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      const recoveredWorkspace = payload.workspace;
+      const recoveredClaim = claimPayload.claim;
+      if (
+        recoveredClaim.claim_id !== recoveredWorkspace.claim_id ||
+        recoveredClaim.task?.delivery_id !== deliveryId ||
+        recoveredClaim.task?.task_fingerprint_sha256 !== fingerprint ||
+        recoveredWorkspace.task?.task_fingerprint_sha256 !== fingerprint
+      ) {
+        throw new Error(
+          "La reserva recuperada no coincide con el borrador durable solicitado."
+        );
+      }
+      const refreshedClaims = await loadQueue({ signal: controller.signal });
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      if (
+        !refreshedClaims ||
+        refreshedClaims[deliveryId]?.claim_id !== recoveredClaim.claim_id
+      ) {
+        throw new Error(
+          "La cola no confirmó la reserva recuperada; vuelve a intentarlo antes de continuar."
+        );
+      }
+      setClaims((current) => ({
+        ...current,
+        [deliveryId]: recoveredClaim,
+      }));
+      setWorkspaces((current) => ({
+        ...current,
+        [deliveryId]: recoveredWorkspace,
+      }));
+      setActiveDeliveryId(deliveryId);
+      forgetCommandKey(commandScope);
+      if (activeSessionIdRef.current === expectedSessionId) {
+        await loadWorkspaceRecoveries(installationId, {
+          signal: controller.signal,
+        });
+      }
+    } catch (recoveryError) {
+      if (activeSessionIdRef.current !== expectedSessionId) return;
+      setError(
+        recoveryError.message ||
+          "No se pudo adoptar el borrador durable en esta sesión."
+      );
+    } finally {
+      if (recoveryAbortRef.current === controller) {
+        recoveryAbortRef.current = null;
+      }
+      if (activeSessionIdRef.current === expectedSessionId) {
+        setRecoveryBusyWorkspaceId("");
+        setBusyDeliveryId("");
       }
     }
   }
@@ -1039,6 +1329,19 @@ export default function OpsSignerStationPage() {
               station={station}
               busy={stationBusy}
               onDescriptorSelected={registerStationDescriptor}
+            />
+
+            <WorkspaceRecoveryCard
+              station={station}
+              recoveries={workspaceRecoveries}
+              loading={recoveriesBusy}
+              busyWorkspaceId={recoveryBusyWorkspaceId}
+              onRefresh={() =>
+                loadWorkspaceRecoveries(
+                  station?.installation?.installation_id || ""
+                )
+              }
+              onRecover={recoverDurableWorkspace}
             />
 
             {error ? (
