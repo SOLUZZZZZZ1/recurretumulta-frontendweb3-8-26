@@ -37,7 +37,10 @@ class OpsFollowupsContractTest(unittest.TestCase):
 
     def test_global_page_loads_protected_read_only_endpoint(self):
         self.assertIn("/ops/followups?status=all&limit=500", self.followups)
-        self.assertIn('"X-Operator-Token": token', self.followups)
+        self.assertIn("useOpsAuth", self.followups)
+        self.assertIn("authFetch", self.followups)
+        self.assertNotIn("X-Operator-Token", self.followups)
+        self.assertNotIn("localStorage", self.followups)
         self.assertNotIn('method: "POST"', self.followups)
         self.assertNotIn('method: "DELETE"', self.followups)
 
@@ -74,7 +77,7 @@ class OpsFollowupsContractTest(unittest.TestCase):
 
     def test_case_detail_controls_clear_the_overhanging_brand(self):
         self.assertEqual(
-            self.detail.count('className="sr-container ops-case-main"'), 4
+            self.detail.count('className="sr-container ops-case-main"'), 3
         )
         self.assertNotIn('className="sr-container py-', self.detail)
         self.assertRegex(
@@ -89,7 +92,7 @@ class OpsFollowupsContractTest(unittest.TestCase):
         self.assertIn("Ver todas las solicitudes", vehicle_removal)
         self.assertIn('to="/ops/followups"', vehicle_removal)
 
-    def test_returns_to_ops_use_a_full_direct_navigation(self):
+    def test_returns_to_ops_preserve_the_memory_only_spa_session(self):
         for relative in (
             "src/pages/OpsCaseDetail.jsx",
             "src/pages/OpsFollowups.jsx",
@@ -98,8 +101,8 @@ class OpsFollowupsContractTest(unittest.TestCase):
         ):
             with self.subTest(relative=relative):
                 source = read(ROOT / relative)
-                self.assertIn('href="/ops"', source)
-                self.assertNotIn('to="/ops"', source)
+                self.assertIn('to="/ops"', source)
+                self.assertNotIn('href="/ops"', source)
 
 
 if __name__ == "__main__":

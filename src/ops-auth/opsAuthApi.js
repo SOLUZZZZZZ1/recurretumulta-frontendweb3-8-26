@@ -1,0 +1,332 @@
+export const OPS_AUTH_STATUS_ROUTE = "/api/ops/auth/status";
+export const OPS_AUTH_LOGIN_ROUTE = "/api/ops/auth/login";
+export const OPS_AUTH_LOGOUT_ROUTE = "/api/ops/auth/logout";
+
+const BEARER_PATTERN = /^[A-Za-z0-9._~-]{32,2048}$/;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OPS_AUTHENTICATED_PATH_PREFIXES = Object.freeze(["/api/ops/"]);
+const INVALID_INTERNAL_URL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+const ENCODED_PATH_SEPARATOR = /%(?:2f|5c)/i;
+
+export class OpsAuthError extends Error {
+  constructor(code, message, status = null) {
+    super(message);
+    this.name = "OpsAuthError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+function fail(code, message, status = null) {
+  throw new OpsAuthError(code, message, status);
+}
+
+function requireFetch(fetchImpl) {
+  if (typeof fetchImpl !== "function") {
+    fail("ops_auth.fetch_required", "No hay transporte seguro disponible.");
+  }
+  return fetchImpl;
+}
+
+function requireEmail(value) {
+  const email = String(value || "").trim();
+  if (email.length < 3 || email.length > 320 || !EMAIL_PATTERN.test(email)) {
+    fail("ops_auth.email_invalid", "El email de operador no es válido.");
+  }
+  return email;
+}
+
+function requirePassword(value) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 256 ||
+    value.includes("\0")
+  ) {
+    fail("ops_auth.password_invalid", "La contraseña de operador no es válida.");
+  }
+  return value;
+}
+
+export function requireOpsBearer(value) {
+  if (typeof value !== "string" || !BEARER_PATTERN.test(value)) {
+    fail("ops_auth.bearer_invalid", "La sesión individual no es válida.", 401);
+  }
+  return value;
+}
+
+export function buildOpsAuthenticatedRequest({
+  url,
+  bearerToken,
+  options = {},
+} = {}) {
+  const rawPath = typeof url === "string" ? url.split(/[?#]/, 1)[0] : "";
+  if (
+    typeof url !== "string" ||
+    !url.startsWith("/api/") ||
+    INVALID_INTERNAL_URL_CHARACTERS.test(url) ||
+    rawPath.includes("\\") ||
+    ENCODED_PATH_SEPARATOR.test(rawPath) ||
+    !options ||
+    typeof options !== "object" ||
+    Array.isArray(options)
+  ) {
+    fail(
+      "ops_auth.api_route_required",
+      "La sesión individual solo puede usarse con rutas internas de RTM."
+    );
+  }
+
+  let target;
+  let decodedPath;
+  try {
+    target = new URL(url, "https://rtm.invalid");
+    decodedPath = decodeURIComponent(target.pathname);
+  } catch {
+    fail("ops_auth.api_route_invalid", "La ruta interna no es válida.");
+  }
+  if (
+    target.origin !== "https://rtm.invalid" ||
+    !OPS_AUTHENTICATED_PATH_PREFIXES.some((prefix) =>
+      target.pathname.startsWith(prefix)
+    ) ||
+    target.username ||
+    target.password ||
+    target.hash ||
+    /[\\\u0000-\u001f\u007f]/.test(decodedPath) ||
+    decodedPath.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
+    fail("ops_auth.api_route_invalid", "La ruta interna no es válida.");
+  }
+
+  const headers = new Headers(options.headers || {});
+  headers.delete("Authorization");
+  headers.delete("X-Operator-Token");
+  headers.delete("X-Operator-Actor");
+  headers.delete("X-RTM-Device");
+  headers.set("Authorization", `Bearer ${requireOpsBearer(bearerToken)}`);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+
+  return {
+    url,
+    options: {
+      ...options,
+      headers,
+      cache: "no-store",
+      credentials: "same-origin",
+      mode: "same-origin",
+      redirect: "error",
+      referrerPolicy: "same-origin",
+    },
+  };
+}
+
+function publicHttpMessage(status, operation) {
+  if (status === 401) return "El email o la contraseña no son correctos.";
+  if (status === 403) return "Esta cuenta no tiene acceso a OPS.";
+  if (status === 429) return "Demasiados intentos. Espera antes de probar de nuevo.";
+  if (status === 503) return "El acceso individual de OPS no está disponible.";
+  return operation === "status"
+    ? "No se pudo comprobar el acceso individual de OPS."
+    : "No se pudo iniciar la sesión individual de OPS.";
+}
+
+async function readJson(response, operation) {
+  if (!response || typeof response.ok !== "boolean") {
+    fail("ops_auth.response_invalid", "El servicio de identidad no respondió correctamente.");
+  }
+  const text = await response.text().catch(() => "");
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    fail(
+      "ops_auth.response_not_json",
+      "El servicio de identidad devolvió una respuesta no válida.",
+      response.status ?? null
+    );
+  }
+  if (!response.ok) {
+    fail(
+      `ops_auth.${operation}_rejected`,
+      publicHttpMessage(response.status, operation),
+      response.status ?? null
+    );
+  }
+  return payload;
+}
+
+function baseOptions(signal = null) {
+  const options = {
+    cache: "no-store",
+    credentials: "same-origin",
+    redirect: "error",
+    referrerPolicy: "same-origin",
+  };
+  if (signal) options.signal = signal;
+  return options;
+}
+
+export async function readOpsAuthStatus({
+  signal = null,
+  fetchImpl = globalThis.fetch?.bind(globalThis),
+} = {}) {
+  let response;
+  try {
+    response = await requireFetch(fetchImpl)(OPS_AUTH_STATUS_ROUTE, {
+      ...baseOptions(signal),
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    if (signal?.aborted) fail("ops_auth.request_aborted", "Operación cancelada.");
+    fail("ops_auth.transport_failed", "No se pudo conectar con el servicio de identidad.");
+  }
+  const payload = await readJson(response, "status");
+  if (
+    payload?.ok !== true ||
+    typeof payload?.individual_login_enabled !== "boolean" ||
+    payload?.configuration_valid !== true ||
+    payload?.staging_only !== true ||
+    payload?.shared_ops_login_accepted !== false
+  ) {
+    fail(
+      "ops_auth.status_contract_invalid",
+      "El estado del acceso individual no cumple el contrato de staging."
+    );
+  }
+  return Object.freeze({
+    individualLoginEnabled: payload.individual_login_enabled,
+    configurationValid: payload.configuration_valid,
+    sharedOpsLoginAccepted: false,
+  });
+}
+
+async function closeTokenCandidate(token, fetchImpl) {
+  if (!BEARER_PATTERN.test(String(token || ""))) return;
+  await fetchImpl(OPS_AUTH_LOGOUT_ROUTE, {
+    ...baseOptions(),
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  }).catch(() => {});
+}
+
+function validateOperator(value) {
+  if (!value || typeof value !== "object") {
+    fail("ops_auth.operator_invalid", "El servidor no identificó al operador.");
+  }
+  if (
+    !UUID_PATTERN.test(String(value.id || "")) ||
+    !EMAIL_PATTERN.test(String(value.email || "")) ||
+    typeof value.display_name !== "string" ||
+    !Array.isArray(value.permissions) ||
+    typeof value.must_change_password !== "boolean" ||
+    value.mfa_required !== false
+  ) {
+    fail(
+      "ops_auth.operator_contract_invalid",
+      "La cuenta requiere controles de identidad que OPS todavía no puede completar."
+    );
+  }
+  return Object.freeze({
+    id: value.id,
+    email: value.email,
+    displayName: value.display_name,
+    roleCode: typeof value.role_code === "string" ? value.role_code : "",
+    permissions: Object.freeze([...value.permissions]),
+    mustChangePassword: value.must_change_password,
+    mfaRequired: value.mfa_required,
+  });
+}
+
+export async function loginOpsOperator({
+  email,
+  password,
+  signal = null,
+  fetchImpl = globalThis.fetch?.bind(globalThis),
+} = {}) {
+  const exactFetch = requireFetch(fetchImpl);
+  const submittedEmail = requireEmail(email);
+  const submittedPassword = requirePassword(password);
+  let response;
+  try {
+    response = await exactFetch(OPS_AUTH_LOGIN_ROUTE, {
+      ...baseOptions(signal),
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: submittedEmail, password: submittedPassword }),
+    });
+  } catch {
+    if (signal?.aborted) fail("ops_auth.request_aborted", "Operación cancelada.");
+    fail("ops_auth.transport_failed", "No se pudo conectar con el servicio de identidad.");
+  }
+
+  const payload = await readJson(response, "login");
+  const tokenCandidate = String(payload?.token || "");
+  try {
+    if (
+      payload?.ok !== true ||
+      payload?.token_type !== "bearer" ||
+      payload?.shared_ops_login_accepted !== false ||
+      !UUID_PATTERN.test(String(payload?.session_id || "")) ||
+      !UUID_PATTERN.test(String(payload?.device_id || "")) ||
+      typeof payload?.expires_at !== "string" ||
+      typeof payload?.absolute_expires_at !== "string"
+    ) {
+      fail(
+        "ops_auth.login_contract_invalid",
+        "El servidor no devolvió una sesión individual válida."
+      );
+    }
+    const bearerToken = requireOpsBearer(tokenCandidate);
+    const operator = validateOperator(payload.operator);
+    return Object.freeze({
+      bearerToken,
+      sessionId: payload.session_id,
+      deviceId: payload.device_id,
+      expiresAt: payload.expires_at,
+      absoluteExpiresAt: payload.absolute_expires_at,
+      operator,
+    });
+  } catch (error) {
+    await closeTokenCandidate(tokenCandidate, exactFetch);
+    throw error;
+  }
+}
+
+export async function logoutOpsOperator({
+  bearerToken,
+  signal = null,
+  keepalive = false,
+  fetchImpl = globalThis.fetch?.bind(globalThis),
+} = {}) {
+  const token = requireOpsBearer(bearerToken);
+  let response;
+  try {
+    response = await requireFetch(fetchImpl)(OPS_AUTH_LOGOUT_ROUTE, {
+      ...baseOptions(signal),
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      keepalive,
+    });
+  } catch {
+    if (signal?.aborted) fail("ops_auth.request_aborted", "Operación cancelada.");
+    fail("ops_auth.logout_transport_failed", "No se pudo confirmar el cierre remoto.");
+  }
+  const payload = await readJson(response, "logout");
+  if (payload?.ok !== true || payload?.status !== "closed") {
+    fail("ops_auth.logout_contract_invalid", "El servidor no confirmó el cierre de sesión.");
+  }
+  return Object.freeze({ closed: true });
+}

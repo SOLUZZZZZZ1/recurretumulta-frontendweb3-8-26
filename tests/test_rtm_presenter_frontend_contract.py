@@ -25,46 +25,50 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         page = (ROOT / "src" / "pages" / "OpsPresenterPage.jsx").read_text(
             encoding="utf-8"
         )
+        auth = (ROOT / "src" / "ops-auth" / "OpsAuthContext.jsx").read_text(
+            encoding="utf-8"
+        )
+        authorization = (
+            ROOT / "src" / "ops-auth" / "opsAuthorization.js"
+        ).read_text(encoding="utf-8")
         self.assertIn("OpsPresenterPage", app)
         self.assertIn('path="/ops/case/:caseId/presenter"', app)
+        self.assertIn("OpsWorkspaceRoute", app)
         self.assertIn("RtmPresenterWorkspace", page)
-        self.assertIn("onUnauthorized={presenterUnauthorized}", page)
-        self.assertIn("activeSessionIdRef.current !== expectedSessionId", page)
+        self.assertIn("fetchImpl: authFetch", page)
+        self.assertIn("apiClient={presenterClient}", page)
         self.assertIn('key={`${session.sessionId}:${activeCaseId || ""}`}', page)
         self.assertIn("onOpenCase={openPresenterCase}", page)
-        self.assertIn('typeof mustChangePassword !== "boolean"', page)
-        self.assertIn("if (mustChangePassword)", page)
-        self.assertIn("mfa_required !== false", page)
-        self.assertIn('`${API}/ops/auth/logout`', page)
-        self.assertIn("authStatus?.individual_login_enabled !== true", page)
-        self.assertIn(
-            "La autenticación individual de RTM Presenter no está habilitada.",
-            page,
-        )
+        self.assertIn("useOpsAuth", page)
+        self.assertIn("invalidateSession(session.sessionId)", page)
+        self.assertIn("OpsAuthProvider", auth)
+        self.assertIn('"ops.view"', authorization)
+        self.assertIn('"rtm.operator"', authorization)
+        self.assertIn('"rtm.supervisor"', authorization)
 
     def test_temporary_password_onboarding_is_memory_only_and_requires_relogin(self):
         page = (ROOT / "src" / "pages" / "OpsPresenterPage.jsx").read_text(
             encoding="utf-8"
         )
+        auth = (ROOT / "src" / "ops-auth" / "OpsAuthContext.jsx").read_text(
+            encoding="utf-8"
+        )
         onboarding = source("rtmOperatorOnboardingApi.js")
-        combined = page + onboarding
+        combined = page + auth + onboarding
 
-        self.assertIn("TemporaryPasswordChangeCard", page)
-        self.assertIn("changeTemporaryOperatorPassword", page)
-        self.assertIn("setPassword(\"\")", page)
-        self.assertIn("setTemporaryPassword(\"\")", page)
-        self.assertIn("setReplacementPassword(\"\")", page)
-        self.assertIn("setReplacementPasswordConfirmation(\"\")", page)
-        self.assertIn('if (mustChangePassword)', page)
-        self.assertIn('payload?.operator?.mfa_required !== false', page)
+        self.assertIn("InitialPasswordCard", auth)
+        self.assertIn("changeTemporaryOperatorPassword", auth)
+        self.assertIn('setPassword("")', auth)
+        self.assertIn("clearSensitiveInput", auth)
+        self.assertIn("authenticated.operator.mustChangePassword", auth)
         self.assertIn('"/api/ops/auth/password/change"', onboarding)
         self.assertIn("current_password: current", onboarding)
         self.assertIn("new_password: next", onboarding)
         self.assertIn("payload?.password_returned !== false", onboarding)
         self.assertIn("payload?.reauthentication_required !== true", onboarding)
         self.assertIn("payload?.operator?.must_change_password !== false", onboarding)
-        self.assertIn("bearerRef.current = \"\"", page)
-        self.assertIn("Identifícate de nuevo con la contraseña nueva", page)
+        self.assertIn('bearerRef.current = ""', auth)
+        self.assertIn("Identifícate de nuevo con la contraseña nueva", auth)
         self.assertNotIn("localStorage", combined)
         self.assertNotIn("sessionStorage", combined)
         self.assertNotIn("document.cookie", combined)
@@ -490,6 +494,9 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         page = (ROOT / "src" / "pages" / "OpsPresenterPage.jsx").read_text(
             encoding="utf-8"
         )
+        auth = (ROOT / "src" / "ops-auth" / "OpsAuthContext.jsx").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("STAGING · SOLO CASOS SINTÉTICOS", component)
         self.assertIn('environment !== "staging"', model)
         self.assertIn("syntheticOnly !== true", model)
@@ -498,7 +505,7 @@ class RtmPresenterFrontendContractTest(unittest.TestCase):
         self.assertNotIn("localStorage", component + api + model + page)
         self.assertNotIn("sessionStorage", component + api + model + page)
         self.assertNotIn("https://", api)
-        self.assertIn("individual_login_enabled !== true", page)
+        self.assertIn("individualLoginEnabled !== true", auth)
 
     def test_workspace_is_not_a_nested_main_landmark(self):
         component = source("RtmPresenterWorkspace.jsx")

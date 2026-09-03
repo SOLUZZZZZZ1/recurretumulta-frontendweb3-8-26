@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
 
-async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+async function fetchJson(fetchImpl, url, options = {}) {
+  const r = await fetchImpl(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail?.message || data?.detail || `Error HTTP ${r.status}`);
   return data;
@@ -327,25 +328,18 @@ function QueueSection({ title, tone, items, emptyText }) {
 }
 
 export default function OPSQueueSmart() {
+  const { authFetch } = useOpsAuth();
   const [data, setData] = useState({ ok: true, count: 0, summary: {}, items: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(15);
 
-  const token = localStorage.getItem("ops_token") || "";
-
-  async function loadQueue() {
-    if (!token) {
-      setError("Falta token de operador. Entra primero al panel OPS.");
-      return;
-    }
+  const loadQueue = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetchJson(`${API}/ops/queue-smart`, {
-        headers: { "X-Operator-Token": token },
-      });
+      const res = await fetchJson(authFetch, `${API}/ops/queue-smart`);
       setData(res || { ok: true, count: 0, summary: {}, items: [] });
     } catch (e) {
       setError(e.message || "No se pudo cargar la cola inteligente");
@@ -353,12 +347,11 @@ export default function OPSQueueSmart() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [authFetch]);
 
   useEffect(() => {
-    loadQueue();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadQueue();
+  }, [loadQueue]);
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -474,12 +467,12 @@ export default function OPSQueueSmart() {
               </Link>
             ) : null}
 
-            <a
-              href="/ops"
+            <Link
+              to="/ops"
               className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
             >
               Volver
-            </a>
+            </Link>
           </div>
         </div>
       </div>

@@ -41,7 +41,9 @@ class RtmPresenterFrontendNoExportContractTest(unittest.TestCase):
         self.assertNotIn("localStorage.setItem", source)
         self.assertNotIn("sessionStorage", source)
         self.assertNotIn("indexedDB", source)
-        self.assertIn('localStorage.getItem("ops_token")', source)
+        self.assertNotIn("localStorage", source)
+        self.assertIn("useOpsAuth", source)
+        self.assertIn("authFetch", source)
         self.assertIn("no se guardan en el dispositivo", source)
 
     def test_vercel_uses_modern_rewrites_and_covers_ops_root(self):
@@ -94,7 +96,7 @@ class RtmPresenterFrontendNoExportContractTest(unittest.TestCase):
     def test_pro_cannot_claim_pdf_review_or_approve_without_receipt(self):
         source = _source(OPS_VIEWS[1])
         self.assertNotIn("/approve", source)
-        self.assertIn("Aprobación bloqueada", source)
+        self.assertIn("Aprobación CORE pendiente", source)
         self.assertIn('aria-describedby="approval-blocked-reason"', source)
         self.assertIn('id="approval-blocked-reason"', source)
         self.assertIn('aria-describedby="secure-pdf-review-reason"', source)

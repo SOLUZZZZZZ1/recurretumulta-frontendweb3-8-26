@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { publicFamilyLabel } from "../lib/opsFamilies.js";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+async function fetchJson(fetchImpl, url, options = {}) {
+  const response = await fetchImpl(url, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.detail || `Error ${response.status}`);
   return data;
@@ -103,34 +104,32 @@ function Stat({ label, value, tone = "default", onClick, active = false }) {
 
 export default function OpsFollowups() {
   const [searchParams] = useSearchParams();
-  const [token] = useState(() => localStorage.getItem("ops_token") || "");
+  const { authFetch } = useOpsAuth();
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [scope, setScope] = useState(() => (searchParams.get("scope") === "due" ? "due" : "all"));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const authed = token.trim().length > 10;
-
   const load = useCallback(async () => {
-    if (!authed) return;
     setLoading(true);
     setError("");
     try {
-      const result = await fetchJson(`${API}/ops/followups?status=all&limit=500`, {
-        headers: { "X-Operator-Token": token },
-      });
+      const result = await fetchJson(
+        authFetch,
+        `${API}/ops/followups?status=all&limit=500`
+      );
       setItems(result.items || []);
     } catch (err) {
       setError(err.message || "No se pudieron cargar los seguimientos");
     } finally {
       setLoading(false);
     }
-  }, [authed, token]);
+  }, [authFetch]);
 
   useEffect(() => {
-    if (authed) load();
-  }, [authed, load]);
+    load();
+  }, [load]);
 
   const stats = useMemo(() => {
     const pending = items.filter(isPending);
@@ -173,20 +172,6 @@ export default function OpsFollowups() {
     });
   }, [items, scope, search, status]);
 
-  if (!authed) {
-    return (
-      <main className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
-          <h1 className="text-2xl font-black text-slate-950">Acceso de operador necesario</h1>
-          <p className="mt-2 text-sm text-slate-600">Entra primero en OPS para consultar la bandeja global de seguimientos.</p>
-          <a href="/ops" className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">
-            Volver a OPS
-          </a>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-[1500px]">
@@ -198,9 +183,9 @@ export default function OpsFollowups() {
               <p className="mt-2 text-sm text-slate-300">Todos los avisos operativos, con acceso directo a su expediente.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a href="/ops" className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950">
+              <Link to="/ops" className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950">
                 ← Volver al panel
-              </a>
+              </Link>
               <button
                 type="button"
                 onClick={load}

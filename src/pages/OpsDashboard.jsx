@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { isPaidStatus } from "../lib/opsPayment.js";
 import { OPS_PUBLIC_FAMILIES, publicFamilyOf } from "../lib/opsFamilies.js";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
 
@@ -29,8 +30,8 @@ const TYPE_LABELS = {
   general_administration:"Otro trámite administrativo", other:"Otros",
 };
 
-async function fetchJson(url, options={}) {
-  const r = await fetch(url, options);
+async function fetchJson(fetchImpl, url, options={}) {
+  const r = await fetchImpl(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || `Error HTTP ${r.status}`);
   return data;
@@ -70,8 +71,7 @@ function Pill({children,tone="default"}){
 }
 
 export default function OpsDashboard(){
-  const [token,setToken]=useState(()=>localStorage.getItem("ops_token")||"");
-  const [pin,setPin]=useState("");
+  const { session, authFetch, logout, canSupervise } = useOpsAuth();
   const [items,setItems]=useState([]);
   const [due,setDue]=useState([]);
   const [family,setFamily]=useState("all");
@@ -81,36 +81,27 @@ export default function OpsDashboard(){
   const [loading,setLoading]=useState(false);
   const [tickLoading,setTickLoading]=useState(false);
   const [error,setError]=useState("");
-  const authed=token.trim().length>10;
-  const headers={"X-Operator-Token":token};
-
-  async function login(){
-    try{
-      const fd=new FormData(); fd.append("pin",pin.trim());
-      const d=await fetchJson(`${API}/ops/login`,{method:"POST",body:fd});
-      if(!d?.token) throw new Error("No se recibió token");
-      localStorage.setItem("ops_token",d.token); setToken(d.token); setPin("");
-    }catch(e){setError(e.message||"No se pudo iniciar sesión");}
-  }
-  async function load(){
-    if(!authed)return;
+  const tickLockRef=useRef(false);
+  const load=useCallback(async()=>{
     setLoading(true);setError("");
     try{
       const [q,f]=await Promise.all([
-        fetchJson(`${API}/ops/queue?status=all&limit=500`,{headers}),
-        fetchJson(`${API}/ops/followups/due?days=7&limit=500`,{headers}).catch(()=>({items:[]}))
+        fetchJson(authFetch, `${API}/ops/queue?status=all&limit=500`),
+        fetchJson(authFetch, `${API}/ops/followups/due?days=7&limit=500`).catch(()=>({items:[]}))
       ]);
       setItems(q.items||[]);setDue(f.items||[]);
     }catch(e){setError(e.message||"No se pudo cargar OPS CORE");}
     finally{setLoading(false);}
-  }
+  },[authFetch]);
   async function runTick(){
+    if(!canSupervise||tickLockRef.current)return;
+    tickLockRef.current=true;
     setTickLoading(true);setError("");
-    try{await fetchJson(`${API}/ops/automation/tick?limit=25`,{method:"POST",headers});await load();}
+    try{await fetchJson(authFetch, `${API}/ops/automation/tick?limit=25`,{method:"POST"});await load();}
     catch(e){setError(e.message||"No se pudo ejecutar automatización");}
-    finally{setTickLoading(false);}
+    finally{tickLockRef.current=false;setTickLoading(false);}
   }
-  useEffect(()=>{if(authed)load();},[authed]);
+  useEffect(()=>{void load();},[load]);
 
   const urgentIds=useMemo(()=>new Set(due.map(x=>String(x.case_id))),[due]);
   const paidPendingCount=useMemo(()=>items.filter(needsPaidReview).length,[items]);
@@ -154,31 +145,20 @@ export default function OpsDashboard(){
     });
   },[items,family,type,state,search,urgentIds]);
 
-  if(!authed)return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-    <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl border border-slate-200">
-      <div className="text-xs font-bold tracking-[.25em] text-slate-400">RTM · OPS CORE</div>
-      <h1 className="mt-2 text-2xl font-bold">Acceso operador</h1>
-      <input type="password" value={pin} onChange={e=>setPin(e.target.value)}
-        onKeyDown={e=>e.key==="Enter"&&login()} placeholder="PIN operador"
-        className="mt-5 w-full rounded-xl border px-4 py-3"/>
-      <button onClick={login} className="mt-3 w-full rounded-xl bg-slate-950 px-4 py-3 font-bold text-white">Entrar</button>
-      {error?<div className="mt-3 text-sm text-rose-700">{error}</div>:null}
-    </div>
-  </div>;
-
   return <main className="min-h-screen bg-slate-50 p-4 md:p-6"><div className="mx-auto max-w-[1500px]">
     <header className="rounded-[28px] bg-slate-950 p-5 text-white shadow-xl">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div><div className="text-[10px] uppercase tracking-[.35em] text-slate-400">RTM · Centro de operaciones</div>
           <h1 className="mt-1 text-3xl font-bold">OPS CORE</h1>
-          <p className="mt-2 text-sm text-slate-300">Familia → tipo de caso → estado → expediente.</p></div>
+          <p className="mt-2 text-sm text-slate-300">Familia → tipo de caso → estado → expediente.</p>
+          <p className="mt-1 text-xs text-slate-400">{session.operator.displayName || session.operator.email} · sesión individual</p></div>
         <div className="flex flex-wrap gap-2">
           <button onClick={load} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900">{loading?"Cargando…":"↻ Refrescar"}</button>
           <button onClick={()=>{setFamily("all");setType("all");setState("paid");}} className="rounded-xl bg-lime-300 px-4 py-2.5 text-sm font-bold text-slate-950">💶 {paidPendingCount} pagados por revisar</button>
-          <button onClick={runTick} className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold">{tickLoading?"Ejecutando…":"▶ Automatización"}</button>
+          {canSupervise?<button onClick={runTick} disabled={tickLoading} className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold disabled:opacity-60">{tickLoading?"Ejecutando…":"▶ Automatización"}</button>:null}
           <Link to="/ops/followups" className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950">⏰ Seguimientos{due.length?` (${due.length})`:""}</Link>
           <Link to="/ops/queue-smart" className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold">Cola técnica</Link>
-          <button onClick={()=>{localStorage.removeItem("ops_token");setToken("");}} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold">Salir</button>
+          <button onClick={logout} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold">Cerrar sesión</button>
         </div>
       </div>
     </header>

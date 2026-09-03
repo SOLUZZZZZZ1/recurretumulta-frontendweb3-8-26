@@ -36,6 +36,7 @@ function safePasswordChangeResponse() {
     audit_event_id: "22222222-2222-4222-8222-222222222222",
     password_returned: false,
     reauthentication_required: true,
+    shared_ops_login_accepted: false,
     legacy_login_unchanged: true,
   };
 }
@@ -146,6 +147,36 @@ test("fails closed when the server does not require a fresh login", async () => 
     }),
     (error) =>
       error.code === "operator_onboarding.response_contract_invalid"
+  );
+});
+
+test("fails closed when the password response omits the retired shared-login flag", async () => {
+  const malformed = safePasswordChangeResponse();
+  delete malformed.shared_ops_login_accepted;
+  await assert.rejects(
+    changeTemporaryOperatorPassword({
+      bearerToken: TOKEN,
+      currentPassword: CURRENT_PASSWORD,
+      newPassword: NEW_PASSWORD,
+      fetchImpl: async () => jsonResponse(malformed),
+    }),
+    (error) => error.code === "operator_onboarding.response_contract_invalid"
+  );
+});
+
+test("fails closed when the password response accepts shared OPS login", async () => {
+  await assert.rejects(
+    changeTemporaryOperatorPassword({
+      bearerToken: TOKEN,
+      currentPassword: CURRENT_PASSWORD,
+      newPassword: NEW_PASSWORD,
+      fetchImpl: async () =>
+        jsonResponse({
+          ...safePasswordChangeResponse(),
+          shared_ops_login_accepted: true,
+        }),
+    }),
+    (error) => error.code === "operator_onboarding.response_contract_invalid"
   );
 });
 

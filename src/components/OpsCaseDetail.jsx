@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
 
@@ -12,8 +13,8 @@ function fmt(d) {
   }
 }
 
-async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+async function fetchJson(fetchImpl, url, options = {}) {
+  const r = await fetchImpl(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || "Error API");
   return data;
@@ -21,62 +22,23 @@ async function fetchJson(url, options = {}) {
 
 export default function OpsCaseDetail() {
   const { caseId } = useParams();
-  const token = localStorage.getItem("ops_token");
-  const headers = { "X-Operator-Token": token };
+  const { authFetch } = useOpsAuth();
 
   const [docs, setDocs] = useState([]);
   const [events, setEvents] = useState([]);
-  const [registro, setRegistro] = useState("");
-  const [note, setNote] = useState("");
-  const [justificante, setJustificante] = useState(null);
-  const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    load();
-  }, [caseId]);
-
-  async function load() {
+  const load = useCallback(async () => {
     const [d, e] = await Promise.all([
-      fetchJson(`${API}/ops/cases/${caseId}/documents`, { headers }),
-      fetchJson(`${API}/ops/cases/${caseId}/events`, { headers }),
+      fetchJson(authFetch, `${API}/ops/cases/${caseId}/documents`),
+      fetchJson(authFetch, `${API}/ops/cases/${caseId}/events`),
     ]);
     setDocs(d.items || []);
     setEvents(e.items || []);
-  }
+  }, [authFetch, caseId]);
 
-  async function markSubmitted() {
-    const fd = new FormData();
-    if (registro) fd.append("registro", registro);
-    if (note) fd.append("note", note);
-
-    await fetchJson(`${API}/ops/cases/${caseId}/mark-submitted`, {
-      method: "POST",
-      headers,
-      body: fd,
-    });
-
-    alert("✅ Caso marcado como presentado");
-    load();
-  }
-
-  async function uploadJustificante() {
-    if (!justificante) return alert("Selecciona un archivo");
-    setUploading(true);
-
-    const fd = new FormData();
-    fd.append("file", justificante);
-
-    await fetchJson(`${API}/ops/cases/${caseId}/upload-justificante`, {
-      method: "POST",
-      headers,
-      body: fd,
-    });
-
-    setUploading(false);
-    setJustificante(null);
-    alert("📎 Justificante subido");
-    load();
-  }
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
     <div className="sr-container py-8">
@@ -88,40 +50,11 @@ export default function OpsCaseDetail() {
 
       <div className="sr-card mt-4">
         <h3 className="sr-h3">Acciones</h3>
-
-        <div className="grid md:grid-cols-2 gap-3 mt-3">
-          <input
-            placeholder="Número de registro (opcional)"
-            value={registro}
-            onChange={(e) => setRegistro(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Nota interna (opcional)"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="flex gap-3 flex-wrap mt-4">
-          <button className="sr-btn-primary" onClick={markSubmitted}>
-            Marcar como presentado
-          </button>
-
-          <input
-            type="file"
-            onChange={(e) => setJustificante(e.target.files?.[0] || null)}
-          />
-
-          <button
-            className="sr-btn-primary"
-            onClick={uploadJustificante}
-            disabled={uploading}
-          >
-            {uploading ? "Subiendo…" : "Subir justificante"}
-          </button>
-        </div>
+        <p className="mt-3 text-sm text-slate-700">
+          Fase de acceso individual: esta vista legacy es solo de consulta. La
+          presentación y su justificante se gestionan desde RTM Presenter con
+          sesión individual y evidencia ligada al documento.
+        </p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4 mt-6">

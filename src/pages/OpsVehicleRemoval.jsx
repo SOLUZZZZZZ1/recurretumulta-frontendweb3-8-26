@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
 
-async function fetchJson(url, options = {}) {
-  const res = await fetch(url, options);
+async function fetchJson(fetchImpl, url, options = {}) {
+  const res = await fetchImpl(url, options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.detail || `Error HTTP ${res.status}`);
   return data;
@@ -70,9 +71,10 @@ function Stat({ title, value, tone = "default" }) {
 }
 
 export default function OpsVehicleRemoval() {
+  const { authFetch, canSupervise } = useOpsAuth();
+  const canManageLegacy = canSupervise;
   const [searchParams] = useSearchParams();
   const focusCaseId = searchParams.get("case_id") || "";
-  const [token] = useState(() => localStorage.getItem("ops_token") || "");
   const [status, setStatus] = useState("all");
   const [data, setData] = useState({ items: [], summary: {}, count: 0 });
   const [loading, setLoading] = useState(false);
@@ -81,27 +83,21 @@ export default function OpsVehicleRemoval() {
   const [assigning, setAssigning] = useState("");
   const [completing, setCompleting] = useState("");
   const [noteCase, setNoteCase] = useState("");
+  const [savingNote, setSavingNote] = useState("");
   const [noteText, setNoteText] = useState("");
+  const mutationLockRef = useRef(false);
+  const mutationBusy = Boolean(assigning || completing || savingNote);
 
-  const authHeaders = useMemo(
-    () => ({
-      "Content-Type": "application/json",
-      "X-Operator-Token": token,
-    }),
-    [token]
-  );
+  const jsonHeaders = useMemo(() => ({ "Content-Type": "application/json" }), []);
 
-  async function load() {
-    if (!token) {
-      setError("Falta token de operador. Entra primero por /ops.");
-      return;
-    }
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetchJson(`${API}/ops/vehicle-removal?status=${encodeURIComponent(status)}&limit=200`, {
-        headers: { "X-Operator-Token": token },
-      });
+      const res = await fetchJson(
+        authFetch,
+        `${API}/ops/vehicle-removal?status=${encodeURIComponent(status)}&limit=200`
+      );
       setData(res || { items: [], summary: {}, count: 0 });
     } catch (e) {
       setError(e.message || "No se pudo cargar OPS vehículos");
@@ -109,62 +105,83 @@ export default function OpsVehicleRemoval() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [authFetch, status]);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
-
-  async function markPaid(caseId) {
-    if (!window.confirm("¿Marcar este caso como pagado manualmente? Úsalo solo si Stripe/webhook no lo actualizó.")) return;
-    await fetchJson(`${API}/ops/vehicle-removal/${caseId}/mark-paid`, {
-      method: "POST",
-      headers: authHeaders,
-    });
-    await load();
-  }
+    void load();
+  }, [load]);
 
   async function assign(caseId) {
+    if (!canManageLegacy || mutationLockRef.current) return;
     const desguace_name = window.prompt("Nombre del desguace / CAT autorizado:");
     if (!desguace_name) return;
 
     const desguace_phone = window.prompt("Teléfono del desguace (opcional):") || "";
     const note = window.prompt("Nota interna (opcional):") || "";
 
-    await fetchJson(`${API}/ops/vehicle-removal/${caseId}/assign`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify({ desguace_name, desguace_phone, note }),
-    });
-    setAssigning("");
-    await load();
+    mutationLockRef.current = true;
+    setAssigning(caseId);
+    setError("");
+    try {
+      await fetchJson(authFetch, `${API}/ops/vehicle-removal/${encodeURIComponent(caseId)}/assign`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ desguace_name, desguace_phone, note }),
+      });
+      await load();
+    } catch (mutationError) {
+      setError(mutationError.message || "No se pudo asignar el desguace");
+    } finally {
+      mutationLockRef.current = false;
+      setAssigning("");
+    }
   }
 
   async function complete(caseId) {
+    if (!canManageLegacy || mutationLockRef.current) return;
     const certificate_ref = window.prompt("Referencia certificado / baja DGT (opcional):") || "";
     const note = window.prompt("Nota de cierre (opcional):") || "";
 
-    await fetchJson(`${API}/ops/vehicle-removal/${caseId}/complete`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify({ certificate_ref, note }),
-    });
-    setCompleting("");
-    await load();
+    mutationLockRef.current = true;
+    setCompleting(caseId);
+    setError("");
+    try {
+      await fetchJson(authFetch, `${API}/ops/vehicle-removal/${encodeURIComponent(caseId)}/complete`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ certificate_ref, note }),
+      });
+      await load();
+    } catch (mutationError) {
+      setError(mutationError.message || "No se pudo completar la retirada");
+    } finally {
+      mutationLockRef.current = false;
+      setCompleting("");
+    }
   }
 
   async function addNote(caseId) {
+    if (!canManageLegacy || mutationLockRef.current) return;
     const note = noteText.trim();
     if (!note) return;
-    await fetchJson(`${API}/ops/vehicle-removal/${caseId}/note`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify({ note }),
-    });
-    setNoteCase("");
-    setNoteText("");
-    await load();
+    mutationLockRef.current = true;
+    setSavingNote(caseId);
+    setError("");
+    try {
+      await fetchJson(authFetch, `${API}/ops/vehicle-removal/${encodeURIComponent(caseId)}/note`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({ note }),
+      });
+      setNoteCase("");
+      setNoteText("");
+      await load();
+    } catch (mutationError) {
+      setError(mutationError.message || "No se pudo guardar la nota");
+    } finally {
+      mutationLockRef.current = false;
+      setSavingNote("");
+    }
   }
 
   const items = data.items || [];
@@ -191,12 +208,12 @@ export default function OpsVehicleRemoval() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <a
-                href="/ops"
+              <Link
+                to="/ops"
                 className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100"
               >
                 ← Volver OPS
-              </a>
+              </Link>
               <Link
                 to="/ops/followups"
                 className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-300"
@@ -217,6 +234,13 @@ export default function OpsVehicleRemoval() {
         {error ? (
           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
+          </div>
+        ) : null}
+
+        {!canManageLegacy ? (
+          <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+            Fase de acceso individual: consulta disponible. Asignar, completar y
+            anotar permanecen pendientes de la edición CORE ligada al operador.
           </div>
         ) : null}
 
@@ -301,11 +325,12 @@ export default function OpsVehicleRemoval() {
                     </div>
                   ) : null}
 
-                  {noteCase === item.case_id ? (
+                  {canManageLegacy && noteCase === item.case_id ? (
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <textarea
                         value={noteText}
                         onChange={(e) => setNoteText(e.target.value)}
+                        disabled={mutationBusy}
                         rows={3}
                         className="w-full rounded-xl border border-slate-300 p-3 text-sm"
                         placeholder="Nota interna..."
@@ -313,15 +338,17 @@ export default function OpsVehicleRemoval() {
                       <div className="mt-2 flex gap-2">
                         <button
                           onClick={() => addNote(item.case_id)}
+                          disabled={mutationBusy}
                           className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
                         >
-                          Guardar nota
+                          {savingNote === item.case_id ? "Guardando…" : "Guardar nota"}
                         </button>
                         <button
                           onClick={() => {
                             setNoteCase("");
                             setNoteText("");
                           }}
+                          disabled={mutationBusy}
                           className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"
                         >
                           Cancelar
@@ -333,36 +360,34 @@ export default function OpsVehicleRemoval() {
 
                 <div className="flex w-full flex-col gap-2 xl:w-[230px]">
                   {item.payment_status !== "paid" ? (
-                    <button
-                      onClick={() => markPaid(item.case_id)}
-                      className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-                    >
-                      💳 Marcar pagado
-                    </button>
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                      💳 Pago pendiente de confirmación externa
+                    </div>
                   ) : null}
 
                   {item.status !== "vehicle_removal_completed" ? (
                     <button
                       onClick={() => assign(item.case_id)}
-                      disabled={assigning === item.case_id}
+                      disabled={!canManageLegacy || mutationBusy}
                       className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                     >
-                      🏭 Asignar desguace
+                      {assigning === item.case_id ? "Asignando…" : "🏭 Asignar desguace"}
                     </button>
                   ) : null}
 
                   {item.status !== "vehicle_removal_completed" ? (
                     <button
                       onClick={() => complete(item.case_id)}
-                      disabled={completing === item.case_id}
+                      disabled={!canManageLegacy || mutationBusy}
                       className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      ✅ Completar
+                      {completing === item.case_id ? "Completando…" : "✅ Completar"}
                     </button>
                   ) : null}
 
                   <button
                     onClick={() => setNoteCase(noteCase === item.case_id ? "" : item.case_id)}
+                    disabled={!canManageLegacy || mutationBusy}
                     className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     📝 Nota interna

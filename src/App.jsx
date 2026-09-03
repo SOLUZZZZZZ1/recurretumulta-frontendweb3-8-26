@@ -48,6 +48,7 @@ import OpsDashboard from "./pages/OpsDashboard.jsx";
 import OpsCaseDetail from "./pages/OpsCaseDetail.jsx";
 import OpsCaseDetailPro from "./pages/OpsCaseDetailPro.jsx";
 import OpsFollowups from "./pages/OpsFollowups.jsx";
+import { OpsWorkspaceRoute } from "./ops-auth/OpsAuthContext.jsx";
 
 // Legal
 import AvisoLegal from "./pages/AvisoLegal.jsx";
@@ -175,14 +176,28 @@ export default function App() {
         <Route path="/partner/panel" element={<PartnerPanelExpedientes />} />
         <Route path="/gestorias/alta" element={<SolicitarAltaGestoria />} />
         <Route path="/admin/crear-asesoria" element={<AdminCrearAsesoria />} />
-        <Route path="/ops/queue-smart" element={<OPSQueueSmart />} />
-        <Route path="/ops/vehicle-removal" element={<OpsVehicleRemoval />} />
-
         <Route path="/pago-ok" element={<PagoOk />} />
         <Route path="/pago-cancel" element={<PagoCancel />} />
 
-        <Route path="/ops" element={<OpsDashboard />} />
-        <Route path="/ops/followups" element={<OpsFollowups />} />
+        <Route element={<OpsWorkspaceRoute />}>
+          <Route path="/ops" element={<OpsDashboard />} />
+          <Route path="/ops/followups" element={<OpsFollowups />} />
+          <Route path="/ops/queue-smart" element={<OPSQueueSmart />} />
+          <Route path="/ops/vehicle-removal" element={<OpsVehicleRemoval />} />
+          <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
+          <Route
+            path="/ops/case/:caseId/presenter"
+            element={
+              <Suspense fallback={<OpsPresenterFallback />}>
+                <OpsPresenterPage />
+              </Suspense>
+            }
+          />
+          <Route path="/ops/review/:caseId" element={<OpsCaseDetailPro />} />
+          <Route path="/ops/case/:caseId/review" element={<OpsCaseDetailPro />} />
+          <Route path="/ops/pro/:caseId" element={<OpsCaseDetailPro />} />
+          <Route path="/__admin-restaurantes" element={<AdminRestaurantes />} />
+        </Route>
         <Route
           path="/ops/presenter/signer"
           element={
@@ -191,21 +206,7 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
-        <Route
-          path="/ops/case/:caseId/presenter"
-          element={
-            <Suspense fallback={<OpsPresenterFallback />}>
-              <OpsPresenterPage />
-            </Suspense>
-          }
-        />
-        <Route path="/ops/review/:caseId" element={<OpsCaseDetailPro />} />
-        <Route path="/ops/case/:caseId/review" element={<OpsCaseDetailPro />} />
-        <Route path="/ops/pro/:caseId" element={<OpsCaseDetailPro />} />
-
         <Route path="/__reservas-restaurante" element={<ReservasRestaurante />} />
-        <Route path="/__admin-restaurantes" element={<AdminRestaurantes />} />
 
         <Route path="/aviso-legal" element={<AvisoLegal />} />
         <Route path="/privacidad" element={<Privacidad />} />

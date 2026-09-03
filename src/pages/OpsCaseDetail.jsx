@@ -1,8 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import { derivePaymentDisplay } from "../lib/opsPayment.js";
+import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
+const EMPTY_CASE_LIST = Object.freeze([]);
 
 const FAMILY_CONFIG = {
   traffic: {
@@ -243,8 +253,8 @@ async function readJson(response) {
   return data;
 }
 
-async function apiJson(path, options = {}) {
-  return readJson(await fetch(apiUrl(path), options));
+async function apiJson(fetchImpl, path, options = {}) {
+  return readJson(await fetchImpl(apiUrl(path), options));
 }
 
 function fmtDate(value) {
@@ -608,13 +618,15 @@ function TimelineItem({ event }) {
 
 export default function OpsCaseDetail() {
   const { caseId } = useParams();
-  const token = localStorage.getItem("ops_token") || "";
+  const { authFetch, canSupervise } = useOpsAuth();
+  const canManageLegacy = canSupervise;
 
-  const [workspace, setWorkspace] = useState(null);
-  const [paymentRecord, setPaymentRecord] = useState(null);
-  const [documents, setDocuments] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [followups, setFollowups] = useState([]);
+  const [workspaceState, setWorkspace] = useState(null);
+  const [paymentRecordState, setPaymentRecord] = useState(null);
+  const [documentsState, setDocuments] = useState([]);
+  const [eventsState, setEvents] = useState([]);
+  const [followupsState, setFollowups] = useState([]);
+  const [loadedCaseId, setLoadedCaseId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [debug, setDebug] = useState("");
@@ -623,29 +635,93 @@ export default function OpsCaseDetail() {
   const [followupDueAt, setFollowupDueAt] = useState("");
   const [followupDescription, setFollowupDescription] = useState("");
   const [followupCreating, setFollowupCreating] = useState(false);
+  const [resolvingFollowupId, setResolvingFollowupId] = useState("");
 
-  const headers = useMemo(
-    () => (token ? { "X-Operator-Token": token } : {}),
-    [token]
-  );
+  const followupMutationLockRef = useRef(false);
+  const activeCaseIdRef = useRef(caseId || "");
+  const loadedCaseIdRef = useRef("");
+  const loadAbortRef = useRef(null);
+  const loadGenerationRef = useRef(0);
+  const mutationAbortRef = useRef(null);
+  const mutationGenerationRef = useRef(0);
+
+  const caseProjectionReady = Boolean(caseId) && loadedCaseId === caseId;
+  const workspace = caseProjectionReady ? workspaceState : null;
+  const paymentRecord = caseProjectionReady ? paymentRecordState : null;
+  const documents = caseProjectionReady ? documentsState : EMPTY_CASE_LIST;
+  const events = caseProjectionReady ? eventsState : EMPTY_CASE_LIST;
+  const followups = caseProjectionReady ? followupsState : EMPTY_CASE_LIST;
+
+  useLayoutEffect(() => {
+    activeCaseIdRef.current = caseId || "";
+    loadedCaseIdRef.current = "";
+    setLoadedCaseId("");
+    loadAbortRef.current?.abort();
+    loadAbortRef.current = null;
+    loadGenerationRef.current += 1;
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = null;
+    mutationGenerationRef.current += 1;
+    followupMutationLockRef.current = false;
+    setWorkspace(null);
+    setPaymentRecord(null);
+    setDocuments([]);
+    setEvents([]);
+    setFollowups([]);
+    setFollowupTitle("");
+    setFollowupDueAt("");
+    setFollowupDescription("");
+    setFollowupCreating(false);
+    setResolvingFollowupId("");
+    setMessage("");
+    setDebug("");
+    setLoading(Boolean(caseId));
+
+    return () => {
+      activeCaseIdRef.current = "";
+      loadedCaseIdRef.current = "";
+      loadAbortRef.current?.abort();
+      mutationAbortRef.current?.abort();
+      loadGenerationRef.current += 1;
+      mutationGenerationRef.current += 1;
+      followupMutationLockRef.current = false;
+    };
+  }, [caseId]);
 
   const load = useCallback(async () => {
-    if (!token || !caseId) {
+    const requestedCaseId = caseId || "";
+    if (!requestedCaseId) {
       setLoading(false);
       return;
     }
+
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    const requestGeneration = loadGenerationRef.current + 1;
+    loadGenerationRef.current = requestGeneration;
+    const isCurrentLoad = () =>
+      isCurrentOpsCaseRequest({
+        requestedCaseId,
+        activeCaseId: activeCaseIdRef.current,
+        requestGeneration,
+        activeGeneration: loadGenerationRef.current,
+        signal: controller.signal,
+      });
 
     setLoading(true);
     setMessage("");
     setDebug("");
 
     const [ws, payment, ds, es, fs] = await Promise.allSettled([
-      apiJson(`/ops/core/cases/${caseId}/workspace`, { headers }),
-      apiJson(`/billing/status/${caseId}`, { headers }),
-      apiJson(`/ops/cases/${caseId}/documents`, { headers }),
-      apiJson(`/ops/cases/${caseId}/events`, { headers }),
-      apiJson(`/ops/cases/${caseId}/followups`, { headers }),
+      apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/workspace`, { signal: controller.signal }),
+      apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/payment-status`, { signal: controller.signal }),
+      apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/documents`, { signal: controller.signal }),
+      apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/events`, { signal: controller.signal }),
+      apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/followups`, { signal: controller.signal }),
     ]);
+
+    if (!isCurrentLoad()) return;
 
     const nextWorkspace = ws.status === "fulfilled" ? ws.value : null;
     const nextDocuments =
@@ -667,6 +743,8 @@ export default function OpsCaseDetail() {
     setDocuments(nextDocuments);
     setEvents(nextEvents);
     setFollowups(nextFollowups);
+    loadedCaseIdRef.current = requestedCaseId;
+    setLoadedCaseId(requestedCaseId);
 
     const partial = [
       ["Espacio jurídico", ws],
@@ -687,8 +765,11 @@ export default function OpsCaseDetail() {
     if (partial.length) {
       setDebug(partial.join(" | "));
     }
-    setLoading(false);
-  }, [caseId, headers, token]);
+    if (loadAbortRef.current === controller) {
+      loadAbortRef.current = null;
+      setLoading(false);
+    }
+  }, [authFetch, caseId]);
 
   useEffect(() => {
     load();
@@ -746,12 +827,47 @@ export default function OpsCaseDetail() {
       kind.includes("original")
     ),
   };
+  const followupActionsDisabled =
+    !canManageLegacy ||
+    !caseProjectionReady ||
+    loading ||
+    followupCreating ||
+    Boolean(resolvingFollowupId);
 
   async function createFollowup() {
+    if (!canManageLegacy) {
+      setMessage("ℹ️ Fase de acceso individual: la edición CORE está pendiente.");
+      return;
+    }
+    const requestedCaseId = loadedCaseIdRef.current;
+    if (
+      !caseProjectionReady ||
+      !requestedCaseId ||
+      requestedCaseId !== activeCaseIdRef.current ||
+      loading ||
+      followupMutationLockRef.current
+    ) {
+      return;
+    }
     if (!followupTitle.trim() || !followupDueAt.trim()) {
       setMessage("❌ Indica título y fecha del seguimiento.");
       return;
     }
+    followupMutationLockRef.current = true;
+    mutationAbortRef.current?.abort();
+    const controller = new AbortController();
+    mutationAbortRef.current = controller;
+    const requestGeneration = mutationGenerationRef.current + 1;
+    mutationGenerationRef.current = requestGeneration;
+    const isCurrentMutation = () =>
+      isCurrentOpsCaseRequest({
+        requestedCaseId,
+        activeCaseId: activeCaseIdRef.current,
+        requestGeneration,
+        activeGeneration: mutationGenerationRef.current,
+        signal: controller.signal,
+      }) && loadedCaseIdRef.current === requestedCaseId;
+
     setFollowupCreating(true);
     setMessage("");
     setDebug("");
@@ -763,54 +879,87 @@ export default function OpsCaseDetail() {
       if (followupDescription.trim())
         formData.append("description", followupDescription.trim());
 
-      await apiJson(`/ops/cases/${caseId}/followups`, {
+      await apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/followups`, {
         method: "POST",
-        headers,
         body: formData,
+        signal: controller.signal,
       });
+      if (!isCurrentMutation()) return;
+      await load();
+      if (!isCurrentMutation()) return;
       setFollowupTitle("");
       setFollowupDueAt("");
       setFollowupDescription("");
       setMessage("✅ Seguimiento creado.");
-      await load();
     } catch (error) {
+      if (!isCurrentMutation()) return;
       setMessage("❌ No se pudo crear el seguimiento.");
       setDebug(error?.message || "");
     } finally {
-      setFollowupCreating(false);
+      if (mutationAbortRef.current === controller) {
+        mutationAbortRef.current = null;
+        followupMutationLockRef.current = false;
+        setFollowupCreating(false);
+      }
     }
   }
 
   async function resolveFollowup(followupId) {
+    if (!canManageLegacy) {
+      setMessage("ℹ️ Fase de acceso individual: la edición CORE está pendiente.");
+      return;
+    }
+    const requestedCaseId = loadedCaseIdRef.current;
+    if (
+      !caseProjectionReady ||
+      !requestedCaseId ||
+      requestedCaseId !== activeCaseIdRef.current ||
+      loading ||
+      followupMutationLockRef.current
+    ) {
+      return;
+    }
+    followupMutationLockRef.current = true;
+    mutationAbortRef.current?.abort();
+    const controller = new AbortController();
+    mutationAbortRef.current = controller;
+    const requestGeneration = mutationGenerationRef.current + 1;
+    mutationGenerationRef.current = requestGeneration;
+    const isCurrentMutation = () =>
+      isCurrentOpsCaseRequest({
+        requestedCaseId,
+        activeCaseId: activeCaseIdRef.current,
+        requestGeneration,
+        activeGeneration: mutationGenerationRef.current,
+        signal: controller.signal,
+      }) && loadedCaseIdRef.current === requestedCaseId;
+
+    setResolvingFollowupId(String(followupId));
     setMessage("");
     setDebug("");
     try {
       const formData = new FormData();
       formData.append("note", "Resuelto desde OPS CORE");
       await apiJson(
-        `/ops/cases/${caseId}/followups/${followupId}/resolve`,
-        { method: "POST", headers, body: formData }
+        authFetch,
+        `/ops/cases/${encodeURIComponent(requestedCaseId)}/followups/${encodeURIComponent(followupId)}/resolve`,
+        { method: "POST", body: formData, signal: controller.signal }
       );
-      setMessage("✅ Seguimiento resuelto.");
+      if (!isCurrentMutation()) return;
       await load();
+      if (!isCurrentMutation()) return;
+      setMessage("✅ Seguimiento resuelto.");
     } catch (error) {
+      if (!isCurrentMutation()) return;
       setMessage("❌ No se pudo resolver el seguimiento.");
       setDebug(error?.message || "");
+    } finally {
+      if (mutationAbortRef.current === controller) {
+        mutationAbortRef.current = null;
+        followupMutationLockRef.current = false;
+        setResolvingFollowupId("");
+      }
     }
-  }
-
-  if (!token) {
-    return (
-      <main className="sr-container ops-case-main">
-        <Panel>
-          <h1 className="sr-h2">Acceso de operador necesario</h1>
-          <p className="sr-p">Entra primero en OPS.</p>
-          <a href="/ops" className="sr-btn-primary">
-            Ir al acceso OPS
-          </a>
-        </Panel>
-      </main>
-    );
   }
 
   if (loading && !workspace) {
@@ -825,9 +974,9 @@ export default function OpsCaseDetail() {
     return (
       <main className="sr-container ops-case-main">
         <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
-          <a href="/ops" className="sr-btn-secondary">
+          <Link to="/ops" className="sr-btn-secondary">
             ← Volver al panel
-          </a>
+          </Link>
           <Link to="/ops/followups" className="sr-btn-secondary">
             ⏰ Todos los seguimientos
           </Link>
@@ -971,9 +1120,9 @@ export default function OpsCaseDetail() {
   return (
     <main className="sr-container ops-case-main">
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
-        <a href="/ops" className="sr-btn-secondary">
+        <Link to="/ops" className="sr-btn-secondary">
           ← Volver al panel
-        </a>
+        </Link>
         <Link to="/ops/queue-smart" className="sr-btn-secondary">
           Cola técnica
         </Link>
@@ -1474,6 +1623,13 @@ export default function OpsCaseDetail() {
         <h2 className="sr-h3" style={{ marginTop: 0 }}>
           Seguimientos
         </h2>
+        {!canManageLegacy ? (
+          <p className="sr-p" style={{ marginBottom: 0 }}>
+            Fase de acceso individual: puedes consultar los seguimientos, pero la
+            creación y el cierre permanecerán bloqueados hasta que la edición CORE
+            quede ligada al operador.
+          </p>
+        ) : null}
         <div
           style={{
             display: "grid",
@@ -1487,12 +1643,14 @@ export default function OpsCaseDetail() {
             onChange={(event) => setFollowupTitle(event.target.value)}
             placeholder="Título del seguimiento"
             className="border rounded px-3 py-2 text-sm"
+            disabled={followupActionsDisabled}
           />
           <input
             type="datetime-local"
             value={followupDueAt}
             onChange={(event) => setFollowupDueAt(event.target.value)}
             className="border rounded px-3 py-2 text-sm"
+            disabled={followupActionsDisabled}
           />
           <input
             value={followupDescription}
@@ -1501,6 +1659,7 @@ export default function OpsCaseDetail() {
             }
             placeholder="Descripción / nota"
             className="border rounded px-3 py-2 text-sm"
+            disabled={followupActionsDisabled}
           />
         </div>
         <button
@@ -1508,7 +1667,7 @@ export default function OpsCaseDetail() {
           className="sr-btn-primary"
           style={{ marginTop: 10 }}
           onClick={createFollowup}
-          disabled={followupCreating}
+          disabled={followupActionsDisabled}
         >
           {followupCreating ? "Creando…" : "Crear seguimiento"}
         </button>
@@ -1545,16 +1704,21 @@ export default function OpsCaseDetail() {
                     </div>
                   ) : null}
                 </div>
-                {normalize(followup.status) !== "resolved" ? (
+                {normalize(followup.status) !== "resolved" && canManageLegacy ? (
                   <button
                     type="button"
                     className="sr-btn-secondary"
                     onClick={() => resolveFollowup(followup.id)}
+                    disabled={followupActionsDisabled}
                   >
-                    Marcar resuelto
+                    {resolvingFollowupId === String(followup.id)
+                      ? "Resolviendo…"
+                      : "Marcar resuelto"}
                   </button>
-                ) : (
+                ) : normalize(followup.status) === "resolved" ? (
                   <Badge tone="success">Resuelto</Badge>
+                ) : (
+                  <Badge tone="warn">Pendiente · solo lectura</Badge>
                 )}
               </div>
             ))

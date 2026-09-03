@@ -22,9 +22,17 @@ class OpsPaymentIntegrityContractTest(unittest.TestCase):
         cls.payment = read(PAYMENT)
 
     def test_payment_is_loaded_independently_from_core_workspace(self):
-        self.assertIn("/ops/core/cases/${caseId}/workspace", self.detail)
-        self.assertIn("/billing/status/${caseId}", self.detail)
+        self.assertIn(
+            "/ops/core/cases/${encodeURIComponent(requestedCaseId)}/workspace",
+            self.detail,
+        )
+        self.assertNotIn("/billing/status/${caseId}", self.detail)
+        self.assertIn(
+            "/ops/core/cases/${encodeURIComponent(requestedCaseId)}/payment-status",
+            self.detail,
+        )
         self.assertIn("const [ws, payment, ds, es, fs]", self.detail)
+        self.assertIn("derivePaymentDisplay(paymentRecord, caseData)", self.detail)
 
     def test_workspace_failure_never_invents_pending_payment(self):
         self.assertIn("if (!workspace)", self.detail)

@@ -1,7 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
+import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
+import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 
 const API = "/api";
+const JSON_HEADERS = Object.freeze({ "Content-Type": "application/json" });
+const EMPTY_CASE_LIST = Object.freeze([]);
 const INTERNAL_KEYS = new Set([
   "access_token", "b2", "b2_bucket", "b2_key", "bucket", "document_url",
   "download_endpoint", "download_url", "internal_path", "key", "object_key",
@@ -77,8 +88,8 @@ const ENTITY_OPTIONS = [
   { value: "otra_entidad", label: "Otra entidad" },
 ];
 
-async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+async function fetchJson(fetchImpl, url, options = {}) {
+  const r = await fetchImpl(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || `Error HTTP ${r.status}`);
   return data;
@@ -444,7 +455,7 @@ function buildPackageStatus(documents) {
     hasRecurso,
     hasAutorizacion,
     hasOriginal,
-    ready: hasRecurso && hasAutorizacion && hasOriginal,
+    documentsComplete: hasRecurso && hasAutorizacion && hasOriginal,
   };
 }
 
@@ -495,30 +506,26 @@ function CustodyBadge() {
   );
 }
 
+function pickLatestAiEvent(events) {
+  return [...(events || [])].find((event) => event?.type === "ai_expediente_result") || null;
+}
+
 export default function OpsCaseDetailPro() {
+  const { authFetch, canSupervise } = useOpsAuth();
+  const canManageLegacy = canSupervise;
   const { caseId } = useParams();
 
-  const [documents, setDocuments] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [aiResult, setAiResult] = useState(null);
-  const [detail, setDetail] = useState(null);
+  const [documentsState, setDocuments] = useState([]);
+  const [eventsState, setEvents] = useState([]);
+  const [aiResultState, setAiResult] = useState(null);
+  const [detailState, setDetail] = useState(null);
+  const [loadedCaseId, setLoadedCaseId] = useState("");
   const [openEvent, setOpenEvent] = useState(null);
 
   const [loading, setLoading] = useState(false);
-  const [runningAI, setRunningAI] = useState(false);
   const [busyManual, setBusyManual] = useState(false);
-  const [busySave, setBusySave] = useState(false);
-  const [busyFamilyRegenerate, setBusyFamilyRegenerate] = useState(false);
-  const [busyHechoRegenerate, setBusyHechoRegenerate] = useState(false);
-  const [pollingMsg, setPollingMsg] = useState("");
   const [error, setError] = useState("");
-  const [saveMsg, setSaveMsg] = useState("");
   const [planningMsg, setPlanningMsg] = useState("");
-
-  const [hechoEdit, setHechoEdit] = useState("");
-  const [familiaEdit, setFamiliaEdit] = useState("");
-  const [saveReason, setSaveReason] = useState("Corrección operador");
-  const [receiptFile, setReceiptFile] = useState(null);
 
   const [beforeDeadlineEdit, setBeforeDeadlineEdit] = useState("");
   const [afterDeadlineEdit, setAfterDeadlineEdit] = useState("");
@@ -535,38 +542,96 @@ export default function OpsCaseDetailPro() {
   const [checkPlazos, setCheckPlazos] = useState(false);
   const [checkCanal, setCheckCanal] = useState(false);
 
-  const pollTimerRef = useRef(null);
+  const manualLockRef = useRef(false);
+  const activeCaseIdRef = useRef(caseId || "");
+  const loadedCaseIdRef = useRef("");
+  const loadAbortRef = useRef(null);
+  const loadGenerationRef = useRef(0);
+  const mutationAbortRef = useRef(null);
+  const mutationGenerationRef = useRef(0);
 
-  const token = localStorage.getItem("ops_token") || "";
-  const headers = { "X-Operator-Token": token };
+  const caseProjectionReady = Boolean(caseId) && loadedCaseId === caseId;
+  const documents = caseProjectionReady ? documentsState : EMPTY_CASE_LIST;
+  const events = caseProjectionReady ? eventsState : EMPTY_CASE_LIST;
+  const aiResult = caseProjectionReady ? aiResultState : null;
+  const detail = caseProjectionReady ? detailState : null;
 
-  function clearPollTimer() {
-    if (pollTimerRef.current) {
-      clearTimeout(pollTimerRef.current);
-      pollTimerRef.current = null;
+  useLayoutEffect(() => {
+    activeCaseIdRef.current = caseId || "";
+    loadedCaseIdRef.current = "";
+    setLoadedCaseId("");
+    loadAbortRef.current?.abort();
+    loadAbortRef.current = null;
+    loadGenerationRef.current += 1;
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = null;
+    mutationGenerationRef.current += 1;
+    manualLockRef.current = false;
+    setDocuments([]);
+    setEvents([]);
+    setAiResult(null);
+    setDetail(null);
+    setOpenEvent(null);
+    setError("");
+    setPlanningMsg("");
+    setBeforeDeadlineEdit("");
+    setAfterDeadlineEdit("");
+    setBeforeTextEdit("");
+    setAfterTextEdit("");
+    setChannelEdit("");
+    setEntityEdit("");
+    setDestinationEdit("");
+    setAddressEdit("");
+    setCheckHecho(false);
+    setCheckFamilia(false);
+    setCheckPlazos(false);
+    setCheckCanal(false);
+    setBusyManual(false);
+    setLoading(Boolean(caseId));
+
+    return () => {
+      activeCaseIdRef.current = "";
+      loadedCaseIdRef.current = "";
+      loadAbortRef.current?.abort();
+      mutationAbortRef.current?.abort();
+      loadGenerationRef.current += 1;
+      mutationGenerationRef.current += 1;
+      manualLockRef.current = false;
+    };
+  }, [caseId]);
+
+  const loadCase = useCallback(async ({ silent = false } = {}) => {
+    const requestedCaseId = caseId || "";
+    if (!requestedCaseId) {
+      setLoading(false);
+      return;
     }
-  }
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    const requestGeneration = loadGenerationRef.current + 1;
+    loadGenerationRef.current = requestGeneration;
+    const isCurrentLoad = () =>
+      isCurrentOpsCaseRequest({
+        requestedCaseId,
+        activeCaseId: activeCaseIdRef.current,
+        requestGeneration,
+        activeGeneration: loadGenerationRef.current,
+        signal: controller.signal,
+      });
 
-  function pickLatestAiEvent(evs) {
-    return [...(evs || [])].find((e) => e?.type === "ai_expediente_result") || null;
-  }
-
-  async function loadCase({ silent = false } = {}) {
     if (!silent) {
       setError("");
-      setSaveMsg("");
-    }
-    if (!token) {
-      setError("Falta token de operador. Accede primero al panel OPS y entra con PIN.");
-      return;
     }
     if (!silent) setLoading(true);
 
     try {
-      const docsRes = await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/documents`, { headers });
-      const evRes = await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/events`, { headers });
-      const detailRes = await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}`, { headers });
-      const overridesRes = await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/ai-overrides`, { headers });
+      const docsRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/documents`, { signal: controller.signal });
+      const evRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/events`, { signal: controller.signal });
+      const detailRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}`, { signal: controller.signal });
+      const overridesRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/ai-overrides`, { signal: controller.signal });
+
+      if (!isCurrentLoad()) return;
 
       const docs = docsRes.documents || docsRes.items || [];
       const evs = sanitizePayload(evRes.events || evRes.items || []);
@@ -581,9 +646,11 @@ export default function OpsCaseDetailPro() {
       setEvents(evs);
       setDetail(safeDetail);
       setAiResult(payload);
+      loadedCaseIdRef.current = requestedCaseId;
+      setLoadedCaseId(requestedCaseId);
 
     } catch (e) {
-      if (!silent) {
+      if (isCurrentLoad() && !silent) {
         setError(e.message || "Error cargando expediente");
         setDocuments([]);
         setEvents([]);
@@ -591,155 +658,78 @@ export default function OpsCaseDetailPro() {
         setDetail(null);
       }
     } finally {
-      if (!silent) setLoading(false);
+      if (loadAbortRef.current === controller) {
+        loadAbortRef.current = null;
+        if (!silent) setLoading(false);
+      }
     }
-  }
+  }, [authFetch, caseId]);
 
   useEffect(() => {
-    loadCase();
-    return () => clearPollTimer();
-  }, [caseId]);
-
-  async function pollForAiResult() {
-    clearPollTimer();
-    const start = Date.now();
-    const maxMs = 180000;
-    const intervalMs = 6000;
-
-    async function step() {
-      await loadCase({ silent: true });
-      if (Date.now() - start > maxMs) {
-        setPollingMsg("");
-        setError("La IA parece haber tardado demasiado. Recarga el expediente para comprobar si terminó.");
-        clearPollTimer();
-        return;
-      }
-      setPollingMsg("La IA sigue procesando. Comprobando resultado…");
-      pollTimerRef.current = setTimeout(step, intervalMs);
-    }
-
-    await step();
-  }
-
-  async function runAI() {
-    setError("");
-    setSaveMsg("");
-    setPollingMsg("");
-    if (!token) return setError("Falta token de operador.");
-
-    setRunningAI(true);
-    try {
-      await fetchJson(`${API}/ai/expediente/run`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ case_id: caseId }),
-      });
-      await loadCase();
-      setPollingMsg("✅ IA completada.");
-      setTimeout(() => setPollingMsg(""), 2500);
-    } catch (e) {
-      const msg = e.message || "";
-      const is502 = msg.includes("502") || msg.includes("Error HTTP 502");
-      if (is502) {
-        setPollingMsg("La IA sigue ejecutándose. Comprobando resultado…");
-        await pollForAiResult();
-      } else {
-        setError(msg || "Error ejecutando IA");
-      }
-    } finally {
-      setRunningAI(false);
-    }
-  }
-
-  async function saveAiChanges() {
-    setError("");
-    setSaveMsg("");
-    if (!token) return setError("Falta token de operador.");
-    if (!saveReason || saveReason.trim().length < 3) return setError("Indica un motivo de al menos 3 caracteres.");
-    setBusySave(true);
-    try {
-      await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/save-ai-overrides`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ familia: familiaEdit || null, hecho: hechoEdit || null, motivo: saveReason }),
-      });
-      await loadCase({ silent: true });
-      setSaveMsg("✅ Cambios IA guardados en backend.");
-      setTimeout(() => setSaveMsg(""), 3500);
-    } catch (e) {
-      setError(e.message || "Error guardando cambios IA");
-    } finally {
-      setBusySave(false);
-    }
-  }
-
-  async function regenerateFamily() {
-    setError("");
-    setSaveMsg("");
-    if (!token) return setError("Falta token de operador.");
-    if (!familiaEdit) return setError("Selecciona una familia.");
-    if (!saveReason || saveReason.trim().length < 3) return setError("Indica un motivo de al menos 3 caracteres.");
-    setBusyFamilyRegenerate(true);
-    try {
-      await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/override-family-and-regenerate`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ familia: familiaEdit, motivo: saveReason }),
-      });
-      await loadCase();
-      setSaveMsg("✅ Familia guardada y recurso regenerado.");
-      setTimeout(() => setSaveMsg(""), 3500);
-    } catch (e) {
-      setError(e.message || "Error regenerando por familia");
-    } finally {
-      setBusyFamilyRegenerate(false);
-    }
-  }
-
-  async function regenerateHecho() {
-    setError("");
-    setSaveMsg("");
-    if (!token) return setError("Falta token de operador.");
-    if (!hechoEdit || hechoEdit.trim().length < 5) return setError("El hecho debe tener al menos 5 caracteres.");
-    if (!saveReason || saveReason.trim().length < 3) return setError("Indica un motivo de al menos 3 caracteres.");
-    setBusyHechoRegenerate(true);
-    try {
-      await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/rewrite-hecho-and-regenerate`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ hecho: hechoEdit, motivo: saveReason, familia: familiaEdit || null }),
-      });
-      await loadCase();
-      setSaveMsg("✅ Hecho guardado y recurso regenerado.");
-      setTimeout(() => setSaveMsg(""), 3500);
-    } catch (e) {
-      setError(e.message || "Error regenerando por hecho");
-    } finally {
-      setBusyHechoRegenerate(false);
-    }
-  }
+    void loadCase();
+  }, [loadCase]);
 
   function confirmPlanningInMemory() {
+    if (!canManageLegacy) {
+      setError("Fase de acceso individual: esta vista es de consulta para el operador.");
+      return;
+    }
+    if (
+      !caseProjectionReady ||
+      loadedCaseIdRef.current !== activeCaseIdRef.current ||
+      loading ||
+      busyManual
+    ) return;
     setPlanningMsg("✅ Cambios aplicados solo en esta vista; no se guardan en el dispositivo.");
-    setTimeout(() => setPlanningMsg(""), 3500);
   }
 
   async function manual() {
+    if (!canManageLegacy) return setError("Fase de acceso individual: la edición CORE está pendiente.");
+    const requestedCaseId = loadedCaseIdRef.current;
+    if (
+      !caseProjectionReady ||
+      !requestedCaseId ||
+      requestedCaseId !== activeCaseIdRef.current ||
+      loading ||
+      manualLockRef.current
+    ) return;
+    manualLockRef.current = true;
+    mutationAbortRef.current?.abort();
+    const controller = new AbortController();
+    mutationAbortRef.current = controller;
+    const requestGeneration = mutationGenerationRef.current + 1;
+    mutationGenerationRef.current = requestGeneration;
+    const isCurrentMutation = () =>
+      isCurrentOpsCaseRequest({
+        requestedCaseId,
+        activeCaseId: activeCaseIdRef.current,
+        requestGeneration,
+        activeGeneration: mutationGenerationRef.current,
+        signal: controller.signal,
+      }) && loadedCaseIdRef.current === requestedCaseId;
+
     setError("");
-    if (!token) return setError("Falta token de operador.");
     setBusyManual(true);
     try {
-      await fetchJson(`${API}/ops/cases/${encodeURIComponent(caseId)}/manual`, {
+      await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/manual`, {
         method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ motivo: "Revisión manual desde PRO" }),
+        signal: controller.signal,
       });
-      await loadCase();
+      if (!isCurrentMutation()) return;
+      await loadCase({ silent: true });
+      if (!isCurrentMutation()) return;
       alert("Expediente enviado a revisión manual");
     } catch (e) {
+      if (!isCurrentMutation()) return;
       setError(e.message || "Error enviando a revisión manual");
     } finally {
-      setBusyManual(false);
+      if (mutationAbortRef.current === controller) {
+        mutationAbortRef.current = null;
+        manualLockRef.current = false;
+        setBusyManual(false);
+      }
     }
   }
 
@@ -771,11 +761,6 @@ export default function OpsCaseDetailPro() {
     }) || null,
     [documents]
   );
-
-  useEffect(() => {
-    setHechoEdit(ai.hecho || "");
-    setFamiliaEdit(ai.familia || "");
-  }, [ai.hecho, ai.familia]);
 
   useEffect(() => {
     setBeforeDeadlineEdit(fmtDateOnly(deadlines.beforeDate));
@@ -845,11 +830,13 @@ export default function OpsCaseDetailPro() {
     : ai.confianza || "—";
 
   const aiTone = ai.admisibilidad === "ADMISSIBLE" ? "success" : ai.admisibilidad === "NOT_ADMISSIBLE" ? "warn" : "default";
-  const familyTone = familiaEdit ? "info" : "default";
+  const familyTone = ai.familia ? "info" : "default";
   const actionTone = toneForAction(ai.accion);
   const checklistOk = [checkPdf, checkHecho, checkFamilia, checkPlazos, checkCanal].filter(Boolean).length;
   const checklistTotal = 5;
   const latestThreeDocs = documents.slice(0, 3);
+  const caseControlsDisabled =
+    !canManageLegacy || !caseProjectionReady || loading || busyManual;
 
   return (
     <div className="sr-container" style={{ paddingTop: 18, paddingBottom: 40 }}>
@@ -861,14 +848,24 @@ export default function OpsCaseDetailPro() {
             <p className="mt-2 text-xs text-slate-300 break-all">Expediente: {caseId}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="min-w-[118px] rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100" onClick={() => loadCase()}>
+            <button className="min-w-[118px] rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-60" onClick={() => loadCase()} disabled={loading}>
               {loading ? "Recargando..." : "Recargar"}
             </button>
-            <button className="min-w-[146px] rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50" onClick={runAI} disabled={runningAI}>
-              {runningAI ? "Ejecutando IA..." : "Ejecutar IA"}
+            <button
+              type="button"
+              className="min-w-[190px] cursor-not-allowed rounded-xl bg-slate-600 px-4 py-2.5 text-sm font-semibold text-white opacity-70"
+              disabled
+              title="El reanálisis se habilitará cuando esta vista use el flujo CORE auditado."
+            >
+              Reanálisis CORE pendiente
             </button>
-            <button className="min-w-[146px] rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50" onClick={saveAiChanges} disabled={busySave}>
-              {busySave ? "Guardando..." : "Guardar cambios IA"}
+            <button
+              type="button"
+              className="min-w-[190px] cursor-not-allowed rounded-xl bg-slate-600 px-4 py-2.5 text-sm font-semibold text-white opacity-70"
+              disabled
+              aria-describedby="core-edit-blocked-reason"
+            >
+              Edición CORE pendiente
             </button>
             <button
               type="button"
@@ -876,9 +873,9 @@ export default function OpsCaseDetailPro() {
               disabled
               aria-describedby="approval-blocked-reason"
             >
-              Aprobación bloqueada
+              Aprobación CORE pendiente
             </button>
-            <button className="min-w-[118px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50" onClick={manual} disabled={busyManual}>
+            <button className="min-w-[118px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50" onClick={manual} disabled={caseControlsDisabled}>
               {busyManual ? "Enviando..." : "Manual"}
             </button>
             <Link to={`/ops/case/${caseId}`} className="min-w-[118px] rounded-xl bg-slate-800 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-slate-700">
@@ -889,13 +886,16 @@ export default function OpsCaseDetailPro() {
       </div>
 
       {error ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
-      {pollingMsg ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{pollingMsg}</div> : null}
-      {saveMsg ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">{saveMsg}</div> : null}
       {planningMsg ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{planningMsg}</div> : null}
+      {!canManageLegacy ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">Fase de acceso individual: esta vista es de consulta para el operador. La edición y regeneración CORE siguen pendientes.</div> : null}
 
       <p id="approval-blocked-reason" className="mt-3 text-xs font-semibold text-slate-600">
-        La aprobación seguirá bloqueada hasta que RTM emita un recibo individual
-        de revisión interna ligado al hash del PDF.
+        La aprobación desde este puente se ha retirado. Se habilitará mediante un
+        flujo CORE auditado y ligado al hash del PDF.
+      </p>
+      <p id="core-edit-blocked-reason" className="mt-1 text-xs font-semibold text-slate-600">
+        Guardado, corrección y regeneración permanecen deshabilitados para todos
+        los roles hasta que estén disponibles en el flujo CORE.
       </p>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
@@ -920,10 +920,11 @@ export default function OpsCaseDetailPro() {
             {autoDelivery.address ? (
               <button
                 type="button"
-                onClick={() => window.open(autoDelivery.address, "_blank")}
-                className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+                disabled
+                title="La apertura de sedes reales está cerrada en este staging sintético."
+                className="cursor-not-allowed rounded-xl bg-slate-500 px-4 py-2.5 text-sm font-semibold text-white opacity-70"
               >
-                🌐 Abrir sede
+                Abrir sede · activación pendiente
               </button>
             ) : null}
           </div>
@@ -938,14 +939,20 @@ export default function OpsCaseDetailPro() {
           <div>{packageStatus.hasOriginal ? "✔" : "❌"} Multa original</div>
         </div>
         <div className="mt-3">
-          <InfoPill tone={packageStatus.ready ? "success" : "warn"}>
-            {packageStatus.ready ? "LISTO PARA ENVIAR" : "INCOMPLETO"}
+          <InfoPill tone={packageStatus.documentsComplete ? "info" : "warn"}>
+            {packageStatus.documentsComplete
+              ? "DOCUMENTACIÓN COMPLETA · REVISIÓN PENDIENTE"
+              : "DOCUMENTACIÓN INCOMPLETA"}
           </InfoPill>
+          <p className="mt-2 text-xs font-semibold text-slate-600">
+            La presencia de los tres documentos no acredita que el recurso sea
+            correcto, esté aprobado ni listo para presentar.
+          </p>
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard title="Familia" value={`${infractionEmoji(familiaEdit)} ${infractionLabel(familiaEdit)}`} tone={familyTone} compact />
+        <StatCard title="Familia" value={`${infractionEmoji(ai.familia)} ${infractionLabel(ai.familia)}`} tone={familyTone} compact />
         <StatCard title="Confianza" value={confianzaPct} compact />
         <StatCard title="Admisibilidad" value={ai.admisibilidad || "—"} tone={aiTone} compact />
         <StatCard title="Acción" value={shortText(ai.accion, 42)} tone={actionTone} compact />
@@ -953,38 +960,38 @@ export default function OpsCaseDetailPro() {
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <Section title="Resultado IA" right={<div className="flex items-center gap-2"><InfoPill tone={familyTone}>{infractionEmoji(familiaEdit)} {infractionLabel(familiaEdit)}</InfoPill><InfoPill tone={aiTone}>{ai.admisibilidad || "—"}</InfoPill></div>}>
+        <Section title="Resultado IA" right={<div className="flex items-center gap-2"><InfoPill tone={familyTone}>{infractionEmoji(ai.familia)} {infractionLabel(ai.familia)}</InfoPill><InfoPill tone={aiTone}>{ai.admisibilidad || "—"}</InfoPill></div>}>
           {!aiResult ? <p className="text-slate-500">No hay resultado IA todavía.</p> : (
             <div className="space-y-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-[11px] uppercase tracking-wide text-slate-400">Hecho imputado</div>
-                <textarea value={hechoEdit} onChange={(e) => setHechoEdit(e.target.value)} className="mt-2 min-h-[90px] w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-900 outline-none" />
-                <div className="mt-2 text-xs text-slate-500">Puedes corregir el hecho y guardarlo o regenerar directamente.</div>
+                <textarea value={ai.hecho || ""} readOnly aria-describedby="core-result-read-only" className="mt-2 min-h-[90px] w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold leading-6 text-slate-900 outline-none" />
+                <div id="core-result-read-only" className="mt-2 text-xs text-slate-500">Consulta únicamente. La corrección se habilitará en el flujo CORE auditado.</div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-[11px] uppercase tracking-wide text-slate-400">Familia</div>
-                  <select value={familiaEdit} onChange={(e) => setFamiliaEdit(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none">
+                  <select value={ai.familia || ""} disabled className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold text-slate-900 outline-none">
                     <option value="">Selecciona familia</option>
                     {FAMILY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
-                  <div className="mt-2 text-xs text-slate-500">Esta familia se guarda en servidor y puede regenerar recurso.</div>
+                  <div className="mt-2 text-xs text-slate-500">Consulta únicamente; no guarda ni regenera desde este puente.</div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 p-4">
-                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Motivo del cambio</div>
-                  <input value={saveReason} onChange={(e) => setSaveReason(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none" placeholder="Ej.: OCR defectuoso / familia corregida por operador" />
-                  <div className="mt-2 text-xs text-slate-500">Se guarda auditado en evento y en interested_data.</div>
+                  <div className="text-[11px] uppercase tracking-wide text-slate-400">Corrección</div>
+                  <input value="Edición CORE pendiente" readOnly className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold text-slate-700 outline-none" />
+                  <div className="mt-2 text-xs text-slate-500">No se enviará ningún cambio desde esta vista.</div>
                 </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <button type="button" onClick={regenerateFamily} disabled={busyFamilyRegenerate} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
-                  {busyFamilyRegenerate ? "Regenerando familia..." : "Familia + regenerar"}
+                <button type="button" disabled aria-describedby="core-edit-blocked-reason" className="cursor-not-allowed rounded-xl bg-slate-500 px-4 py-3 text-sm font-semibold text-white opacity-70">
+                  Familia + regenerar · CORE pendiente
                 </button>
-                <button type="button" onClick={regenerateHecho} disabled={busyHechoRegenerate} className="rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-semibold text-white hover:bg-fuchsia-700 disabled:opacity-50">
-                  {busyHechoRegenerate ? "Regenerando hecho..." : "Hecho + regenerar"}
+                <button type="button" disabled aria-describedby="core-edit-blocked-reason" className="cursor-not-allowed rounded-xl bg-slate-500 px-4 py-3 text-sm font-semibold text-white opacity-70">
+                  Hecho + regenerar · CORE pendiente
                 </button>
               </div>
 
@@ -1015,21 +1022,26 @@ export default function OpsCaseDetailPro() {
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <Section title="Plazos" right={<InfoPill tone="warn">antes / después</InfoPill>}>
+        <Section title="Plazos" right={<InfoPill tone="warn">simulación local</InfoPill>}>
+          <p id="planning-local-only" className="mb-3 text-xs font-semibold text-slate-600">
+            {canManageLegacy
+              ? "Los cambios de esta sección son una simulación: no se guardan y se perderán al salir."
+              : "Consulta únicamente. La edición de plazos se habilitará en el flujo CORE auditado."}
+          </p>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="text-[11px] uppercase tracking-wide text-slate-400">Plazo antes del recurso</div>
-              <input value={beforeDeadlineEdit} onChange={(e) => setBeforeDeadlineEdit(e.target.value)} type="date" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none" />
-              <textarea value={beforeTextEdit} onChange={(e) => setBeforeTextEdit(e.target.value)} className="mt-2 min-h-[72px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none" placeholder="Notas de plazo previo..." />
+              <input value={beforeDeadlineEdit} onChange={(e) => setBeforeDeadlineEdit(e.target.value)} type="date" disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" />
+              <textarea value={beforeTextEdit} onChange={(e) => setBeforeTextEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[72px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Notas de plazo previo..." />
             </div>
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="text-[11px] uppercase tracking-wide text-slate-400">Plazo después del recurso</div>
-              <input value={afterDeadlineEdit} onChange={(e) => setAfterDeadlineEdit(e.target.value)} type="date" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none" />
-              <textarea value={afterTextEdit} onChange={(e) => setAfterTextEdit(e.target.value)} className="mt-2 min-h-[72px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none" placeholder="Notas de plazo posterior..." />
+              <input value={afterDeadlineEdit} onChange={(e) => setAfterDeadlineEdit(e.target.value)} type="date" disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" />
+              <textarea value={afterTextEdit} onChange={(e) => setAfterTextEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[72px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Notas de plazo posterior..." />
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={confirmPlanningInMemory} className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600">
+            <button type="button" onClick={confirmPlanningInMemory} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
               Aplicar plazos en esta vista
             </button>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -1038,27 +1050,32 @@ export default function OpsCaseDetailPro() {
           </div>
         </Section>
 
-        <Section title="Envío de recursos" right={<InfoPill tone="info">historial guardado</InfoPill>}>
+        <Section title="Envío de recursos" right={<InfoPill tone="info">consulta / simulación</InfoPill>}>
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 p-4">
+              <p className="mb-3 text-xs font-semibold text-slate-600" aria-describedby="planning-local-only">
+                {canManageLegacy
+                  ? "La selección de canal es una simulación local y no se guarda."
+                  : "El canal registrado se muestra en modo consulta; su edición CORE está pendiente."}
+              </p>
               <div className="text-[11px] uppercase tracking-wide text-slate-400">Canal de envío</div>
-              <select value={channelEdit} onChange={(e) => setChannelEdit(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none">
+              <select value={channelEdit} onChange={(e) => setChannelEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100">
                 <option value="">Selecciona canal</option>
                 {SEND_CHANNEL_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
 
               <div className="mt-4 text-[11px] uppercase tracking-wide text-slate-400">Entidad / organismo</div>
-              <select value={entityEdit} onChange={(e) => setEntityEdit(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none">
+              <select value={entityEdit} onChange={(e) => setEntityEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100">
                 <option value="">Selecciona entidad</option>
                 {ENTITY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
 
               <div className="mt-4 text-[11px] uppercase tracking-wide text-slate-400">Dirección / canal mostrado</div>
-              <input value={destinationEdit} onChange={(e) => setDestinationEdit(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none" placeholder="Ej. DGT / Ayuntamiento / Registro electrónico" />
+              <input value={destinationEdit} onChange={(e) => setDestinationEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Ej. DGT / Ayuntamiento / Registro electrónico" />
 
-              <textarea value={addressEdit} onChange={(e) => setAddressEdit(e.target.value)} className="mt-2 min-h-[84px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none" placeholder="Dirección o instrucciones de envío..." />
+              <textarea value={addressEdit} onChange={(e) => setAddressEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[84px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Dirección o instrucciones de envío..." />
 
-              <button type="button" onClick={confirmPlanningInMemory} className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+              <button type="button" onClick={confirmPlanningInMemory} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400">
                 Aplicar envío en esta vista
               </button>
 
@@ -1091,11 +1108,16 @@ export default function OpsCaseDetailPro() {
                   Presenter no está habilitado para este expediente.
                 </div>
               )}
-              {!packageStatus.ready ? (
+              {!packageStatus.documentsComplete ? (
                 <div className="mt-2 text-xs text-amber-600">
                   Falta documentación para enviar el recurso.
                 </div>
-              ) : null}
+              ) : (
+                <div className="mt-2 text-xs font-semibold text-blue-700">
+                  Documentación presente; la revisión humana y la preparación
+                  controlada siguen siendo obligatorias.
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border border-slate-200 p-4">
@@ -1115,66 +1137,31 @@ export default function OpsCaseDetailPro() {
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-sm font-semibold mb-3">📬 Subir justificante de envío (REG)</div>
-
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-xl file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
-              />
-
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    setError("");
-                    setSaveMsg("");
-                    if (!receiptFile) {
-                      setError("Selecciona primero el justificante en PDF.");
-                      return;
-                    }
-
-                    const fd = new FormData();
-                    fd.append("file", receiptFile);
-
-                    const res = await fetch(`/api/cases/${caseId}/upload-receipt`, {
-                      method: "POST",
-                      headers,
-                      body: fd,
-                    });
-
-                    const data = await res.json().catch(() => ({}));
-                    if (!res.ok) {
-                      throw new Error(data?.detail || "No se pudo subir el justificante");
-                    }
-
-                    setSaveMsg("✅ Justificante guardado correctamente.");
-                    setReceiptFile(null);
-                    await loadCase({ silent: true });
-                    window.location.reload();
-                  } catch (e) {
-                    setError(e.message || "Error subiendo justificante");
-                  }
-                }}
-                className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-              >
-                Subir justificante
-              </button>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <div className="font-semibold">📬 Justificante de presentación</div>
+              <p className="mt-2">
+                El justificante se incorpora desde RTM Presenter después de la
+                presentación. Esta vista no admite cargas paralelas sin el recibo
+                individual y el hash de la versión presentada.
+              </p>
             </div>
           </div>
         </Section>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <Section title="Checklist antes de aprobar" right={<InfoPill tone={checklistOk === checklistTotal ? "success" : "warn"}>{checklistOk}/{checklistTotal}</InfoPill>}>
+        <Section title="Checklist local de revisión" right={<InfoPill tone={checklistOk === checklistTotal ? "success" : "warn"}>{checklistOk}/{checklistTotal}</InfoPill>}>
+          <p id="checklist-local-only" className="mb-3 text-xs font-semibold text-slate-600">
+            {canManageLegacy
+              ? "Esta lista sirve como apoyo temporal: no se guarda y se perderá al salir."
+              : "Consulta únicamente. La confirmación auditada se habilitará en CORE."}
+          </p>
           <div className="space-y-2.5">
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><input type="checkbox" checked={checkPdf} disabled aria-describedby="secure-pdf-review-reason" className="mt-1" /><div><div className="font-semibold text-slate-900">Revisión del PDF pendiente de evidencia</div><div id="secure-pdf-review-reason" className="text-xs text-slate-500">Se habilitará al existir un visor interno con recibo individual, hash y auditoría.</div></div></label>
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkHecho} onChange={() => setCheckHecho(!checkHecho)} className="mt-1" /><div><div className="font-semibold text-slate-900">El hecho denunciado es correcto y limpio</div><div className="text-xs text-slate-500">Debe reflejar la conducta real sin ruido OCR.</div></div></label>
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkFamilia} onChange={() => setCheckFamilia(!checkFamilia)} className="mt-1" /><div><div className="font-semibold text-slate-900">La familia jurídica es la correcta</div><div className="text-xs text-slate-500">Semáforo, velocidad, móvil, etc.</div></div></label>
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkPlazos} onChange={() => setCheckPlazos(!checkPlazos)} className="mt-1" /><div><div className="font-semibold text-slate-900">He revisado los plazos del expediente</div><div className="text-xs text-slate-500">Plazo inicial y, si aplica, plazo post-presentación.</div></div></label>
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkCanal} onChange={() => setCheckCanal(!checkCanal)} className="mt-1" /><div><div className="font-semibold text-slate-900">Sé por qué canal se va a presentar</div><div className="text-xs text-slate-500">DGT, sede electrónica, registro, CSV, etc.</div></div></label>
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkHecho} onChange={() => setCheckHecho(!checkHecho)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">El hecho denunciado es correcto y limpio</div><div className="text-xs text-slate-500">Debe reflejar la conducta real sin ruido OCR.</div></div></label>
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkFamilia} onChange={() => setCheckFamilia(!checkFamilia)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">La familia jurídica es la correcta</div><div className="text-xs text-slate-500">Semáforo, velocidad, móvil, etc.</div></div></label>
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkPlazos} onChange={() => setCheckPlazos(!checkPlazos)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">He revisado los plazos del expediente</div><div className="text-xs text-slate-500">Plazo inicial y, si aplica, plazo post-presentación.</div></div></label>
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkCanal} onChange={() => setCheckCanal(!checkCanal)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">Sé por qué canal se va a presentar</div><div className="text-xs text-slate-500">DGT, sede electrónica, registro, CSV, etc.</div></div></label>
           </div>
         </Section>
 

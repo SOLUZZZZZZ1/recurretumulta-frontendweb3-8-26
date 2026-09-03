@@ -131,7 +131,7 @@ export async function changeTemporaryOperatorPassword({
     payload?.ok !== true ||
     payload?.password_returned !== false ||
     payload?.reauthentication_required !== true ||
-    payload?.legacy_login_unchanged !== true ||
+    payload?.shared_ops_login_accepted !== false ||
     payload?.operator?.must_change_password !== false
   ) {
     fail(
