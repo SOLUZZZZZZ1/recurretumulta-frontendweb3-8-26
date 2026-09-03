@@ -1,0 +1,67 @@
+{
+  "version": "rtm.frontend.historical-evidence-integrity.addendum.v1",
+  "status": "historical_manifest_discrepancies_recorded",
+  "scope": "historical_file_integrity_only",
+  "method": "SHA-256 over the exact raw bytes returned by git show <commit>:<path>; Git object ids resolved from the same commit",
+  "original_manifests_modified": false,
+  "build_or_test_claims_reattested": false,
+  "production_authorized": false,
+  "finding": "Six declared file digests in two historical manifests do not identify the files committed with those manifests.",
+  "chain_of_custody_residual": "The original inputs that produced the six declared digests are not present in the reachable Git object database, so their provenance cannot be reconstructed from this repository.",
+  "records": {
+    "brand_tagline_v1": {
+      "source_commit": "e677aeaeda807fc4cee5cf87332c6fc72186de27",
+      "manifest_path": "docs/rtm_connect/RTM_FRONTEND_BRAND_TAGLINE_V1_EVIDENCE.json",
+      "manifest_git_object_id": "de12e4a57e374014545db22d5f23aa10c1f066b0",
+      "manifest_git_blob_sha256": "f9873930bf72c20ff32d39fc856c49739b2ccc16529a8f132a8b020ea2942d86",
+      "original_manifest_valid": false,
+      "declared_file_count": 9,
+      "matching_file_count": 4,
+      "mismatch_count": 5,
+      "mismatches": {
+        "index.html": {
+          "declared_sha256": "a73e052a44529d97a0c78bd9bbe556925467bfadafb852273b09a67c09507fc1",
+          "git_object_id": "c2cecfd93b873233e8776252c7623ba8a8edc207",
+          "git_blob_sha256": "adef86ee910bc1418613797c94f89d1e783666a7fd982b7f769876c7f8cd127d"
+        },
+        "src/components/Footer.jsx": {
+          "declared_sha256": "fff0f4c2074daf7c08733b594b34e9992e8dd7f257dbed08df758a43b7b6e5dc",
+          "git_object_id": "9076ee26fe1a1c3240521456f9967856a1073db2",
+          "git_blob_sha256": "3129b2ea9f1d41360ec8ac61c6652ae0a71ea8828daf468675d2bbd99441c7c8"
+        },
+        "src/components/Seo.jsx": {
+          "declared_sha256": "f7a3bbbcabf74431a3cc6baa297b981c0fc85c53ad1168e623223e754d03aef4",
+          "git_object_id": "2f59dba5bdeced2710cac516ff5a27aa64bea494",
+          "git_blob_sha256": "6dbe3bbdf4794a7852c88802c25b50a0e39fcda99faead50eaff9420f4a9604f"
+        },
+        "src/index.css": {
+          "declared_sha256": "cecaedf12583a01abd33b41a719c216c59cb5830f0f70a528b522c82f482db7e",
+          "git_object_id": "35b7593d88ae111f9b651e36497bd8a185bb85e2",
+          "git_blob_sha256": "cdef9f6347dd961443a0d370c430cde6dc5fa41adf141ea253ae59a24a0ac7a0"
+        },
+        "src/pages/InicioRTM.jsx": {
+          "declared_sha256": "a5b5d853fc619b62f301339e634c8206e81f1b111783d1385400c0ea85277ac2",
+          "git_object_id": "93f84f9a0da2383b1461aaf7ac6d36a461b20243",
+          "git_blob_sha256": "d9ef8ca8fab20c9e4ada5d12ed9447cc6cc2ee29c31d12d3c2776d03af074b53"
+        }
+      }
+    },
+    "como_funciona_hero_v1": {
+      "source_commit": "47fbb165c16f93217b0f0e445631258fbfbe3f18",
+      "manifest_path": "scripts/rtm_frontend_como_funciona_hero_v1_preflight.py",
+      "manifest_git_object_id": "d03770999abcffd4398cff25089494c93c2c6953",
+      "manifest_git_blob_sha256": "e07d9b9637ef38a10f678e70a8f11d3ed2795ddcfaa461d1a421877b5f5d2b45",
+      "original_manifest_valid": false,
+      "declared_file_count": 4,
+      "matching_file_count": 3,
+      "mismatch_count": 1,
+      "mismatches": {
+        "src/pages/ComoFunciona.jsx": {
+          "declared_sha256": "b58d45dfe98e8357a753c8e864defd188c02c1c12db2fcf583bd1e6eefe0230a",
+          "git_object_id": "9ef8e29e154c31c1eb9583d3a680cb8c8c8a2fbe",
+          "git_blob_sha256": "20b132ecdcabb1743157394994073942b6bb1aa9bef0ca5034bb6fd11e826959"
+        }
+      }
+    }
+  }
+}
