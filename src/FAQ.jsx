@@ -31,7 +31,7 @@ const FAQ_GROUPS = [
     items: [
       {
         q: "¿Cuánto cuesta empezar?",
-        a: "La Revisión Inicial cuesta 10 € en Multas y vehículos, 10 € en Deudas y morosidad y 25 € en Administración pública.",
+        a: "El importe vigente se muestra dentro de cada expediente mediante una cotización del servidor, antes de iniciar cualquier pago.",
       },
       {
         q: "¿Se descuenta el importe de la revisión inicial?",

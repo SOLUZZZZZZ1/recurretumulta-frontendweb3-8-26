@@ -96,12 +96,16 @@ class RtmPresenterFrontendNoExportContractTest(unittest.TestCase):
     def test_pro_cannot_claim_pdf_review_or_approve_without_receipt(self):
         source = _source(OPS_VIEWS[1])
         self.assertNotIn("/approve", source)
-        self.assertIn("Aprobación CORE pendiente", source)
+        self.assertIn("Aprobación final del recurso · pendiente", source)
         self.assertIn('aria-describedby="approval-blocked-reason"', source)
         self.assertIn('id="approval-blocked-reason"', source)
         self.assertIn('aria-describedby="secure-pdf-review-reason"', source)
-        self.assertIn("Revisión del PDF pendiente de evidencia", source)
-        self.assertIn("hash y auditoría", source)
+        self.assertIn("Revisión del recurso final pendiente de evidencia", source)
+        self.assertIn(
+            "Este control corresponde al recurso final, no a la autorización firmada",
+            source,
+        )
+        self.assertIn("<OpsAuthorizationReview", source)
 
     def test_legacy_event_projection_filters_known_storage_coordinates(self):
         for path in OPS_VIEWS:

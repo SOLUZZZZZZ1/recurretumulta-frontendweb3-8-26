@@ -10,6 +10,9 @@ AUTH = (ROOT / "src" / "ops-auth" / "OpsAuthContext.jsx").read_text(
 AUTH_API = (ROOT / "src" / "ops-auth" / "opsAuthApi.js").read_text(
     encoding="utf-8"
 )
+AUTH_LIFECYCLE = (
+    ROOT / "src" / "ops-auth" / "opsSessionLifecycle.js"
+).read_text(encoding="utf-8")
 AUTHORIZATION = (
     ROOT / "src" / "ops-auth" / "opsAuthorization.js"
 ).read_text(encoding="utf-8")
@@ -116,6 +119,26 @@ class OpsIndividualAuthFrontendContractTest(unittest.TestCase):
         self.assertIn("apiClient={presenterClient}", presenter)
         self.assertNotIn("getAuthHeaders", AUTH)
 
+    def test_memory_session_is_hidden_aborted_and_expired_fail_closed(self):
+        self.assertIn("bindOpsSessionLifecycle(window", AUTH)
+        self.assertIn("scheduleOpsSessionExpiry", AUTH)
+        self.assertIn('sensitiveRootRef.current?.setAttribute("hidden", "")', AUTH)
+        self.assertIn("hidden={!viewVisible}", AUTH)
+        self.assertIn("activeFetchControllersRef", AUTH)
+        self.assertIn("controller.abort()", AUTH)
+        self.assertIn('addEventListener("pagehide"', AUTH_LIFECYCLE)
+        self.assertIn('addEventListener("pageshow"', AUTH_LIFECYCLE)
+        self.assertIn("event?.persisted === true", AUTH_LIFECYCLE)
+        self.assertIn("MAX_TIMER_DELAY_MS", AUTH_LIFECYCLE)
+
+    def test_login_parser_rejects_ambiguous_operator_and_expiry_shapes(self):
+        self.assertIn("MAX_AUTH_JSON_CHARACTERS", AUTH_API)
+        self.assertIn("new Set(permissions).size === permissions.length", AUTH_API)
+        self.assertIn("ISO_TIMESTAMP_PATTERN", AUTH_API)
+        self.assertIn("Date.parse(expiresAt) <= now", AUTH_API)
+        self.assertIn("Date.parse(expiresAt) > Date.parse(absoluteExpiresAt)", AUTH_API)
+        self.assertIn("await closeTokenCandidate(tokenCandidate, exactFetch)", AUTH_API)
+
     def test_retired_shared_login_is_explicit_and_legacy_flag_is_not_authority(self):
         onboarding = (
             ROOT / "src" / "rtm-presenter" / "rtmOperatorOnboardingApi.js"
@@ -163,7 +186,11 @@ class OpsIndividualAuthFrontendContractTest(unittest.TestCase):
         self.assertIn("Pago pendiente de confirmación externa", vehicle)
         self.assertIn("Reanálisis CORE pendiente", pro)
         self.assertIn("Edición CORE pendiente", pro)
-        self.assertIn("Aprobación CORE pendiente", pro)
+        self.assertIn("Revisión del recurso final pendiente de evidencia", pro)
+        self.assertIn(
+            "Este control corresponde al recurso final, no a la autorización firmada",
+            pro,
+        )
         self.assertIn("El justificante se incorpora desde RTM Presenter", pro)
         self.assertIn("caseControlsDisabled", pro)
         self.assertIn("simulación: no se guardan y se perderán al salir", pro)

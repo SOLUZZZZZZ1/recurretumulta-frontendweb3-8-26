@@ -30,8 +30,8 @@ function loginEnvelope(overrides = {}) {
     token_type: "bearer",
     token: TOKEN,
     session_id: SESSION_ID,
-    expires_at: "2026-09-02T19:00:00+00:00",
-    absolute_expires_at: "2026-09-02T23:00:00+00:00",
+    expires_at: "2099-09-02T19:00:00+00:00",
+    absolute_expires_at: "2099-09-02T23:00:00+00:00",
     device_id: DEVICE_ID,
     operator: {
       id: "33333333-3333-4333-8333-333333333333",
@@ -189,6 +189,44 @@ test("logs in with email and password while device possession stays in HttpOnly 
   assert.equal(session.sessionId, SESSION_ID);
   assert.equal(session.deviceId, DEVICE_ID);
   assert.deepEqual(session.operator.permissions, ["ops.view"]);
+});
+
+test("strict login parsing rejects malformed identity fields and closes the token candidate", async () => {
+  for (const overrides of [
+    {
+      operator: {
+        ...loginEnvelope().operator,
+        permissions: ["ops.view", "ops.view"],
+      },
+    },
+    { expires_at: "not-a-timestamp" },
+    {
+      expires_at: "2000-01-01T12:00:00Z",
+      absolute_expires_at: "2000-01-01T13:00:00Z",
+    },
+    {
+      expires_at: "2026-09-03T12:00:00Z",
+      absolute_expires_at: "2026-09-03T11:59:59Z",
+    },
+  ]) {
+    const calls = [];
+    await assert.rejects(
+      loginOpsOperator({
+        email: "operador@example.com",
+        password: "temporary-password",
+        fetchImpl: async (url) => {
+          calls.push(url);
+          return jsonResponse(loginEnvelope(overrides));
+        },
+      }),
+      (error) =>
+        error instanceof OpsAuthError &&
+        ["ops_auth.operator_contract_invalid", "ops_auth.login_contract_invalid"].includes(
+          error.code
+        )
+    );
+    assert.deepEqual(calls, [OPS_AUTH_LOGIN_ROUTE, OPS_AUTH_LOGOUT_ROUTE]);
+  }
 });
 
 test("rejects a server that still accepts the shared OPS login", async () => {

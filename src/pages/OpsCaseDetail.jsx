@@ -10,6 +10,11 @@ import { Link, useParams } from "react-router-dom";
 import { derivePaymentDisplay } from "../lib/opsPayment.js";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
+import {
+  hasVehiclePreparationConsent,
+  isLegalRepresentationVerified,
+  isVehicleRemovalCase,
+} from "../lib/authorizationEvidence.js";
 
 const API = "/api";
 const EMPTY_CASE_LIST = Object.freeze([]);
@@ -301,8 +306,12 @@ function documentLabel(kind = "") {
   const key = normalize(kind);
   if (key === "identity_front") return "Documento de identidad · frontal";
   if (key === "identity_back") return "Documento de identidad · reverso";
-  if (key.includes("authorization_signed")) return "Autorización firmada";
-  if (key.includes("authorization")) return "Autorización";
+  if (key.includes("authorization_signed_stale")) return "Candidato de autorización · obsoleto";
+  if (key.includes("authorization_signed_rejected")) return "Candidato de autorización · rechazado";
+  if (key.includes("authorization_signed_candidate")) return "Candidato de autorización · pendiente de revisión";
+  if (key === "authorization_signed_verified") return "Autorización firmada · verificada";
+  if (key.includes("authorization_signed")) return "Documento firmado · validez sin verificar";
+  if (key.includes("authorization")) return "Documento de autorización";
   if (key.includes("original")) return "Documento principal";
   if (key.includes("justificante")) return "Justificante de presentación";
   if (key.includes("resolucion")) return "Resolución";
@@ -813,16 +822,15 @@ export default function OpsCaseDetail() {
   const previewFrozen = previewStatus === "frozen";
   const presentationReady =
     resourceStatus === "final_ready" && Boolean(latestResource?.approved_at);
+  const vehicleRemoval = isVehicleRemovalCase(caseData);
+  const representationVerified = isLegalRepresentationVerified(caseData);
+  const vehiclePreparationConsent = hasVehiclePreparationConsent(caseData);
 
   const progress = {
     identity:
       documentKinds.has("identity_front") &&
       documentKinds.has("identity_back"),
-    authorization:
-      Boolean(caseData.authorized) &&
-      [...documentKinds].some((kind) =>
-        kind.includes("authorization_signed")
-      ),
+    authorization: representationVerified,
     mainDocument: [...documentKinds].some((kind) =>
       kind.includes("original")
     ),
@@ -1289,7 +1297,7 @@ export default function OpsCaseDetail() {
               label="Entrada documental completa"
               detail={
                 readiness.ready
-                  ? "Datos, identidad, autorización y documento principal disponibles."
+                  ? "Los controles de entrada declarados por CORE están completos."
                   : "Existen bloqueos en la entrada."
               }
             />
@@ -1299,12 +1307,23 @@ export default function OpsCaseDetail() {
               detail="Frontal y reverso registrados."
             />
             <CheckItem
-              ok={progress.authorization}
-              label="Autorización firmada"
+              ok={vehicleRemoval ? vehiclePreparationConsent : progress.authorization}
+              pending={vehicleRemoval && !vehiclePreparationConsent}
+              label={
+                vehicleRemoval
+                  ? vehiclePreparationConsent
+                    ? "Consentimiento de preparación"
+                    : "Revisión humana requerida"
+                  : "Representación firmada"
+              }
               detail={
-                caseData.authorized
-                  ? "Autorización registrada."
-                  : "Autorización pendiente."
+                vehicleRemoval
+                  ? vehiclePreparationConsent
+                    ? "Consentimiento contractual específico; no acredita representación ni ejecuta la retirada."
+                    : "El indicador genérico de autorización no acredita representación en una retirada de vehículo."
+                  : representationVerified
+                    ? "Representación verificada mediante revisión humana de la evidencia ligada."
+                    : "Representación pendiente de verificación."
               }
             />
             <CheckItem
@@ -1376,7 +1395,7 @@ export default function OpsCaseDetail() {
 
         <Panel>
           <h2 className="sr-h3" style={{ marginTop: 0 }}>
-            Siguiente paso autorizado
+            Siguiente paso operativo
           </h2>
           <div
             style={{
@@ -1766,7 +1785,7 @@ export default function OpsCaseDetail() {
           style={{ background: "#f0fdf4", borderColor: "#bbf7d0" }}
         >
           <h2 className="sr-h3" style={{ marginTop: 0 }}>
-            Presentación autorizada
+            Documento final aprobado
           </h2>
           <p className="sr-p" style={{ marginBottom: 0 }}>
             El documento final está aprobado. El canal concreto debe

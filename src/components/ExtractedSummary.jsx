@@ -1,6 +1,7 @@
 // src/components/ExtractedSummary.jsx — resumen con flujo manual
-import React from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
+import { rememberCaseScopedData } from "../lib/caseSession.js";
 
 function Row({ label, value }) {
   return (
@@ -22,12 +23,13 @@ function Badge({ children }) {
 export default function ExtractedSummary({ data }) {
   const wrapper = data?.extracted;
   const extracted = wrapper?.extracted;
-  const storage = wrapper?.storage;
   const caseId = data?.case_id;
 
-  if (!extracted) return null;
+  useEffect(() => {
+    if (caseId) rememberCaseScopedData(caseId, data);
+  }, [caseId, data]);
 
-  try { localStorage.setItem("rtm_last_analysis", JSON.stringify(data)); } catch {}
+  if (!extracted) return null;
 
   return (
     <div className="sr-card" style={{marginTop:14}}>
@@ -60,8 +62,6 @@ export default function ExtractedSummary({ data }) {
       <Row label="Hecho imputado" value={extracted.hecho_para_recurso || extracted.hecho_imputado || extracted.hecho_denunciado_resumido} />
       <Row label="Resultado estratégico" value={extracted.resultado_estrategico} />
       <Row label="Revisión automática" value="No bloqueante: revisión manual antes de presentar" />
-
-      {storage?.key && <Row label="Documento guardado" value={storage.key} />}
 
       <div className="sr-cta-row" style={{justifyContent:"flex-start",marginTop:14}}>
         <Link to={`/resumen?case=${encodeURIComponent(caseId)}`} className="sr-btn-primary">

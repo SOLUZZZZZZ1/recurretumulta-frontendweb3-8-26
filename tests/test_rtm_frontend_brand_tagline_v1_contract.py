@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 
@@ -18,7 +19,23 @@ CSS = ROOT / "src" / "index.css"
 INDEX = ROOT / "index.html"
 DOC = ROOT / "docs" / "rtm_connect" / "RTM_FRONTEND_BRAND_TAGLINE_V1.md"
 EVIDENCE = ROOT / "docs" / "rtm_connect" / "RTM_FRONTEND_BRAND_TAGLINE_V1_EVIDENCE.json"
+INTEGRITY_ADDENDUM = (
+    ROOT
+    / "docs"
+    / "rtm_connect"
+    / "RTM_FRONTEND_HISTORICAL_EVIDENCE_INTEGRITY_V1.json"
+)
 PREFLIGHT = ROOT / "scripts" / "rtm_frontend_brand_tagline_v1_preflight.py"
+BRAND_TAGLINE_EVIDENCE_COMMIT_SHA40 = (
+    "e677aeaeda807fc4cee5cf87332c6fc72186de27"
+)
+INTEGRITY_ADDENDUM_SHA256 = (
+    "aad8f0e63e8702cb2619973722d31428dd964dead26d189730ac242f5998d5b0"
+)
+INTEGRITY_ADDENDUM_COMMIT_SHA40 = (
+    "2e94c15852a3636c271143b00e56133ca208834c"
+)
+INTEGRITY_ADDENDUM_GIT_OBJECT_ID = "6782d2c00e21799383bc35aae9d014cec826d663"
 
 
 def load_preflight():
@@ -29,8 +46,31 @@ def load_preflight():
     return module
 
 
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def archived_blob(commit: str, relative_path: str) -> bytes:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{relative_path}"],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"No se pudo leer {relative_path} en {commit}")
+    return result.stdout
+
+
+def archived_object_id(commit: str, relative_path: str) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", f"{commit}:{relative_path}"],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"No se pudo resolver {relative_path} en {commit}")
+    return result.stdout.strip()
 
 
 def css_block(css: str, selector: str) -> str:
@@ -109,10 +149,26 @@ class BrandTaglineNavbarContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.css)
 
-    def test_travel_landing_duplicate_is_removed_without_destination_change(self):
-        self.assertEqual(self.navbar.count('landing: "/viajes"'), 1)
-        self.assertIn('landingLabel: "Ver todos los servicios de viajes"', self.navbar)
-        self.assertIn('to: "/iniciar-expediente/claims/airline?issue=cancelled_flight"', self.navbar)
+    def test_travel_navigation_has_one_catalog_authority_and_no_duplicate_literal(self):
+        catalog = (ROOT / "src" / "data" / "publicServices.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "const SERVICE_GROUPS = PUBLIC_SERVICE_FAMILIES.map((family) => ({",
+            self.navbar,
+        )
+        self.assertIn("landing: family.path", self.navbar)
+        self.assertIn("landingLabel: family.action", self.navbar)
+        self.assertNotIn('landing: "/viajes"', self.navbar)
+        self.assertEqual(catalog.count('id: "viajes"'), 1)
+        self.assertEqual(catalog.count('path: "/viajes"'), 1)
+        self.assertEqual(catalog.count('action: "Ver servicios de viajes"'), 1)
+        self.assertEqual(
+            catalog.count(
+                'withFamily("/iniciar-expediente/claims/airline", "viajes")'
+            ),
+            1,
+        )
 
 
 class BrandTaglineSurfaceContractTests(unittest.TestCase):
@@ -168,10 +224,12 @@ class BrandTaglineSurfaceContractTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.home)
 
-    def test_changed_surfaces_preserve_existing_transport_and_add_no_dynamic_html(self):
+    def test_changed_surfaces_keep_transport_bounded_and_add_no_dynamic_html(self):
         code = "\n".join((self.footer, self.seo, self.home, self.index, NAVBAR.read_text(encoding="utf-8")))
-        self.assertEqual(code.count("fetch("), 2)
-        self.assertEqual(code.count("https://recurretumulta-backend.onrender.com"), 1)
+        self.assertEqual(code.count("fetch("), 1)
+        self.assertIn("apiFetch(url, { method: \"GET\" })", self.home)
+        self.assertIn("for (const base of RTM_API_CANDIDATES)", self.home)
+        self.assertNotIn("https://recurretumulta-backend.onrender.com", code)
         for marker in (
             "XMLHttpRequest",
             "WebSocket",
@@ -190,6 +248,8 @@ class BrandTaglineEvidenceContractTests(unittest.TestCase):
         cls.script = PREFLIGHT.read_text(encoding="utf-8")
         cls.doc = DOC.read_text(encoding="utf-8")
         cls.evidence = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+        cls.integrity_addendum_bytes = INTEGRITY_ADDENDUM.read_bytes()
+        cls.integrity_addendum = json.loads(cls.integrity_addendum_bytes)
 
     def test_base_identity_is_exact_and_documented(self):
         self.assertEqual(
@@ -217,14 +277,95 @@ class BrandTaglineEvidenceContractTests(unittest.TestCase):
         self.assertEqual(len(self.preflight.NEW_OVERLAY_PATHS), 4)
         self.assertEqual(self.evidence["overlay_paths"], list(self.preflight.OVERLAY_PATHS))
 
-    def test_evidence_hashes_every_non_self_overlay_file(self):
+    def test_legacy_manifest_is_archived_and_explicitly_invalidated(self):
         expected = set(self.preflight.OVERLAY_PATHS) - {
             "docs/rtm_connect/RTM_FRONTEND_BRAND_TAGLINE_V1_EVIDENCE.json"
         }
         self.assertEqual(set(self.evidence["file_sha256"]), expected)
+        self.assertEqual(
+            hashlib.sha256(self.integrity_addendum_bytes).hexdigest(),
+            INTEGRITY_ADDENDUM_SHA256,
+        )
+        addendum_path = INTEGRITY_ADDENDUM.relative_to(ROOT).as_posix()
+        self.assertEqual(
+            archived_blob(INTEGRITY_ADDENDUM_COMMIT_SHA40, addendum_path),
+            self.integrity_addendum_bytes,
+        )
+        self.assertEqual(
+            archived_object_id(INTEGRITY_ADDENDUM_COMMIT_SHA40, addendum_path),
+            INTEGRITY_ADDENDUM_GIT_OBJECT_ID,
+        )
+        self.assertEqual(
+            self.integrity_addendum["status"],
+            "historical_manifest_discrepancies_recorded",
+        )
+        self.assertEqual(
+            self.integrity_addendum["scope"], "historical_file_integrity_only"
+        )
+        self.assertIs(self.integrity_addendum["original_manifests_modified"], False)
+        self.assertIs(self.integrity_addendum["build_or_test_claims_reattested"], False)
+        self.assertIs(self.integrity_addendum["production_authorized"], False)
+        record = self.integrity_addendum["records"]["brand_tagline_v1"]
+        self.assertEqual(record["source_commit"], BRAND_TAGLINE_EVIDENCE_COMMIT_SHA40)
+        self.assertEqual(
+            record["manifest_path"], EVIDENCE.relative_to(ROOT).as_posix()
+        )
+        self.assertIs(record["original_manifest_valid"], False)
+        archived_evidence = archived_blob(
+            BRAND_TAGLINE_EVIDENCE_COMMIT_SHA40,
+            EVIDENCE.relative_to(ROOT).as_posix(),
+        )
+        self.assertEqual(json.loads(archived_evidence), self.evidence)
+        self.assertEqual(
+            hashlib.sha256(archived_evidence).hexdigest(),
+            record["manifest_git_blob_sha256"],
+        )
+        self.assertEqual(
+            archived_object_id(
+                BRAND_TAGLINE_EVIDENCE_COMMIT_SHA40,
+                EVIDENCE.relative_to(ROOT).as_posix(),
+            ),
+            record["manifest_git_object_id"],
+        )
+
+        observed = {}
         for name, digest in self.evidence["file_sha256"].items():
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
-            self.assertEqual(sha256_file(ROOT / name), digest, name)
+            observed[name] = hashlib.sha256(
+                archived_blob(BRAND_TAGLINE_EVIDENCE_COMMIT_SHA40, name)
+            ).hexdigest()
+
+        mismatches = {
+            name
+            for name, digest in self.evidence["file_sha256"].items()
+            if observed[name] != digest
+        }
+        self.assertEqual(
+            mismatches,
+            {
+                "index.html",
+                "src/components/Footer.jsx",
+                "src/components/Seo.jsx",
+                "src/index.css",
+                "src/pages/InicioRTM.jsx",
+            },
+        )
+        self.assertEqual(set(record["mismatches"]), mismatches)
+        self.assertEqual(record["declared_file_count"], len(expected))
+        self.assertEqual(record["matching_file_count"], len(expected - mismatches))
+        self.assertEqual(record["mismatch_count"], len(mismatches))
+        for name in mismatches:
+            self.assertEqual(
+                record["mismatches"][name],
+                {
+                    "declared_sha256": self.evidence["file_sha256"][name],
+                    "git_object_id": archived_object_id(
+                        BRAND_TAGLINE_EVIDENCE_COMMIT_SHA40, name
+                    ),
+                    "git_blob_sha256": observed[name],
+                },
+                name,
+            )
 
     def test_preflight_is_static_read_only_and_does_not_extract_archive(self):
         tree = ast.parse(self.script)

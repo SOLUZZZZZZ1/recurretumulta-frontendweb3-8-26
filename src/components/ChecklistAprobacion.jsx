@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, openCaseFile, RTM_API_BASE } from "../lib/api.js";
+import { parseAuthorizationIssueEnvelope } from "../lib/authorizationEvidence.js";
 
 function apiUrl(path) {
   return `${RTM_API_BASE}${path}`;
@@ -50,7 +51,10 @@ export default function ChecklistAprobacion({
   const [msg, setMsg] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
 
-  const alreadyAuthorized = Boolean(publicStatus?.authorized);
+  const alreadyAuthorized = Boolean(
+    publicStatus?.authorization_evidence_status === "verified" &&
+      publicStatus?.signed_authority_verified === true
+  );
 
   useEffect(() => {
     const interested = publicStatus?.interested_data || {};
@@ -143,10 +147,9 @@ export default function ChecklistAprobacion({
           representation_confirmed: true,
         }),
       });
+      parseAuthorizationIssueEnvelope(data, caseId);
 
-      const url = data?.download_url
-        ? apiUrl(data.download_url)
-        : apiUrl(`/cases/${caseId}/authorization-pdf`);
+      const url = apiUrl(`/cases/${caseId}/authorization-pdf`);
 
       setDownloadUrl(url);
       setMsg("✅ Autorización registrada. PDF generado correctamente.");

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import Seo from "../components/Seo.jsx";
+import { partnerFetch } from "../lib/partnerApi.js";
 
 const API = "/api";
 
 async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+  const r = await partnerFetch(url, options);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || "Error API");
   return data;

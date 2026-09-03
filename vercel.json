@@ -1,15 +1,16 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "headers": [
     {
       "source": "/:path*",
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; connect-src 'self' https://recurretumulta-backend-1.onrender.com https://backend-spainroom.onrender.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+          "value": "default-src 'self'; base-uri 'none'; connect-src 'self' https://backend-spainroom.onrender.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data: blob:; manifest-src 'self'; media-src 'self'; object-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; style-src-elem 'self' 'unsafe-inline'; worker-src 'none'; upgrade-insecure-requests"
         },
         {
           "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
+          "value": "no-referrer"
         },
         {
           "key": "X-Content-Type-Options",
@@ -21,7 +22,15 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+          "value": "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000"
+        },
+        {
+          "key": "X-Permitted-Cross-Domain-Policies",
+          "value": "none"
         }
       ]
     },
@@ -49,6 +58,135 @@
           "key": "X-Robots-Tag",
           "value": "noindex, nofollow, noarchive"
         }
+      ]
+    },
+    {
+      "source": "/partner/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
+    {
+      "source": "/gestorias",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
+    {
+      "source": "/__reservas-restaurante",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
+    {
+      "source": "/eliminar-coche",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
+    {
+      "source": "/resumen",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/autorizar",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/pago-ok",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/pago-cancel",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/gestorias/alta",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/__admin-restaurantes",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/multas/documentos",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/deudas/documentos",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/administracion/documentos",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/reclamaciones/documentos",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    },
+    {
+      "source": "/otros/documentos",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
       ]
     }
   ],

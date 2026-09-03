@@ -1,13 +1,48 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Seo from "../components/Seo.jsx";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  clearPartnerSession,
+  getPartnerSessionValue,
+  hasPartnerSessionHint,
+  parsePartnerSessionEnvelope,
+  partnerSessionRemainingMs,
+  setPartnerSessionValue,
+} from "../lib/partnerSession.js";
+import {
+  bindPartnerCookieSession,
+  clearPartnerCookieSessionBinding,
+  partnerFetch,
+  readJsonResponseLimited,
+  readPartnerCsrfToken,
+} from "../lib/partnerApi.js";
+import {
+  normalizePartnerSearch,
+  parsePartnerCasesEnvelope,
+  PARTNER_CASE_PAGE_LIMIT,
+  PARTNER_CASE_RESPONSE_MAX_BYTES,
+  PARTNER_SEARCH_MAX_CHARS,
+} from "../lib/partnerCases.js";
+import {
+  announcePartnerSessionChange,
+  bindPartnerCrossTabSession,
+  bindPartnerViewLifecycle,
+} from "../lib/partnerViewLifecycle.js";
 
 const API = "/api";
+const MAX_CURSOR_HISTORY = 100;
 
-async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.detail || `Error HTTP ${r.status}`);
+async function fetchJson(url, options = {}, security = {}) {
+  const r = await partnerFetch(url, options, security);
+  const data = await readJsonResponseLimited(
+    r,
+    PARTNER_CASE_RESPONSE_MAX_BYTES
+  ).catch(() => ({}));
+  if (!r.ok) {
+    const error = new Error(data?.detail || `Error HTTP ${r.status}`);
+    error.status = r.status;
+    throw error;
+  }
   return data;
 }
 
@@ -41,6 +76,16 @@ function paymentLabel(status) {
     refunded: "Reembolsado",
   };
   return map[status] || status || "—";
+}
+
+function authorizationEvidenceLabel(status) {
+  const map = {
+    verified: "Verificada",
+    pending_review: "Pendiente de revisión humana",
+    rejected: "Rechazada",
+    not_submitted: "No presentada",
+  };
+  return map[status] || "No verificada";
 }
 
 function statusTone(status) {
@@ -84,76 +129,229 @@ function Badge({ children, tone }) {
 export default function PartnerPanelExpedientes() {
   const nav = useNavigate();
 
-  const [partnerToken, setPartnerToken] = useState(() => localStorage.getItem("partner_token") || "");
-  const [partnerName, setPartnerName] = useState(() => localStorage.getItem("partner_name") || "");
+  const [partnerName, setPartnerName] = useState(() => getPartnerSessionValue("partner_name"));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [viewReady, setViewReady] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [loadedQuery, setLoadedQuery] = useState("");
+  const [loadedStatus, setLoadedStatus] = useState("");
+  const qRef = useRef(q);
+  const statusRef = useRef(status);
+  const requestGenerationRef = useRef(0);
+  const sensitiveViewRef = useRef(null);
+  const currentCursorRef = useRef("");
+  const cursorHistoryRef = useRef([]);
+  qRef.current = q;
+  statusRef.current = status;
 
-  useEffect(() => {
-    const t = (localStorage.getItem("partner_token") || "").trim();
-    const n = localStorage.getItem("partner_name") || "";
-    setPartnerToken(t);
-    setPartnerName(n);
-
-    if (!t) {
-      nav("/gestorias");
-      return;
-    }
-
-    loadCases(t, "", "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const invalidateSensitiveView = useCallback(() => {
+    requestGenerationRef.current += 1;
+    sensitiveViewRef.current?.setAttribute("hidden", "");
+    setViewReady(false);
+    setItems([]);
+    setPartnerName("");
+    setQ("");
+    setStatus("");
+    setErr("");
+    setNextCursor(null);
+    setPageNumber(1);
+    setLoadedQuery("");
+    setLoadedStatus("");
+    currentCursorRef.current = "";
+    cursorHistoryRef.current = [];
   }, []);
 
-  async function loadCases(tokenOverride = null, qOverride = null, statusOverride = null) {
-    setErr("");
+  const endExpiredSession = useCallback(() => {
+    invalidateSensitiveView();
+    clearPartnerCookieSessionBinding();
+    clearPartnerSession();
+    nav("/gestorias", { replace: true });
+  }, [invalidateSensitiveView, nav]);
 
-    const t = (tokenOverride ?? partnerToken ?? "").trim();
-    const qq = qOverride ?? q;
-    const st = statusOverride ?? status;
-
-    if (!t) {
-      setErr("Sesión no encontrada. Vuelve a entrar en el portal de asesorías.");
-      nav("/gestorias");
+  const loadCases = useCallback(async ({
+    qValue = qRef.current,
+    statusValue = statusRef.current,
+    cursor = "",
+    history = [],
+    hideUntilVerified = false,
+    validateSession = false,
+  } = {}) => {
+    if (!hasPartnerSessionHint()) {
+      endExpiredSession();
       return;
     }
+    if (hideUntilVerified) invalidateSensitiveView();
+    setErr("");
+
+    const qq = normalizePartnerSearch(qValue);
+    const st = statusValue;
+    const generation = ++requestGenerationRef.current;
 
     setLoading(true);
     try {
+      if (validateSession) {
+        const csrfBefore = readPartnerCsrfToken();
+        if (!csrfBefore) throw new Error("Falta la protección de la sesión partner.");
+        const session = parsePartnerSessionEnvelope(
+          await fetchJson(`${API}/partner/session`)
+        );
+        if (generation !== requestGenerationRef.current) return;
+        if (csrfBefore !== readPartnerCsrfToken()) {
+          throw new Error("La sesión partner ha cambiado en otra ventana.");
+        }
+        bindPartnerCookieSession(csrfBefore);
+        setPartnerSessionValue("partner_authenticated", "1");
+        setPartnerSessionValue("partner_expires_at", session.expiresAt);
+        setPartnerSessionValue("partner_name", session.partnerName);
+      }
+
       const params = new URLSearchParams();
+      params.set("limit", String(PARTNER_CASE_PAGE_LIMIT));
       if ((qq || "").trim()) params.set("q", qq.trim());
       if ((st || "").trim()) params.set("status", st.trim());
+      if (cursor) params.set("cursor", cursor);
 
       const qs = params.toString();
       const url = qs ? `${API}/partner/cases?${qs}` : `${API}/partner/cases`;
 
-      const data = await fetchJson(url, {
-        headers: {
-          Authorization: `Bearer ${t}`,
-        },
-      });
+      const data = await fetchJson(url);
 
-      setItems(data.items || []);
-      if (data.partner_name) {
-        setPartnerName(data.partner_name);
-        localStorage.setItem("partner_name", data.partner_name);
-      }
+      if (generation !== requestGenerationRef.current) return;
+      const page = parsePartnerCasesEnvelope(data);
+      setItems(page.items);
+      setPartnerName(page.partnerName);
+      setPartnerSessionValue("partner_name", page.partnerName);
+      const boundedHistory = history.slice(-MAX_CURSOR_HISTORY);
+      currentCursorRef.current = cursor;
+      cursorHistoryRef.current = boundedHistory;
+      setNextCursor(page.nextCursor);
+      setPageNumber(boundedHistory.length + 1);
+      setLoadedQuery(qq.trim());
+      setLoadedStatus(st.trim());
+      setViewReady(true);
+      sensitiveViewRef.current?.removeAttribute("hidden");
     } catch (e) {
+      if (generation !== requestGenerationRef.current) return;
       setItems([]);
+      if (
+        validateSession ||
+        e?.code === "PARTNER_SESSION_CHANGED" ||
+        e?.status === 401 ||
+        e?.status === 403
+      ) {
+        endExpiredSession();
+        return;
+      }
       setErr(e.message || "No se pudo cargar el listado de expedientes.");
+      setViewReady(true);
+      sensitiveViewRef.current?.removeAttribute("hidden");
     } finally {
-      setLoading(false);
+      if (generation === requestGenerationRef.current) setLoading(false);
     }
+  }, [endExpiredSession, invalidateSensitiveView]);
+
+  useEffect(() => {
+    const remainingMs = partnerSessionRemainingMs();
+    if (!hasPartnerSessionHint() || remainingMs <= 0) {
+      endExpiredSession();
+      return undefined;
+    }
+
+    const expirationTimer = window.setTimeout(
+      endExpiredSession,
+      Math.min(remainingMs, 2_147_483_647)
+    );
+    const unbind = bindPartnerViewLifecycle(window, document, {
+      invalidate: invalidateSensitiveView,
+      revalidate: () => loadCases({
+        qValue: "",
+        statusValue: "",
+        hideUntilVerified: true,
+        validateSession: true,
+      }),
+    });
+    const unbindCrossTab = bindPartnerCrossTabSession(window, endExpiredSession);
+    setPartnerName(getPartnerSessionValue("partner_name"));
+    loadCases({
+      qValue: "",
+      statusValue: "",
+      hideUntilVerified: true,
+      validateSession: true,
+    });
+
+    return () => {
+      window.clearTimeout(expirationTimer);
+      unbind();
+      unbindCrossTab();
+      invalidateSensitiveView();
+    };
+  }, [endExpiredSession, invalidateSensitiveView, loadCases]);
+
+  const filtersDirty =
+    normalizePartnerSearch(q).trim() !== loadedQuery || status.trim() !== loadedStatus;
+
+  function refreshCases() {
+    loadCases({ qValue: qRef.current, statusValue: statusRef.current });
   }
 
-  function logout() {
-    localStorage.removeItem("partner_token");
-    localStorage.removeItem("partner_name");
-    localStorage.removeItem("partner_email");
-    localStorage.removeItem("partner_must_change");
-    nav("/gestorias");
+  function loadNextPage() {
+    if (!nextCursor || filtersDirty || cursorHistoryRef.current.length >= MAX_CURSOR_HISTORY) {
+      return;
+    }
+    loadCases({
+      qValue: loadedQuery,
+      statusValue: loadedStatus,
+      cursor: nextCursor,
+      history: [...cursorHistoryRef.current, currentCursorRef.current],
+    });
+  }
+
+  function loadPreviousPage() {
+    if (!cursorHistoryRef.current.length || filtersDirty) return;
+    const history = cursorHistoryRef.current.slice(0, -1);
+    const cursor = cursorHistoryRef.current[cursorHistoryRef.current.length - 1];
+    loadCases({
+      qValue: loadedQuery,
+      statusValue: loadedStatus,
+      cursor,
+      history,
+    });
+  }
+
+  async function logout() {
+    invalidateSensitiveView();
+    setErr("");
+    setLoggingOut(true);
+    try {
+      await fetchJson(
+        `${API}/partner/logout`,
+        { method: "POST" },
+        { requireCsrf: true }
+      );
+      clearPartnerSession();
+      clearPartnerCookieSessionBinding();
+      announcePartnerSessionChange();
+      nav("/gestorias");
+    } catch (e) {
+      if (e?.status === 401 || e?.code === "PARTNER_SESSION_CHANGED") {
+        clearPartnerSession();
+        clearPartnerCookieSessionBinding();
+        announcePartnerSessionChange();
+        nav("/gestorias");
+        return;
+      }
+      setErr("No se pudo revocar la sesión en el servidor. Vuelve a intentarlo.");
+      setViewReady(true);
+      sensitiveViewRef.current?.removeAttribute("hidden");
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   const counters = useMemo(() => {
@@ -173,7 +371,12 @@ export default function PartnerPanelExpedientes() {
         canonical="https://www.recurretumulta.eu/partner/panel"
       />
 
-      <main className="sr-container py-12" style={{ minHeight: "calc(100vh - 160px)" }}>
+      {!viewReady ? (
+        <main className="sr-container py-12" style={{ minHeight: "calc(100vh - 160px)" }}>
+          <div className="sr-card">Comprobando la sesión segura…</div>
+        </main>
+      ) : null}
+      <main ref={sensitiveViewRef} hidden={!viewReady} className="sr-container py-12" style={{ minHeight: "calc(100vh - 160px)" }}>
         <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
           <div>
             <h1 className="sr-h1">Panel de expedientes</h1>
@@ -186,21 +389,21 @@ export default function PartnerPanelExpedientes() {
           </div>
 
           <div className="sr-cta-row" style={{ justifyContent: "flex-end" }}>
-            <Link to="/gestorias/subir" className="sr-btn-primary">
+            <Link to="/gestorias" className="sr-btn-primary">
               + Nuevo expediente
             </Link>
             <Link to="/gestorias" className="sr-btn-secondary">
               ← Volver
             </Link>
-            <button className="sr-btn-secondary" onClick={logout}>
-              Salir
+            <button className="sr-btn-secondary" onClick={logout} disabled={loggingOut}>
+              {loggingOut ? "Cerrando…" : "Salir"}
             </button>
           </div>
         </div>
 
         <div className="grid md:grid-cols-4 gap-3" style={{ marginBottom: 14 }}>
           <div className="sr-card">
-            <div className="sr-small" style={{ color: "#6b7280" }}>Total expedientes</div>
+            <div className="sr-small" style={{ color: "#6b7280" }}>En esta página</div>
             <div style={{ fontSize: 28, fontWeight: 900 }}>{counters.total}</div>
           </div>
 
@@ -235,6 +438,7 @@ export default function PartnerPanelExpedientes() {
                 className="sr-input"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                maxLength={PARTNER_SEARCH_MAX_CHARS}
                 placeholder="Expediente, cliente o email"
               />
             </div>
@@ -253,7 +457,7 @@ export default function PartnerPanelExpedientes() {
             </div>
 
             <div className="sr-cta-row" style={{ justifyContent: "flex-start" }}>
-              <button className="sr-btn-primary" onClick={() => loadCases()} disabled={loading}>
+              <button className="sr-btn-primary" onClick={refreshCases} disabled={loading}>
                 {loading ? "Cargando…" : "Actualizar"}
               </button>
             </div>
@@ -276,7 +480,7 @@ export default function PartnerPanelExpedientes() {
             </div>
 
             <div className="sr-small" style={{ color: "#6b7280" }}>
-              {items.length} resultados
+              Página {pageNumber} · {items.length} resultados
             </div>
           </div>
 
@@ -323,10 +527,10 @@ export default function PartnerPanelExpedientes() {
                           Modo: <b>{item.authorization_mode || "—"}</b>
                         </div>
                         <div className="sr-small">
-                          Recibida: <b>{item.authorization_received ? "Sí" : "No"}</b>
+                          Evidencia: <b>{authorizationEvidenceLabel(item.authorization_evidence_status)}</b>
                         </div>
                         <div className="sr-small">
-                          Documento: <b>{item.authorization_document_uploaded ? "Sí" : "No"}</b>
+                          Documento físico: <b>{item.authorization_document_uploaded ? "Recibido" : "No recibido"}</b>
                         </div>
                       </td>
 
@@ -345,6 +549,35 @@ export default function PartnerPanelExpedientes() {
               </table>
             </div>
           )}
+
+          <div className="sr-cta-row" style={{ justifyContent: "flex-end", marginTop: 14 }}>
+            <button
+              className="sr-btn-secondary"
+              type="button"
+              onClick={loadPreviousPage}
+              disabled={loading || filtersDirty || cursorHistoryRef.current.length === 0}
+            >
+              ← Anterior
+            </button>
+            <button
+              className="sr-btn-secondary"
+              type="button"
+              onClick={loadNextPage}
+              disabled={
+                loading ||
+                filtersDirty ||
+                !nextCursor ||
+                cursorHistoryRef.current.length >= MAX_CURSOR_HISTORY
+              }
+            >
+              Siguiente →
+            </button>
+          </div>
+          {filtersDirty ? (
+            <div className="sr-small" style={{ textAlign: "right", color: "#6b7280", marginTop: 6 }}>
+              Actualiza para aplicar los filtros antes de cambiar de página.
+            </div>
+          ) : null}
         </div>
       </main>
     </>

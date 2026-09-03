@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { purgeLegacyRestaurantPinStorage } from "../lib/restaurantPin.js";
+import { bindRestaurantSessionLifecycle } from "../lib/restaurantSessionLifecycle.js";
+
+const DEFAULT_RESTAURANT_ID = "rest_001";
+const RESTAURANT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 
 const emptyForm = (turno = "comida") => ({
   reservation_time: turno === "desayuno" ? "09:00" : turno === "cena" ? "21:00" : "14:00",
@@ -11,11 +17,58 @@ const emptyForm = (turno = "comida") => ({
   extras_notes: "",
 });
 
-function getRestaurantIdFromHash() {
-  const hash = window.location.hash || "";
-  const qs = hash.includes("?") ? hash.split("?")[1] : "";
-  const params = new URLSearchParams(qs);
-  return params.get("r") || "rest_001";
+function normalizedRestaurantId(values) {
+  if (values.length !== 1) return "";
+  const value = String(values[0] || "").trim();
+  return RESTAURANT_ID_PATTERN.test(value) ? value : "";
+}
+
+function getRestaurantIdFromLocation(location = window.location) {
+  const search = new URLSearchParams(location.search || "");
+  if (search.has("r")) return normalizedRestaurantId(search.getAll("r"));
+
+  const hash = location.hash || "";
+  const queryIndex = hash.indexOf("?");
+  if (queryIndex >= 0) {
+    const hashParams = new URLSearchParams(hash.slice(queryIndex + 1));
+    if (hashParams.has("r")) {
+      return normalizedRestaurantId(hashParams.getAll("r"));
+    }
+  }
+  return DEFAULT_RESTAURANT_ID;
+}
+
+function reservationsListUrl(date, shift, restaurantId) {
+  const params = new URLSearchParams({
+    date,
+    shift,
+    restaurant_id: restaurantId,
+  });
+  return `/api/ops/restaurant-reservations?${params.toString()}`;
+}
+
+function reservationActionUrl(reservationId, action, restaurantId) {
+  const id = encodeURIComponent(String(reservationId || ""));
+  const params = new URLSearchParams({ restaurant_id: restaurantId });
+  return `/api/ops/restaurant-reservations/${id}${action}?${params.toString()}`;
+}
+
+async function restaurantFetch(path, pin, options = {}) {
+  if (!String(path || "").startsWith("/api/ops/")) {
+    throw new TypeError("Ruta de reservas no permitida");
+  }
+  const headers = new Headers(options.headers || {});
+  headers.delete("x-reservas-pin");
+  if (pin) headers.set("x-reservas-pin", pin);
+  return fetch(path, {
+    ...options,
+    headers,
+    credentials: "same-origin",
+    mode: "same-origin",
+    redirect: "error",
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+  });
 }
 
 function normalizeItems(json) {
@@ -27,21 +80,65 @@ function normalizeItems(json) {
   return [];
 }
 
+function pinByteLength(value) {
+  return new TextEncoder().encode(String(value || "")).length;
+}
+
+function newReservationIdempotencyKey() {
+  try {
+    return `reservation:${globalThis.crypto.randomUUID()}`;
+  } catch {
+    return `reservation:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 export default function ReservasRestaurante() {
+  const location = useLocation();
   const [reservas, setReservas] = useState([]);
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [turno, setTurno] = useState("comida");
   const [showCanceladas, setShowCanceladas] = useState(false);
 
-  const [restaurantId, setRestaurantId] = useState(getRestaurantIdFromHash());
+  const restaurantId = useMemo(
+    () => getRestaurantIdFromLocation(location),
+    [location.hash, location.search]
+  );
+  const restaurantIdRef = useRef(restaurantId);
+  restaurantIdRef.current = restaurantId;
+  const previousRestaurantIdRef = useRef(restaurantId);
+  const loadGenerationRef = useRef(0);
+  const loadAbortRef = useRef(null);
+  const actionAbortRef = useRef(null);
+  const actionPendingRef = useRef("");
+  const validationAbortRef = useRef(null);
+  const validationPendingRef = useRef(false);
+  const sensitiveRootRef = useRef(null);
+  const pinInputDomRef = useRef(null);
+  const pinCurrentDomRef = useRef(null);
+  const pinNewDomRef = useRef(null);
+  const pinNew2DomRef = useRef(null);
+  const [sensitiveViewVisible, setSensitiveViewVisible] = useState(true);
+  const [loginRevealEpoch, setLoginRevealEpoch] = useState(0);
+  const [pendingAction, setPendingAction] = useState("");
 
-  const [pin, setPin] = useState(() => sessionStorage.getItem("reservas_pin") || "");
+  const [pin, setPin] = useState(() => {
+    purgeLegacyRestaurantPinStorage();
+    return "";
+  });
   const [pinInput, setPinInput] = useState("");
+  const [pinRestaurantId, setPinRestaurantId] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [validatingPin, setValidatingPin] = useState(false);
+  const pinRef = useRef(pin);
+  const pinRestaurantIdRef = useRef(pinRestaurantId);
+  pinRef.current = pin;
+  pinRestaurantIdRef.current = pinRestaurantId;
 
   // Modal crear/editar
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState(emptyForm("comida"));
+  const reservationIdempotencyKeyRef = useRef("");
 
   // Panel cambiar PIN
   const [showPinPanel, setShowPinPanel] = useState(false);
@@ -50,29 +147,97 @@ export default function ReservasRestaurante() {
   const [pinNew2, setPinNew2] = useState("");
   const [pinMsg, setPinMsg] = useState("");
 
-  const autorizado = Boolean(pin);
+  const autorizado = Boolean(pin && pinRestaurantId === restaurantId);
 
   useEffect(() => {
-    const onHash = () => setRestaurantId(getRestaurantIdFromHash());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    if (!autorizado) {
+      setSensitiveViewVisible(true);
+      sensitiveRootRef.current?.removeAttribute("hidden");
+    }
+  }, [autorizado, loginRevealEpoch]);
+
+  useEffect(() => {
+    purgeLegacyRestaurantPinStorage();
+    const unbind = bindRestaurantSessionLifecycle(window, () => bloquear());
+    return () => {
+      unbind();
+      bloquear();
+    };
+    // Lifecycle binding is intentionally installed once; bloquear reads no
+    // long-lived credential and synchronously invalidates the credential refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function cargarReservas() {
-    if (!pin) return;
-
-    const r = await fetch(
-      `/api/ops/restaurant-reservations?date=${fecha}&shift=${turno}&restaurant_id=${restaurantId}`,
-      { headers: { "x-reservas-pin": pin } }
-    );
-
-    if (!r.ok) {
-      setReservas([]);
-      return;
+  useEffect(() => {
+    if (restaurantId !== previousRestaurantIdRef.current) {
+      bloquear();
+      previousRestaurantIdRef.current = restaurantId;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurantId]);
 
-    const json = await r.json();
-    setReservas(normalizeItems(json));
+  function beginAuthorizedRequest() {
+    const requestedRestaurantId = restaurantId;
+    const requestedPin = pin;
+    if (
+      !requestedPin ||
+      pinRestaurantId !== requestedRestaurantId ||
+      requestedRestaurantId !== restaurantIdRef.current ||
+      requestedPin !== pinRef.current ||
+      pinRestaurantId !== pinRestaurantIdRef.current
+    ) {
+      return null;
+    }
+    return {
+      generation: ++loadGenerationRef.current,
+      restaurantId: requestedRestaurantId,
+      pin: requestedPin,
+    };
+  }
+
+  function requestIsCurrent(request) {
+    return Boolean(
+      request &&
+        request.generation === loadGenerationRef.current &&
+        request.restaurantId === restaurantIdRef.current &&
+        request.restaurantId === pinRestaurantIdRef.current &&
+        request.pin === pinRef.current
+    );
+  }
+
+  async function cargarReservas() {
+    const request = beginAuthorizedRequest();
+    if (!request) return;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+
+    try {
+      const r = await restaurantFetch(
+        reservationsListUrl(fecha, turno, request.restaurantId),
+        request.pin,
+        { signal: controller.signal }
+      );
+
+      if (!requestIsCurrent(request) || controller.signal.aborted) return;
+      if (!r.ok) {
+        setReservas([]);
+        if (r.status === 401 || r.status === 403) {
+          bloquear("El PIN no es válido o ha dejado de estar autorizado.");
+        }
+        return;
+      }
+
+      const json = await r.json();
+      if (!requestIsCurrent(request) || controller.signal.aborted) return;
+      setReservas(normalizeItems(json));
+    } catch (error) {
+      if (error?.name !== "AbortError" && requestIsCurrent(request)) {
+        setReservas([]);
+      }
+    } finally {
+      if (loadAbortRef.current === controller) loadAbortRef.current = null;
+    }
   }
 
   useEffect(() => {
@@ -80,59 +245,195 @@ export default function ReservasRestaurante() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fecha, turno, restaurantId, pin]);
 
-  function confirmarPin() {
+  async function confirmarPin() {
     const v = (pinInput || "").trim();
-    if (!v) return;
-    sessionStorage.setItem("reservas_pin", v);
-    setPin(v);
-    setPinInput("");
+    if (!v || !restaurantId || validationPendingRef.current) return;
+    if (pinByteLength(v) > 72) {
+      setPinError("PIN no válido.");
+      return;
+    }
+    purgeLegacyRestaurantPinStorage();
+    setPinError("");
+    validationAbortRef.current?.abort();
+    const controller = new AbortController();
+    validationAbortRef.current = controller;
+    validationPendingRef.current = true;
+    setValidatingPin(true);
+    const requestedRestaurantId = restaurantId;
+    const generation = ++loadGenerationRef.current;
+    try {
+      const response = await restaurantFetch(
+        reservationsListUrl(fecha, turno, requestedRestaurantId),
+        v,
+        { signal: controller.signal }
+      );
+      if (
+        generation !== loadGenerationRef.current ||
+        requestedRestaurantId !== restaurantIdRef.current
+      ) return;
+      if (!response.ok) {
+        setPinError(
+          response.status === 401 || response.status === 403
+            ? "PIN no válido."
+            : "No se pudo comprobar el acceso."
+        );
+        return;
+      }
+      const json = await response.json();
+      if (
+        generation !== loadGenerationRef.current ||
+        requestedRestaurantId !== restaurantIdRef.current
+      ) return;
+      setReservas(normalizeItems(json));
+      setPin(v);
+      setPinRestaurantId(requestedRestaurantId);
+      setPinInput("");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      if (
+        generation === loadGenerationRef.current &&
+        requestedRestaurantId === restaurantIdRef.current
+      ) {
+        setPinError("No se pudo comprobar el acceso.");
+      }
+    } finally {
+      if (validationAbortRef.current === controller) {
+        validationAbortRef.current = null;
+        validationPendingRef.current = false;
+        setValidatingPin(false);
+      }
+    }
   }
 
-  function bloquear() {
-    sessionStorage.removeItem("reservas_pin");
+  function bloquear(reason = "") {
+    const safeReason = typeof reason === "string" ? reason : "";
+    sensitiveRootRef.current?.setAttribute("hidden", "");
+    setSensitiveViewVisible(false);
+    setLoginRevealEpoch((current) => current + 1);
+    loadGenerationRef.current += 1;
+    loadAbortRef.current?.abort();
+    loadAbortRef.current = null;
+    actionAbortRef.current?.abort();
+    actionAbortRef.current = null;
+    actionPendingRef.current = "";
+    validationAbortRef.current?.abort();
+    validationAbortRef.current = null;
+    validationPendingRef.current = false;
+    pinRef.current = "";
+    pinRestaurantIdRef.current = "";
+    purgeLegacyRestaurantPinStorage();
     setPin("");
+    setPinRestaurantId("");
+    setPinInput("");
+    setPinCurrent("");
+    setPinNew("");
+    setPinNew2("");
     setReservas([]);
     setModalOpen(false);
     setEditId(null);
+    setForm(emptyForm(turno));
+    reservationIdempotencyKeyRef.current = "";
     setShowPinPanel(false);
     setPinMsg("");
+    setPinError(safeReason);
+    setValidatingPin(false);
+    setPendingAction("");
+    for (const ref of [pinInputDomRef, pinCurrentDomRef, pinNewDomRef, pinNew2DomRef]) {
+      if (ref.current) ref.current.value = "";
+    }
+  }
+
+  function beginMutation(label) {
+    if (actionPendingRef.current) return null;
+    const request = beginAuthorizedRequest();
+    if (!request) {
+      bloquear("El acceso ya no corresponde a este restaurante.");
+      return null;
+    }
+    const controller = new AbortController();
+    actionAbortRef.current = controller;
+    actionPendingRef.current = label;
+    setPendingAction(label);
+    return { ...request, controller, label };
+  }
+
+  function finishMutation(request) {
+    if (actionAbortRef.current !== request?.controller) return;
+    actionAbortRef.current = null;
+    actionPendingRef.current = "";
+    setPendingAction("");
   }
 
   // ====== Acciones ======
+  async function runReservationAction(id, action) {
+    const request = beginMutation(`reservation-action:${id}`);
+    if (!request) return;
+    try {
+      const response = await restaurantFetch(reservationActionUrl(id, action, request.restaurantId), request.pin, {
+        method: "POST",
+        signal: request.controller.signal,
+      });
+      if (!requestIsCurrent(request) || request.controller.signal.aborted) return;
+      if (!response.ok) return handleAuthorizedFailure(response, request);
+      await cargarReservas();
+    } catch (error) {
+      if (error?.name !== "AbortError" && requestIsCurrent(request)) {
+        window.alert("No se pudo completar la operación.");
+      }
+    } finally {
+      finishMutation(request);
+    }
+  }
+
   async function marcarLlegada(id) {
-    await fetch(`/api/ops/restaurant-reservations/${id}/arrived?restaurant_id=${restaurantId}`, {
-      method: "POST",
-      headers: { "x-reservas-pin": pin },
-    });
-    cargarReservas();
+    return runReservationAction(id, "/arrived");
   }
 
   async function marcarNoShow(id) {
-    await fetch(`/api/ops/restaurant-reservations/${id}/no-show?restaurant_id=${restaurantId}`, {
-      method: "POST",
-      headers: { "x-reservas-pin": pin },
-    });
-    cargarReservas();
+    return runReservationAction(id, "/no-show");
   }
 
   async function cancelarReserva(id) {
     if (!window.confirm("¿Cancelar esta reserva?")) return;
-    await fetch(`/api/ops/restaurant-reservations/${id}/cancel?restaurant_id=${restaurantId}`, {
-      method: "POST",
-      headers: { "x-reservas-pin": pin },
-    });
-    cargarReservas();
+    return runReservationAction(id, "/cancel");
+  }
+
+  function handleAuthorizedFailure(response, request) {
+    if (!requestIsCurrent(request)) return;
+    if (response.status === 401 || response.status === 403) {
+      bloquear("El PIN no es válido o ha dejado de estar autorizado.");
+      return;
+    }
+    window.alert("No se pudo completar la operación.");
+  }
+
+  function closePinPanel() {
+    setShowPinPanel(false);
+    setPinCurrent("");
+    setPinNew("");
+    setPinNew2("");
+    setPinMsg("");
+  }
+
+  function togglePinPanel() {
+    if (actionPendingRef.current) return;
+    if (showPinPanel) return closePinPanel();
+    setShowPinPanel(true);
   }
 
   // ====== Crear / Editar ======
   function abrirNueva() {
+    if (actionPendingRef.current) return;
     setEditId(null);
     setForm(emptyForm(turno));
+    reservationIdempotencyKeyRef.current = newReservationIdempotencyKey();
     setModalOpen(true);
   }
 
   function abrirEditar(r) {
+    if (actionPendingRef.current) return;
     setEditId(r.id);
+    reservationIdempotencyKeyRef.current = "";
     setForm({
       reservation_time: (r.reservation_time || "14:00").slice(0, 5),
       table_name: r.table_name || "",
@@ -146,14 +447,24 @@ export default function ReservasRestaurante() {
     setModalOpen(true);
   }
 
+  function updateReservationForm(patch) {
+    setForm((current) => ({ ...current, ...patch }));
+    if (!editId) {
+      reservationIdempotencyKeyRef.current = newReservationIdempotencyKey();
+    }
+  }
+
   async function guardarReserva() {
     const name = (form.customer_name || "").trim();
     const pax = Number(form.party_size);
 
     if (!name) return alert("Falta el nombre.");
     if (!pax || pax < 1) return alert("Pax inválidos.");
+    const request = beginMutation(editId ? `reservation-edit:${editId}` : "reservation-create");
+    if (!request) return;
 
-    if (editId) {
+    try {
+      if (editId) {
       // EDIT
       const payload = {
         reservation_time: form.reservation_time,
@@ -166,17 +477,16 @@ export default function ReservasRestaurante() {
         extras_notes: form.extras_notes || "",
       };
 
-      const r = await fetch(`/api/ops/restaurant-reservations/${editId}?restaurant_id=${restaurantId}`, {
+        const r = await restaurantFetch(reservationActionUrl(editId, "", request.restaurantId), request.pin, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "x-reservas-pin": pin },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: request.controller.signal,
       });
 
-      if (!r.ok) {
-        const t = await r.text();
-        return alert("Error al guardar: " + t);
-      }
-    } else {
+        if (!requestIsCurrent(request) || request.controller.signal.aborted) return;
+        if (!r.ok) return handleAuthorizedFailure(r, request);
+      } else {
       // CREATE
       const payload = {
         reservation_date: fecha,
@@ -192,21 +502,36 @@ export default function ReservasRestaurante() {
         created_by: "SALA",
       };
 
-      const r = await fetch(`/api/ops/restaurant-reservations?restaurant_id=${restaurantId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-reservas-pin": pin },
-        body: JSON.stringify(payload),
-      });
+        const idempotencyKey =
+          reservationIdempotencyKeyRef.current || newReservationIdempotencyKey();
+        reservationIdempotencyKeyRef.current = idempotencyKey;
+        const query = new URLSearchParams({ restaurant_id: request.restaurantId });
+        const r = await restaurantFetch(`/api/ops/restaurant-reservations?${query.toString()}`, request.pin, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey,
+          },
+          body: JSON.stringify(payload),
+          signal: request.controller.signal,
+        });
 
-      if (!r.ok) {
-        const t = await r.text();
-        return alert("Error al crear: " + t);
+        if (!requestIsCurrent(request) || request.controller.signal.aborted) return;
+        if (!r.ok) return handleAuthorizedFailure(r, request);
       }
-    }
 
-    setModalOpen(false);
-    setEditId(null);
-    cargarReservas();
+      setModalOpen(false);
+      setEditId(null);
+      setForm(emptyForm(turno));
+      reservationIdempotencyKeyRef.current = "";
+      await cargarReservas();
+    } catch (error) {
+      if (error?.name !== "AbortError" && requestIsCurrent(request)) {
+        window.alert("No se pudo guardar la reserva.");
+      }
+    } finally {
+      finishMutation(request);
+    }
   }
 
   // ====== Cambiar PIN ======
@@ -214,30 +539,43 @@ export default function ReservasRestaurante() {
     setPinMsg("");
     if (!pinCurrent || !pinNew || !pinNew2) return setPinMsg("Rellena los 3 campos.");
     if (pinNew !== pinNew2) return setPinMsg("Los nuevos PIN no coinciden.");
-
-    const r = await fetch("/api/ops/restaurants/change-pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        restaurant_id: restaurantId,
-        current_pin: pinCurrent,
-        new_pin: pinNew,
-      }),
-    });
-
-    if (!r.ok) {
-      const t = await r.text();
-      return setPinMsg("Error: " + t);
+    if (pinNew.length < 8 || pinNew.length > 64 || pinByteLength(pinNew) > 72) {
+      return setPinMsg("El PIN nuevo debe tener entre 8 y 64 caracteres.");
     }
+    const request = beginMutation("pin-change");
+    if (!request) return;
 
-    // Actualiza PIN de sesión al nuevo (para no cortar la sesión)
-    sessionStorage.setItem("reservas_pin", pinNew);
-    setPin(pinNew);
+    try {
+      const r = await restaurantFetch("/api/ops/restaurants/change-pin", "", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurant_id: request.restaurantId,
+          current_pin: pinCurrent,
+          new_pin: pinNew,
+        }),
+        signal: request.controller.signal,
+      });
 
-    setPinCurrent("");
-    setPinNew("");
-    setPinNew2("");
-    setPinMsg("PIN cambiado ✅");
+      if (!requestIsCurrent(request) || request.controller.signal.aborted) return;
+      if (!r.ok) return setPinMsg("No se pudo cambiar el PIN.");
+
+      // El PIN renovado sigue solo en memoria y desaparece al salir o recargar.
+      purgeLegacyRestaurantPinStorage();
+      pinRef.current = pinNew;
+      setPin(pinNew);
+
+      setPinCurrent("");
+      setPinNew("");
+      setPinNew2("");
+      setPinMsg("PIN cambiado ✅");
+    } catch (error) {
+      if (error?.name !== "AbortError" && requestIsCurrent(request)) {
+        setPinMsg("No se pudo cambiar el PIN.");
+      }
+    } finally {
+      finishMutation(request);
+    }
   }
 
   // ====== Derivados (una sola fuente de verdad: 'visibles') ======
@@ -259,9 +597,18 @@ export default function ReservasRestaurante() {
   }, [reservas]);
 
   // ====== LOGIN ======
+  if (!restaurantId) {
+    return (
+      <div style={{ padding: 40, maxWidth: 520, margin: "0 auto" }}>
+        <h2>Enlace de restaurante no válido</h2>
+        <p>No se abrirá ningún panel hasta recibir un identificador de restaurante válido.</p>
+      </div>
+    );
+  }
+
   if (!autorizado) {
     return (
-      <div style={{ padding: 40, maxWidth: 420, margin: "0 auto" }}>
+      <div ref={sensitiveRootRef} hidden={!sensitiveViewVisible} style={{ padding: 40, maxWidth: 420, margin: "0 auto" }}>
       <style>{`
         @media print {
           button, input, select { display: none !important; }
@@ -272,26 +619,31 @@ export default function ReservasRestaurante() {
 
         <h2>Acceso reservas</h2>
         <p style={{ marginTop: 8, opacity: 0.85 }}>
-          Restaurante: <b>{restaurantId}</b> · PIN se guarda solo durante esta sesión.
+          Restaurante: <b>{restaurantId}</b> · La aplicación no almacena el PIN; se borra de esta vista al salir o recargar.
         </p>
         <input
+          ref={pinInputDomRef}
           type="password"
+          name="restaurant-access-code"
+          autoComplete="off"
           placeholder="PIN"
+          maxLength={72}
           value={pinInput}
           onChange={(e) => setPinInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && confirmarPin()}
           style={{ width: "100%", padding: 10, fontSize: 16, marginTop: 8 }}
         />
-        <button onClick={confirmarPin} style={{ marginTop: 10, width: "100%", padding: 12, fontSize: 16 }}>
-          Entrar
+        <button disabled={validatingPin} onClick={confirmarPin} style={{ marginTop: 10, width: "100%", padding: 12, fontSize: 16 }}>
+          {validatingPin ? "Comprobando…" : "Entrar"}
         </button>
+        {pinError ? <p role="alert" style={{ color: "#991b1b" }}>{pinError}</p> : null}
       </div>
     );
   }
 
   // ====== UI PRINCIPAL ======
   return (
-    <div style={{ padding: 20 }}>
+    <div ref={sensitiveRootRef} hidden={!sensitiveViewVisible} style={{ padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div>
           <h2 style={{ margin: 0 }}>Reservas</h2>
@@ -301,18 +653,18 @@ export default function ReservasRestaurante() {
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button onClick={abrirNueva} style={{ padding: "10px 12px", fontWeight: 800 }}>
+          <button disabled={Boolean(pendingAction)} onClick={abrirNueva} style={{ padding: "10px 12px", fontWeight: 800 }}>
             ➕ Añadir reserva
           </button>
-          <button onClick={bloquear} style={{ padding: "10px 12px" }}>
+          <button onClick={() => bloquear()} style={{ padding: "10px 12px" }}>
             🔒 Bloquear
           </button>
         </div>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, margin: "12px 0" }}>
-        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-        <select value={turno} onChange={(e) => setTurno(e.target.value)}>
+        <input disabled={Boolean(pendingAction)} type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <select disabled={Boolean(pendingAction)} value={turno} onChange={(e) => setTurno(e.target.value)}>
           <option value="desayuno">Desayuno</option>
           <option value="comida">Comida</option>
           <option value="cena">Cena</option>
@@ -357,10 +709,10 @@ export default function ReservasRestaurante() {
               </td>
               <td>{r.status}</td>
               <td style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => marcarLlegada(r.id)} title="Llegó">✅</button>
-                <button onClick={() => marcarNoShow(r.id)} title="No show">❌</button>
-                <button onClick={() => cancelarReserva(r.id)} title="Cancelar">🚫</button>
-                <button onClick={() => abrirEditar(r)} title="Editar">✏️</button>
+                <button disabled={Boolean(pendingAction)} onClick={() => marcarLlegada(r.id)} title="Llegó">✅</button>
+                <button disabled={Boolean(pendingAction)} onClick={() => marcarNoShow(r.id)} title="No show">❌</button>
+                <button disabled={Boolean(pendingAction)} onClick={() => cancelarReserva(r.id)} title="Cancelar">🚫</button>
+                <button disabled={Boolean(pendingAction)} onClick={() => abrirEditar(r)} title="Editar">✏️</button>
               </td>
             </tr>
           ))}
@@ -369,7 +721,7 @@ export default function ReservasRestaurante() {
 
       {/* Cambiar PIN (desplegable) */}
       <div style={{ marginTop: 14 }}>
-        <button onClick={() => setShowPinPanel((v) => !v)} style={{ padding: "10px 12px", fontWeight: 800 }}>
+        <button disabled={Boolean(pendingAction)} onClick={togglePinPanel} style={{ padding: "10px 12px", fontWeight: 800 }}>
           🔑 Cambiar PIN
         </button>
 
@@ -378,25 +730,25 @@ export default function ReservasRestaurante() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 PIN actual
-                <input type="password" value={pinCurrent} onChange={(e) => setPinCurrent(e.target.value)} />
+                <input ref={pinCurrentDomRef} name="restaurant-current-code" autoComplete="off" disabled={Boolean(pendingAction)} type="password" maxLength={72} value={pinCurrent} onChange={(e) => setPinCurrent(e.target.value)} />
               </label>
               <div />
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 Nuevo PIN
-                <input type="password" value={pinNew} onChange={(e) => setPinNew(e.target.value)} />
+                <input ref={pinNewDomRef} name="restaurant-new-code" autoComplete="off" disabled={Boolean(pendingAction)} type="password" maxLength={64} value={pinNew} onChange={(e) => setPinNew(e.target.value)} />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 Repetir nuevo PIN
-                <input type="password" value={pinNew2} onChange={(e) => setPinNew2(e.target.value)} />
+                <input ref={pinNew2DomRef} name="restaurant-new-code-confirmation" autoComplete="off" disabled={Boolean(pendingAction)} type="password" maxLength={64} value={pinNew2} onChange={(e) => setPinNew2(e.target.value)} />
               </label>
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
-              <button onClick={() => { setShowPinPanel(false); setPinMsg(""); }} style={{ padding: "10px 12px" }}>
+              <button disabled={Boolean(pendingAction)} onClick={closePinPanel} style={{ padding: "10px 12px" }}>
                 Cerrar
               </button>
-              <button onClick={cambiarPin} style={{ padding: "10px 12px", fontWeight: 900 }}>
-                Cambiar PIN
+              <button disabled={Boolean(pendingAction)} onClick={cambiarPin} style={{ padding: "10px 12px", fontWeight: 900 }}>
+                {pendingAction === "pin-change" ? "Cambiando…" : "Cambiar PIN"}
               </button>
             </div>
 
@@ -419,7 +771,7 @@ export default function ReservasRestaurante() {
             justifyContent: "center",
             padding: 16,
           }}
-          onClick={() => setModalOpen(false)}
+          onClick={() => { if (!pendingAction) setModalOpen(false); }}
         >
           <div
             style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 520, padding: 16 }}
@@ -427,13 +779,13 @@ export default function ReservasRestaurante() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
               <h3 style={{ margin: 0 }}>{editId ? "Editar reserva" : "Añadir reserva"}</h3>
-              <button onClick={() => setModalOpen(false)} aria-label="Cerrar">✖️</button>
+              <button disabled={Boolean(pendingAction)} onClick={() => setModalOpen(false)} aria-label="Cerrar">✖️</button>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 Hora
-                <input value={form.reservation_time} onChange={(e) => setForm({ ...form, reservation_time: e.target.value })} />
+                <input disabled={Boolean(pendingAction)} value={form.reservation_time} onChange={(e) => updateReservationForm({ reservation_time: e.target.value })} />
               </label>
 
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -441,48 +793,49 @@ export default function ReservasRestaurante() {
                 <input
                   type="number"
                   min="1"
+                  disabled={Boolean(pendingAction)}
                   value={form.party_size}
-                  onChange={(e) => setForm({ ...form, party_size: e.target.value })}
+                  onChange={(e) => updateReservationForm({ party_size: e.target.value })}
                 />
               </label>
 
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 Mesa
-                <input value={form.table_name} onChange={(e) => setForm({ ...form, table_name: e.target.value })} placeholder="Ej: 6 / T3 / Barra 2" />
+                <input disabled={Boolean(pendingAction)} value={form.table_name} onChange={(e) => updateReservationForm({ table_name: e.target.value })} placeholder="Ej: 6 / T3 / Barra 2" />
               </label>
 
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 Teléfono
-                <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Opcional" />
+                <input disabled={Boolean(pendingAction)} value={form.phone} onChange={(e) => updateReservationForm({ phone: e.target.value })} placeholder="Opcional" />
               </label>
 
               <label style={{ display: "flex", flexDirection: "column", gap: 6, gridColumn: "1 / -1" }}>
                 Nombre
-                <input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} placeholder="Obligatorio" />
+                <input disabled={Boolean(pendingAction)} value={form.customer_name} onChange={(e) => updateReservationForm({ customer_name: e.target.value })} placeholder="Obligatorio" />
               </label>
 
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="checkbox" checked={form.extras_dog} onChange={(e) => setForm({ ...form, extras_dog: e.target.checked })} />
+                <input disabled={Boolean(pendingAction)} type="checkbox" checked={form.extras_dog} onChange={(e) => updateReservationForm({ extras_dog: e.target.checked })} />
                 Perro
               </label>
 
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="checkbox" checked={form.extras_celiac} onChange={(e) => setForm({ ...form, extras_celiac: e.target.checked })} />
+                <input disabled={Boolean(pendingAction)} type="checkbox" checked={form.extras_celiac} onChange={(e) => updateReservationForm({ extras_celiac: e.target.checked })} />
                 Celíaco
               </label>
 
               <label style={{ display: "flex", flexDirection: "column", gap: 6, gridColumn: "1 / -1" }}>
                 Notas / extras
-                <input value={form.extras_notes} onChange={(e) => setForm({ ...form, extras_notes: e.target.value })} placeholder="Trona, terraza, cumpleaños..." />
+                <input disabled={Boolean(pendingAction)} value={form.extras_notes} onChange={(e) => updateReservationForm({ extras_notes: e.target.value })} placeholder="Trona, terraza, cumpleaños..." />
               </label>
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
-              <button onClick={() => setModalOpen(false)} style={{ padding: "10px 12px" }}>
+              <button disabled={Boolean(pendingAction)} onClick={() => setModalOpen(false)} style={{ padding: "10px 12px" }}>
                 Cancelar
               </button>
-              <button onClick={guardarReserva} style={{ padding: "10px 12px", fontWeight: 900 }}>
-                Guardar
+              <button disabled={Boolean(pendingAction)} onClick={guardarReserva} style={{ padding: "10px 12px", fontWeight: 900 }}>
+                {pendingAction.startsWith("reservation-") ? "Guardando…" : "Guardar"}
               </button>
             </div>
           </div>

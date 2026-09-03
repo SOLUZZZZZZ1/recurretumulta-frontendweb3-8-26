@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import { VEHICLE_REMOVAL_INTAKE_PATH } from "../data/publicServices.js";
 
 const SERVICES = [
   {
@@ -15,7 +16,7 @@ const SERVICES = [
     title: "Eliminar un vehículo",
     text: "Si tiene un vehículo que ya no usa, está parado o continúa generándole problemas, le ayudamos a estudiar cómo resolver la situación.",
     action: "Ver opciones para mi vehículo",
-    to: "/eliminar-coche",
+    to: VEHICLE_REMOVAL_INTAKE_PATH,
     available: true,
   },
   {

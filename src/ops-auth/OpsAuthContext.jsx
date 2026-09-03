@@ -20,6 +20,10 @@ import {
   canAccessOpsWorkspace,
   canSuperviseOpsWorkspace,
 } from "./opsAuthorization.js";
+import {
+  bindOpsSessionLifecycle,
+  scheduleOpsSessionExpiry,
+} from "./opsSessionLifecycle.js";
 
 const OpsAuthContext = createContext(null);
 
@@ -164,12 +168,25 @@ export function OpsAuthProvider({ children }) {
   const mountedRef = useRef(true);
   const requestAbortRef = useRef(null);
   const requestLockRef = useRef(false);
+  const activeFetchControllersRef = useRef(new Set());
+  const sensitiveRootRef = useRef(null);
   const [status, setStatus] = useState(null);
   const [session, setSession] = useState(null);
   const [onboardingOperator, setOnboardingOperator] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [viewVisible, setViewVisible] = useState(true);
+  const [viewEpoch, setViewEpoch] = useState(0);
+  const [statusEpoch, setStatusEpoch] = useState(0);
+
+  const abortSensitiveRequests = useCallback(() => {
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
+    requestLockRef.current = false;
+    for (const controller of activeFetchControllersRef.current) controller.abort();
+    activeFetchControllersRef.current.clear();
+  }, []);
 
   const clearSession = useCallback((message = "") => {
     bearerRef.current = "";
@@ -178,36 +195,78 @@ export function OpsAuthProvider({ children }) {
     setOnboardingOperator(null);
     setNotice("");
     setError(message);
+    setBusy(false);
+    setViewEpoch((current) => current + 1);
   }, []);
 
   const invalidateSession = useCallback(
     (expectedSessionId = "") => {
       if (expectedSessionId && activeSessionIdRef.current !== expectedSessionId) return;
-      requestAbortRef.current?.abort();
-      requestAbortRef.current = null;
-      requestLockRef.current = false;
+      sensitiveRootRef.current?.setAttribute("hidden", "");
+      abortSensitiveRequests();
       clearSession("La sesión individual ha caducado. Vuelve a identificarte.");
     },
-    [clearSession]
+    [abortSensitiveRequests, clearSession]
   );
+
+  const invalidateForPageExit = useCallback(() => {
+    sensitiveRootRef.current?.setAttribute("hidden", "");
+    setViewVisible(false);
+    const token = bearerRef.current;
+    abortSensitiveRequests();
+    clearSession("La vista protegida se cerró. Vuelve a identificarte.");
+    if (token) {
+      void logoutOpsOperator({ bearerToken: token, keepalive: true }).catch(() => {});
+    }
+  }, [abortSensitiveRequests, clearSession]);
+
+  const restoreAfterPageShow = useCallback(() => {
+    abortSensitiveRequests();
+    clearSession("La página se restauró de forma segura. Vuelve a identificarte.");
+    setStatus(null);
+    setStatusEpoch((current) => current + 1);
+    setViewVisible(true);
+  }, [abortSensitiveRequests, clearSession]);
 
   useEffect(() => {
     const controller = new AbortController();
+    activeFetchControllersRef.current.add(controller);
     void readOpsAuthStatus({ signal: controller.signal })
       .then((nextStatus) => {
         if (!controller.signal.aborted) setStatus(nextStatus);
       })
       .catch((statusError) => {
         if (!controller.signal.aborted) setError(statusError.message);
-      });
-    return () => controller.abort();
-  }, []);
+      })
+      .finally(() => activeFetchControllersRef.current.delete(controller));
+    return () => {
+      controller.abort();
+      activeFetchControllersRef.current.delete(controller);
+    };
+  }, [statusEpoch]);
+
+  useEffect(
+    () =>
+      bindOpsSessionLifecycle(window, {
+        invalidate: invalidateForPageExit,
+        restore: restoreAfterPageShow,
+      }),
+    [invalidateForPageExit, restoreAfterPageShow]
+  );
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const expectedSessionId = session.sessionId;
+    return scheduleOpsSessionExpiry(session.expiresAt, () => {
+      invalidateSession(expectedSessionId);
+    });
+  }, [invalidateSession, session]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      requestAbortRef.current?.abort();
+      abortSensitiveRequests();
       const token = bearerRef.current;
       bearerRef.current = "";
       activeSessionIdRef.current = "";
@@ -215,7 +274,7 @@ export function OpsAuthProvider({ children }) {
         void logoutOpsOperator({ bearerToken: token, keepalive: true }).catch(() => {});
       }
     };
-  }, []);
+  }, [abortSensitiveRequests]);
 
   const login = useCallback(
     async (email, password) => {
@@ -326,14 +385,12 @@ export function OpsAuthProvider({ children }) {
   );
 
   const logout = useCallback(async () => {
-    requestAbortRef.current?.abort();
-    requestAbortRef.current = null;
-    requestLockRef.current = false;
     const token = bearerRef.current;
+    abortSensitiveRequests();
     clearSession();
     if (!token) return;
     await logoutOpsOperator({ bearerToken: token }).catch(() => {});
-  }, [clearSession]);
+  }, [abortSensitiveRequests, clearSession]);
 
   const authFetch = useCallback(
     async (url, options = {}) => {
@@ -343,14 +400,28 @@ export function OpsAuthProvider({ children }) {
         invalidateSession(expectedSessionId);
         throw new OpsAuthError("ops_auth.session_required", "La sesión individual ha caducado.", 401);
       }
-      const request = buildOpsAuthenticatedRequest({
-        url,
-        bearerToken: token,
-        options,
-      });
-      const response = await fetch(request.url, request.options);
-      if (response.status === 401) invalidateSession(expectedSessionId);
-      return response;
+      const controller = new AbortController();
+      const callerSignal = options?.signal || null;
+      const abortFromCaller = () => controller.abort(callerSignal?.reason);
+      if (callerSignal?.aborted) {
+        abortFromCaller();
+      } else {
+        callerSignal?.addEventListener?.("abort", abortFromCaller, { once: true });
+      }
+      activeFetchControllersRef.current.add(controller);
+      try {
+        const request = buildOpsAuthenticatedRequest({
+          url,
+          bearerToken: token,
+          options: { ...options, signal: controller.signal },
+        });
+        const response = await fetch(request.url, request.options);
+        if (response.status === 401) invalidateSession(expectedSessionId);
+        return response;
+      } finally {
+        activeFetchControllersRef.current.delete(controller);
+        callerSignal?.removeEventListener?.("abort", abortFromCaller);
+      }
     },
     [invalidateSession]
   );
@@ -385,7 +456,13 @@ export function OpsAuthProvider({ children }) {
     ]
   );
 
-  return <OpsAuthContext.Provider value={value}>{children}</OpsAuthContext.Provider>;
+  return (
+    <OpsAuthContext.Provider value={value}>
+      <div key={viewEpoch} ref={sensitiveRootRef} hidden={!viewVisible}>
+        {children}
+      </div>
+    </OpsAuthContext.Provider>
+  );
 }
 
 export function useOpsAuth() {

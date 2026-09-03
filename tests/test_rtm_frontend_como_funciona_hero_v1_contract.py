@@ -3,8 +3,10 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import struct
+import subprocess
 import unittest
 
 
@@ -13,10 +15,53 @@ IMAGE = ROOT / "public" / "hero-como-trabajamos.png"
 PAGE = ROOT / "src" / "pages" / "ComoFunciona.jsx"
 DOC = ROOT / "docs" / "rtm_connect" / "RTM_FRONTEND_COMO_FUNCIONA_HERO_V1.md"
 PREFLIGHT = ROOT / "scripts" / "rtm_frontend_como_funciona_hero_v1_preflight.py"
+INTEGRITY_ADDENDUM = (
+    ROOT
+    / "docs"
+    / "rtm_connect"
+    / "RTM_FRONTEND_HISTORICAL_EVIDENCE_INTEGRITY_V1.json"
+)
+COMO_FUNCIONA_EVIDENCE_COMMIT_SHA40 = (
+    "47fbb165c16f93217b0f0e445631258fbfbe3f18"
+)
+INTEGRITY_ADDENDUM_SHA256 = (
+    "aad8f0e63e8702cb2619973722d31428dd964dead26d189730ac242f5998d5b0"
+)
+INTEGRITY_ADDENDUM_COMMIT_SHA40 = (
+    "2e94c15852a3636c271143b00e56133ca208834c"
+)
+INTEGRITY_ADDENDUM_GIT_OBJECT_ID = "6782d2c00e21799383bc35aae9d014cec826d663"
 
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def archived_blob(commit: str, relative_path: str) -> bytes:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{relative_path}"],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"No se pudo leer {relative_path} en {commit}")
+    return result.stdout
+
+
+def archived_object_id(commit: str, relative_path: str) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", f"{commit}:{relative_path}"],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"No se pudo resolver {relative_path} en {commit}")
+    return result.stdout.strip()
 
 
 def load_preflight():
@@ -125,14 +170,76 @@ class ComoFuncionaHeroV1DocsAndPreflightTests(unittest.TestCase):
             },
         )
 
-    def test_preflight_hashes_every_non_self_overlay_file(self):
+    def test_legacy_preflight_manifest_is_archived_and_explicitly_invalidated(self):
         expected = set(self.preflight.OVERLAY_PATHS) - {
             "scripts/rtm_frontend_como_funciona_hero_v1_preflight.py"
         }
         self.assertEqual(set(self.preflight.EXPECTED_FILE_SHA256), expected)
+        addendum_bytes = INTEGRITY_ADDENDUM.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(addendum_bytes).hexdigest(), INTEGRITY_ADDENDUM_SHA256
+        )
+        addendum_path = INTEGRITY_ADDENDUM.relative_to(ROOT).as_posix()
+        self.assertEqual(
+            archived_blob(INTEGRITY_ADDENDUM_COMMIT_SHA40, addendum_path),
+            addendum_bytes,
+        )
+        self.assertEqual(
+            archived_object_id(INTEGRITY_ADDENDUM_COMMIT_SHA40, addendum_path),
+            INTEGRITY_ADDENDUM_GIT_OBJECT_ID,
+        )
+        addendum = json.loads(addendum_bytes)
+        record = addendum["records"]["como_funciona_hero_v1"]
+        self.assertEqual(record["source_commit"], COMO_FUNCIONA_EVIDENCE_COMMIT_SHA40)
+        self.assertEqual(
+            record["manifest_path"], PREFLIGHT.relative_to(ROOT).as_posix()
+        )
+        self.assertIs(record["original_manifest_valid"], False)
+        archived_preflight = archived_blob(
+            COMO_FUNCIONA_EVIDENCE_COMMIT_SHA40,
+            PREFLIGHT.relative_to(ROOT).as_posix(),
+        )
+        self.assertEqual(archived_preflight, PREFLIGHT.read_bytes())
+        self.assertEqual(
+            hashlib.sha256(archived_preflight).hexdigest(),
+            record["manifest_git_blob_sha256"],
+        )
+        self.assertEqual(
+            archived_object_id(
+                COMO_FUNCIONA_EVIDENCE_COMMIT_SHA40,
+                PREFLIGHT.relative_to(ROOT).as_posix(),
+            ),
+            record["manifest_git_object_id"],
+        )
+
+        observed = {}
         for name, digest in self.preflight.EXPECTED_FILE_SHA256.items():
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
-            self.assertEqual(sha256_file(ROOT / name), digest, name)
+            observed[name] = hashlib.sha256(
+                archived_blob(COMO_FUNCIONA_EVIDENCE_COMMIT_SHA40, name)
+            ).hexdigest()
+        mismatches = {
+            name
+            for name, digest in self.preflight.EXPECTED_FILE_SHA256.items()
+            if observed[name] != digest
+        }
+        self.assertEqual(mismatches, {"src/pages/ComoFunciona.jsx"})
+        self.assertEqual(set(record["mismatches"]), mismatches)
+        self.assertEqual(record["declared_file_count"], len(expected))
+        self.assertEqual(record["matching_file_count"], len(expected - mismatches))
+        self.assertEqual(record["mismatch_count"], len(mismatches))
+        for name in mismatches:
+            self.assertEqual(
+                record["mismatches"][name],
+                {
+                    "declared_sha256": self.preflight.EXPECTED_FILE_SHA256[name],
+                    "git_object_id": archived_object_id(
+                        COMO_FUNCIONA_EVIDENCE_COMMIT_SHA40, name
+                    ),
+                    "git_blob_sha256": observed[name],
+                },
+                name,
+            )
 
     def test_preflight_has_no_network_or_process_surface(self):
         tree = ast.parse(self.script)

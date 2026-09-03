@@ -1,12 +1,21 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AiDocumentConsent from "../components/AiDocumentConsent.jsx";
 import Seo from "../components/Seo.jsx";
 import {
   apiFetch,
-  redactCaseAccessToken,
   rememberCaseAccessToken,
   RTM_API_CANDIDATES,
 } from "../lib/api.js";
+import { rememberCaseScopedData } from "../lib/caseSession.js";
+import {
+  appendAiDocumentConsent,
+  DOCUMENT_ANALYSIS_PRIVACY_VERSION,
+} from "../lib/aiDocumentConsent.js";
+import {
+  isAuthorizationPendingReview,
+  isAuthorizationVerified,
+} from "../lib/authorizationEvidence.js";
 
 const HARD_SEND_LIMIT_BYTES = 2.2 * 1024 * 1024;
 const TARGET_IMAGE_BYTES = 1.6 * 1024 * 1024;
@@ -301,11 +310,13 @@ function looksLikeUuid(value) {
 }
 
 function getCasePhase(data) {
-  const authorized = Boolean(data?.authorized);
+  const authorized = isAuthorizationVerified(data);
   const paymentStatus = String(data?.payment_status || "").toLowerCase();
   const status = String(data?.status || "").toLowerCase();
 
-  if (!authorized) return "authorize";
+  if (!authorized) {
+    return isAuthorizationPendingReview(data) ? "summary" : "authorize";
+  }
   if (paymentStatus !== "paid") return "pay";
 
   if (
@@ -369,10 +380,12 @@ export default function Multas() {
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [message, setMessage] = useState("");
+  const [aiProcessingConsent, setAiProcessingConsent] = useState(false);
 
   async function handleFileChange(selectedFile) {
     setMessage("");
     setUploadInfo(null);
+    setAiProcessingConsent(false);
 
     if (!selectedFile) {
       setFile(null);
@@ -421,21 +434,27 @@ export default function Multas() {
       return;
     }
 
+    if (!aiProcessingConsent) {
+      setMessage(
+        "Debes autorizar expresamente el procesamiento documental con IA antes de iniciar la revisión."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
+      appendAiDocumentConsent(formData, {
+        consented: aiProcessingConsent,
+        privacyVersion: DOCUMENT_ANALYSIS_PRIVACY_VERSION,
+      });
 
       const data = await requestWithFallback("/analyze", {
         method: "POST",
         body: formData,
       });
-
-      localStorage.setItem(
-        "rtm_last_analysis",
-        JSON.stringify(redactCaseAccessToken(data))
-      );
 
       const newCaseId =
         data?.case_id ||
@@ -453,6 +472,7 @@ export default function Multas() {
       if (!rememberCaseAccessToken(newCaseId, data?.case_access_token)) {
         throw new Error("El backend no devolvió la capacidad segura del expediente.");
       }
+      rememberCaseScopedData(newCaseId, data);
 
       navigate(`/resumen?case=${encodeURIComponent(newCaseId)}`);
     } catch (error) {
@@ -1464,11 +1484,19 @@ export default function Multas() {
                   </p>
                 )}
 
+                <AiDocumentConsent
+                  id="multas-ai-processing-consent"
+                  checked={aiProcessingConsent}
+                  onChange={setAiProcessingConsent}
+                  disabled={!file || preparing || loading}
+                  documentLabel="la multa o notificación seleccionada"
+                />
+
                 <button
                   className="mt-primary"
                   type="button"
                   onClick={handleUpload}
-                  disabled={preparing || loading || !file}
+                  disabled={preparing || loading || !file || !aiProcessingConsent}
                 >
                   {loading ? "Creando expediente…" : "Iniciar la revisión"}
                 </button>
@@ -1556,8 +1584,8 @@ export default function Multas() {
               </div>
 
               <div className="mt-price-side">
-                <strong className="mt-price-value">10 €</strong>
-                <small>Revisión Inicial del Expediente</small>
+                <strong className="mt-price-value">Cotización en el expediente</strong>
+                <small>Importe y moneda confirmados por el servidor</small>
 
                 <a className="mt-primary" href="#iniciar-revision">
                   Iniciar revisión
@@ -1566,10 +1594,9 @@ export default function Multas() {
             </div>
 
             <div className="mt-discount">
-              <strong>Si decides continuar:</strong> el recurso administrativo
-              de multa tiene una tarifa de 39 €. Los 10 € abonados por la
-              Revisión Inicial se descuentan íntegramente, por lo que quedarían
-              29 € pendientes.
+              <strong>Si decides continuar:</strong> verás primero la cotización
+              vigente ligada a tu expediente. Cualquier descuento o importe
+              pendiente se confirmará antes de contratar una gestión posterior.
             </div>
           </div>
         </section>

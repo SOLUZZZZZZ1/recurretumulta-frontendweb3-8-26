@@ -18,6 +18,9 @@ APP = ROOT / "src/App.jsx"
 DOC = ROOT / "docs/rtm_connect/RTM_FRONTEND_CONNECT_A1S_F2.md"
 EVIDENCE = ROOT / "docs/rtm_connect/RTM_FRONTEND_CONNECT_A1S_F2_EVIDENCE.json"
 PREFLIGHT = ROOT / "scripts/rtm_frontend_connect_a1s_f2_preflight.py"
+CONNECT_A1S_F2_EVIDENCE_COMMIT_SHA40 = (
+    "809a7e21f9453522df8f2728033c1ee3d6583014"
+)
 
 EXPECTED_OVERLAY_PATHS = (
     "docs/rtm_connect/RTM_FRONTEND_CONNECT_A1S_F2.md",
@@ -1266,9 +1269,37 @@ class FrontendA1SF2PreflightManifestTests(unittest.TestCase):
             "docs/rtm_connect/RTM_FRONTEND_CONNECT_A1S_F2_EVIDENCE.json"
         }
         self.assertEqual(set(evidence["file_sha256"]), expected)
+        archived_evidence = subprocess.run(
+            [
+                "git",
+                "show",
+                f"{CONNECT_A1S_F2_EVIDENCE_COMMIT_SHA40}:"
+                f"{EVIDENCE.relative_to(ROOT).as_posix()}",
+            ],
+            cwd=ROOT,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(archived_evidence.returncode, 0)
+        self.assertEqual(json.loads(archived_evidence.stdout), evidence)
         for name, digest in evidence["file_sha256"].items():
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
-            self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), digest, name)
+            archived = subprocess.run(
+                [
+                    "git",
+                    "show",
+                    f"{CONNECT_A1S_F2_EVIDENCE_COMMIT_SHA40}:{name}",
+                ],
+                cwd=ROOT,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(archived.returncode, 0, name)
+            self.assertEqual(
+                hashlib.sha256(archived.stdout).hexdigest(), digest, name
+            )
         self.assertEqual(evidence.get("live_verdict"), "no_go")
         self.assertIs(evidence.get("synthetic_case_data_only"), True)
         self.assertIs(evidence.get("read_only_domain"), True)

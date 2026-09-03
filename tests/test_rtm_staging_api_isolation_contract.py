@@ -42,13 +42,20 @@ class StagingApiIsolationContractTest(unittest.TestCase):
 
     def test_deployed_api_is_same_origin_and_single_target(self):
         source = API.read_text(encoding="utf-8")
-        self.assertIn('configuredDevelopmentBase || "/api"', source)
-        self.assertIn("import.meta.env.DEV", source)
+        self.assertIn('RTM_API_BASE = "/api"', source)
+        self.assertNotIn("VITE_API_BASE_URL", source)
+        self.assertNotIn("VITE_API_URL", source)
         self.assertIn(
             "RTM_API_CANDIDATES = Object.freeze([RTM_API_BASE])",
             source,
         )
         self.assertNotIn("DIRECT_BACKEND", source)
+
+    def test_local_development_uses_the_same_origin_vite_proxy(self):
+        source = (ROOT / "vite.config.js").read_text(encoding="utf-8")
+        self.assertIn('"/api"', source)
+        self.assertIn("RTM_DEV_API_PROXY_TARGET", source)
+        self.assertIn("developmentProxyTarget()", source)
 
     def test_payment_flow_uses_authoritative_api_module(self):
         for path in PAYMENT_FLOW:

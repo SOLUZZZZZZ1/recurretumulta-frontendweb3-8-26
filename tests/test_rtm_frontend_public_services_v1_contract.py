@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -28,6 +29,9 @@ EVIDENCE = (
     / "docs"
     / "rtm_connect"
     / "RTM_FRONTEND_PUBLIC_SERVICES_V1_EVIDENCE.json"
+)
+PUBLIC_SERVICES_EVIDENCE_COMMIT_SHA40 = (
+    "b5836a8005599650a19e2b70ca63e57b37bf6f5a"
 )
 
 FAMILY_IDS = (
@@ -150,10 +154,15 @@ class PublicServicesCatalogTests(unittest.TestCase):
 
     def test_clean_public_routes_keep_legacy_hash_links_compatible(self):
         main = read(MAIN)
+        legacy_hash_route = read(SRC / "lib" / "legacyHashRoute.js")
         self.assertIn("BrowserRouter as Router", main)
         self.assertNotIn("HashRouter as Router", main)
-        self.assertIn('hash.startsWith("#/")', main)
-        self.assertIn('window.history.replaceState(null, "", hash.slice(1))', main)
+        self.assertIn('from "./lib/legacyHashRoute.js"', main)
+        self.assertIn("migrateLegacyHashRoute(window)", main)
+        self.assertIn('hash.startsWith("#/")', legacy_hash_route)
+        self.assertIn('browserWindow.history.replaceState(null, "", target)', legacy_hash_route)
+        self.assertIn('pathname !== "/"', legacy_hash_route)
+        self.assertIn('rawPath.startsWith("//")', legacy_hash_route)
         vercel = read(ROOT / "vercel.json")
         self.assertNotIn('"routes"', vercel)
         self.assertIn('"rewrites"', vercel)
@@ -276,17 +285,18 @@ class PublicServicesSurfaceTests(unittest.TestCase):
         ):
             self.assertNotIn(marker, public_surfaces)
 
-    def test_consumer_initial_study_is_priced_and_deductible(self):
+    def test_consumer_initial_study_defers_to_case_bound_quote(self):
         prices = read(PRICES)
         for marker in (
             'title: "Reclamaciones de consumo"',
-            'price: "10 €"',
+            'priceNotice: "Cotización en tu expediente"',
             'label: "Estudio inicial del caso"',
             "bancos, energía, telecomunicaciones, seguros, viajes",
             "se descontará íntegramente del precio o presupuesto",
             'to: "/iniciar-expediente"',
         ):
             self.assertIn(marker, prices)
+        self.assertNotIn('price: "10 €"', prices)
 
     def test_housing_contact_has_specific_subject_and_no_auto_case_notice(self):
         self.assertIn('searchParams.get("area") === "vivienda"', self.contact)
@@ -363,7 +373,7 @@ class PublicServicesDeliveryTests(unittest.TestCase):
         self.assertIn("reversión limpia", guide)
         self.assertIn("no autoriza producción", guide)
 
-    def test_evidence_allowlist_and_file_hashes_are_exact(self):
+    def test_archived_evidence_allowlist_and_file_hashes_are_exact(self):
         evidence = json.loads(read(EVIDENCE))
         overlay_paths = evidence["overlay_paths"]
         hashes = evidence["file_sha256"]
@@ -373,8 +383,35 @@ class PublicServicesDeliveryTests(unittest.TestCase):
             set(hashes),
             set(overlay_paths) - {EVIDENCE.relative_to(ROOT).as_posix()},
         )
+        archived_evidence = subprocess.run(
+            [
+                "git",
+                "show",
+                f"{PUBLIC_SERVICES_EVIDENCE_COMMIT_SHA40}:"
+                f"{EVIDENCE.relative_to(ROOT).as_posix()}",
+            ],
+            cwd=ROOT,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(archived_evidence.returncode, 0)
+        self.assertEqual(json.loads(archived_evidence.stdout), evidence)
+
         for relative, expected in hashes.items():
-            actual = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+            archived = subprocess.run(
+                [
+                    "git",
+                    "show",
+                    f"{PUBLIC_SERVICES_EVIDENCE_COMMIT_SHA40}:{relative}",
+                ],
+                cwd=ROOT,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(archived.returncode, 0, relative)
+            actual = hashlib.sha256(archived.stdout).hexdigest()
             self.assertEqual(actual, expected, relative)
 
     def test_evidence_keeps_publication_and_real_effects_disabled(self):

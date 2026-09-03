@@ -1,14 +1,12 @@
-// El código desplegado usa siempre el proxy del mismo origen. Esto impide que
-// un fallo de staging termine probando silenciosamente un backend distinto.
-const runtimeEnv = import.meta.env || {};
-const configuredDevelopmentBase = import.meta.env && import.meta.env.DEV
-  ? runtimeEnv.VITE_API_BASE_URL || runtimeEnv.VITE_API_URL || ""
-  : "";
+import {
+  CASE_ACCESS_HEADER,
+  requiredCaseAccessFetch,
+} from "./caseAccess.js";
 
-export const RTM_API_BASE = String(configuredDevelopmentBase || "/api").replace(
-  /\/$/,
-  ""
-);
+// El navegador usa siempre el proxy /api del mismo origen, también en local.
+// El destino de desarrollo se configura exclusivamente en vite.config.js y
+// nunca se incrusta como origen alternativo en el bundle público.
+export const RTM_API_BASE = "/api";
 
 // Se conserva el contrato de candidatos para los componentes legacy, pero la
 // lista contiene un único entorno autoritativo y nunca hace failover por HTTP.
@@ -54,21 +52,43 @@ function requestCaseId(input, options = {}) {
   return "";
 }
 
+function hasExplicitCaseAccessHeader(headers) {
+  if (!headers) return false;
+  try {
+    return new Headers(headers).has(CASE_ACCESS_HEADER);
+  } catch {
+    return Object.keys(headers || {}).some(
+      (name) => String(name).toLowerCase() === CASE_ACCESS_HEADER.toLowerCase()
+    );
+  }
+}
+
 export async function apiFetch(input, options = {}) {
   const caseId = requestCaseId(input, options);
-  if (!caseId) return fetch(input, options);
-  const { caseAccessOptions } = await import("./caseAccess.js");
-  return fetch(input, caseAccessOptions(caseId, options));
+  if (!caseId) {
+    if (hasExplicitCaseAccessHeader(options.headers)) {
+      throw new TypeError(
+        "No se permite transportar acceso de expediente sin una ruta de caso verificable"
+      );
+    }
+    return fetch(input, options);
+  }
+  return requiredCaseAccessFetch(input, caseId, options);
 }
 
 export {
   CASE_ACCESS_HEADER,
   bootstrapCaseAccessFromUrl,
+  caseAccessFetch,
   caseAccessHeaders,
   caseAccessOptions,
   caseAccessQuery,
+  forgetCaseAccessToken,
   getCaseAccessToken,
+  normalizeCaseId,
   openCaseFile,
   redactCaseAccessToken,
   rememberCaseAccessToken,
+  requiredCaseAccessFetch,
+  requireSameOriginApiUrl,
 } from "./caseAccess.js";

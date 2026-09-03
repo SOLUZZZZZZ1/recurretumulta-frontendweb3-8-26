@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, openCaseFile, RTM_API_CANDIDATES } from "../lib/api.js";
+import {
+  appendAuthorizationDocumentBinding,
+  parseAuthorizationCandidateEnvelope,
+  parseAuthorizationIssueEnvelope,
+} from "../lib/authorizationEvidence.js";
 
 const DEPARTMENT_CONFIG = {
   traffic: {
@@ -169,6 +174,7 @@ export default function RTMAutorizacion() {
   const [department, setDepartment] = useState("other");
   const [signedFile, setSignedFile] = useState(null);
   const [generated, setGenerated] = useState(false);
+  const [authorizationBinding, setAuthorizationBinding] = useState(null);
   const [uploaded, setUploaded] = useState(false);
   const [msg, setMsg] = useState("");
   const [debug, setDebug] = useState("");
@@ -226,12 +232,9 @@ export default function RTMAutorizacion() {
           telefono: firstValue(interested.telefono, interested.phone),
         });
 
-        const signedAuthorizationReceived = Object.prototype.hasOwnProperty.call(
-          status?.progress || {},
-          "authorization_received"
-        )
-          ? status.progress.authorization_received === true
-          : status?.authorized === true;
+        const signedAuthorizationReceived =
+          status?.authorization_evidence_status === "verified" &&
+          status?.signed_authority_verified === true;
         if (signedAuthorizationReceived) {
           setUploaded(true);
           setGenerated(true);
@@ -247,8 +250,17 @@ export default function RTMAutorizacion() {
     loadCase();
   }, [caseId]);
 
+  function invalidateIssuedAuthorization() {
+    setGenerated(false);
+    setAuthorizationBinding(null);
+    setSignedFile(null);
+    setUploaded(false);
+  }
+
   function update(field, value) {
+    if (loading) return;
     setForm((current) => ({ ...current, [field]: value }));
+    invalidateIssuedAuthorization();
     setMsg("");
     setDebug("");
   }
@@ -315,14 +327,16 @@ export default function RTMAutorizacion() {
           representation_confirmed: true,
         }),
       });
+      const issued = parseAuthorizationIssueEnvelope(authority, caseId);
 
+      setAuthorizationBinding(issued.binding);
       setGenerated(true);
       setMsg(
         "✅ Datos guardados. Se ha abierto la autorización para descargar y firmar."
       );
 
       await openBackendFile(
-        authority?.download_url || `/cases/${caseId}/authorization-pdf`,
+        `/cases/${caseId}/authorization-pdf`,
         caseId
       );
     } catch (error) {
@@ -345,23 +359,29 @@ export default function RTMAutorizacion() {
       setMsg("❌ La autorización firmada debe ser un PDF.");
       return;
     }
+    if (!generated || !authorizationBinding) {
+      setMsg("❌ Genera de nuevo la autorización con los datos actuales.");
+      return;
+    }
 
     setLoading(true);
 
     try {
       const fd = new FormData();
       fd.append("file", signedFile);
+      appendAuthorizationDocumentBinding(fd, authorizationBinding);
 
-      await fetchJsonFallback(
+      const result = await fetchJsonFallback(
         `/cases/${caseId}/upload-authorization-signed`,
         {
           method: "POST",
           body: fd,
         }
       );
+      parseAuthorizationCandidateEnvelope(result, caseId);
 
       setUploaded(true);
-      setMsg("✅ Autorización firmada subida correctamente.");
+      setMsg("✅ Documento recibido como candidato y pendiente de revisión humana. No habilita pagos ni presentaciones hasta su verificación.");
     } catch (error) {
       setMsg("❌ No se pudo subir la autorización firmada.");
       setDebug(error?.message || "");
@@ -528,12 +548,13 @@ export default function RTMAutorizacion() {
             <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
               <CheckRow
                 checked={checks.autorizo_gestion}
-                onChange={(value) =>
+                onChange={(value) => {
+                  invalidateIssuedAuthorization();
                   setChecks((current) => ({
                     ...current,
                     autorizo_gestion: value,
-                  }))
-                }
+                  }));
+                }}
               >
                 Autorizo expresamente la gestión descrita, limitada al
                 expediente RTM {caseId || "indicado"}.
@@ -541,12 +562,13 @@ export default function RTMAutorizacion() {
 
               <CheckRow
                 checked={checks.acepto_responsabilidad}
-                onChange={(value) =>
+                onChange={(value) => {
+                  invalidateIssuedAuthorization();
                   setChecks((current) => ({
                     ...current,
                     acepto_responsabilidad: value,
-                  }))
-                }
+                  }));
+                }}
               >
                 Confirmo que los datos introducidos son correctos y que dispongo
                 de legitimación para solicitar esta gestión.
@@ -594,8 +616,8 @@ export default function RTMAutorizacion() {
             </h2>
 
             <p className="sr-p">
-              Firma el PDF descargado y súbelo aquí para continuar con la
-              documentación del caso.
+              Firma el PDF descargado y súbelo aquí. Se conservará como
+              candidato pendiente de revisión humana.
             </p>
 
             {!generated && !uploaded ? (
@@ -664,7 +686,7 @@ export default function RTMAutorizacion() {
                 onClick={continueToDocuments}
                 style={{ marginTop: 16, width: "100%" }}
               >
-                Continuar y subir documentación del caso
+                Continuar con documentación (autorización pendiente de revisión)
               </button>
             ) : null}
           </div>

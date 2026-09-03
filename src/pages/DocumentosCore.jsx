@@ -254,7 +254,7 @@ export default function DocumentosCore() {
           <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
             <StatusRow text="Datos personales recibidos" />
             <StatusRow text="Documento de identidad recibido" />
-            <StatusRow text="Autorización firmada recibida" />
+            <StatusRow text="Autorización: pendiente de comprobación en el resumen" />
           </div>
 
           <button

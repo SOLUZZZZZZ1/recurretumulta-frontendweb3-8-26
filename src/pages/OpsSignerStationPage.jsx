@@ -8,12 +8,20 @@ import React, {
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import {
+  loginOpsOperator,
+  logoutOpsOperator,
+  readOpsAuthStatus,
+} from "../ops-auth/opsAuthApi.js";
+import {
+  bindOpsSessionLifecycle,
+  scheduleOpsSessionExpiry,
+} from "../ops-auth/opsSessionLifecycle.js";
+import {
   createRtmSignerStationClient,
   newSignerCommandKey,
   parseRtmSignerStationDescriptorText,
 } from "../rtm-presenter/rtmSignerStationApi.js";
 
-const API = "/api";
 const REQUIRED_ROLE = "rtm.signer";
 const REQUIRED_PERMISSIONS = Object.freeze([
   "ops.view",
@@ -21,26 +29,18 @@ const REQUIRED_PERMISSIONS = Object.freeze([
   "presenter.signing.claim",
 ]);
 
-async function readAuthJson(response) {
-  const text = await response.text().catch(() => "");
-  let payload = {};
-  try {
-    payload = text ? JSON.parse(text) : {};
-  } catch {
-    payload = {};
-  }
-  if (!response.ok) {
-    const detail =
-      payload?.detail?.error?.message ||
-      payload?.detail?.message ||
-      payload?.detail;
-    throw new Error(
-      typeof detail === "string" && detail.trim()
-        ? detail
-        : "No se pudo validar la sesión individual."
-    );
-  }
-  return payload;
+function isExactSignerOperator(operator) {
+  const permissions = Array.isArray(operator?.permissions)
+    ? operator.permissions
+    : [];
+  return (
+    operator?.roleCode === REQUIRED_ROLE &&
+    permissions.length === REQUIRED_PERMISSIONS.length &&
+    new Set(permissions).size === permissions.length &&
+    REQUIRED_PERMISSIONS.every((permission) => permissions.includes(permission)) &&
+    operator?.mustChangePassword === false &&
+    operator?.mfaRequired === false
+  );
 }
 
 function shortHash(value) {
@@ -70,7 +70,7 @@ function SignerLoginCard({
         ni sesión de una sede.
       </p>
 
-      {authStatus && !authStatus.individual_login_enabled ? (
+      {authStatus && !authStatus.individualLoginEnabled ? (
         <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
           La autenticación individual de staging está cerrada en este despliegue.
         </p>
@@ -96,12 +96,13 @@ function SignerLoginCard({
             onChange={onPasswordChange}
             autoComplete="current-password"
             required
+            maxLength={256}
             className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal"
           />
         </label>
         <button
           type="submit"
-          disabled={busy || authStatus?.individual_login_enabled !== true}
+          disabled={busy || authStatus?.individualLoginEnabled !== true}
           className="min-h-11 rounded-xl bg-blue-800 px-5 font-black text-white disabled:bg-slate-400"
         >
           {busy
@@ -573,9 +574,12 @@ export default function OpsSignerStationPage() {
   const activeSessionIdRef = useRef("");
   const loginLockRef = useRef(false);
   const loginAbortRef = useRef(null);
+  const statusAbortRef = useRef(null);
+  const sessionAbortRef = useRef(null);
   const recoveryAbortRef = useRef(null);
   const mountedRef = useRef(true);
   const commandKeysRef = useRef(new Map());
+  const sensitiveRootRef = useRef(null);
   const [authStatus, setAuthStatus] = useState(null);
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState("");
@@ -593,24 +597,28 @@ export default function OpsSignerStationPage() {
   const [workspaces, setWorkspaces] = useState({});
   const [workspaceRecoveries, setWorkspaceRecoveries] = useState(null);
   const [activeDeliveryId, setActiveDeliveryId] = useState("");
+  const [viewVisible, setViewVisible] = useState(true);
+  const [viewEpoch, setViewEpoch] = useState(0);
+  const [statusEpoch, setStatusEpoch] = useState(0);
 
   const getAuthHeaders = useCallback(() => {
     const token = bearerRef.current;
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, []);
 
-  const invalidateSession = useCallback((expectedSessionId = "") => {
-    if (
-      expectedSessionId &&
-      activeSessionIdRef.current !== expectedSessionId
-    ) {
-      return;
-    }
+  const clearSignerSession = useCallback((message = "") => {
+    loginAbortRef.current?.abort();
+    loginAbortRef.current = null;
+    loginLockRef.current = false;
+    sessionAbortRef.current?.abort();
+    sessionAbortRef.current = null;
     bearerRef.current = "";
     activeSessionIdRef.current = "";
     recoveryAbortRef.current?.abort();
     recoveryAbortRef.current = null;
     commandKeysRef.current.clear();
+    setEmail("");
+    setPassword("");
     setSession(null);
     setQueue([]);
     setClaims({});
@@ -623,8 +631,26 @@ export default function OpsSignerStationPage() {
     setRecoveryBusyWorkspaceId("");
     setBusyDeliveryId("");
     setActiveDeliveryId("");
-    setError("La sesión individual ha caducado. Vuelve a identificarte.");
+    setLoginBusy(false);
+    setError(message);
+    setViewEpoch((current) => current + 1);
   }, []);
+
+  const invalidateSession = useCallback(
+    (expectedSessionId = "") => {
+      if (
+        expectedSessionId &&
+        activeSessionIdRef.current !== expectedSessionId
+      ) {
+        return;
+      }
+      sensitiveRootRef.current?.setAttribute("hidden", "");
+      clearSignerSession(
+        "La sesión individual ha caducado. Vuelve a identificarte."
+      );
+    },
+    [clearSignerSession]
+  );
 
   const sessionId = session?.sessionId || "";
   const signerUnauthorized = useCallback(() => {
@@ -644,49 +670,81 @@ export default function OpsSignerStationPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(`${API}/ops/auth/status`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      credentials: "same-origin",
-      redirect: "error",
-      referrerPolicy: "same-origin",
-      signal: controller.signal,
-    })
-      .then(readAuthJson)
+    statusAbortRef.current = controller;
+    void readOpsAuthStatus({ signal: controller.signal })
       .then(setAuthStatus)
       .catch((statusError) => {
         if (!controller.signal.aborted) setError(statusError.message);
+      })
+      .finally(() => {
+        if (statusAbortRef.current === controller) statusAbortRef.current = null;
       });
-    return () => controller.abort();
-  }, []);
+    return () => {
+      controller.abort();
+      if (statusAbortRef.current === controller) statusAbortRef.current = null;
+    };
+  }, [statusEpoch]);
+
+  useEffect(
+    () =>
+      bindOpsSessionLifecycle(window, {
+        invalidate: () => {
+          sensitiveRootRef.current?.setAttribute("hidden", "");
+          setViewVisible(false);
+          const token = bearerRef.current;
+          statusAbortRef.current?.abort();
+          statusAbortRef.current = null;
+          clearSignerSession(
+            "La vista protegida se cerró. Vuelve a identificarte."
+          );
+          if (token) {
+            void logoutOpsOperator({ bearerToken: token, keepalive: true }).catch(
+              () => {}
+            );
+          }
+        },
+        restore: () => {
+          statusAbortRef.current?.abort();
+          statusAbortRef.current = null;
+          clearSignerSession(
+            "La página se restauró de forma segura. Vuelve a identificarte."
+          );
+          setAuthStatus(null);
+          setStatusEpoch((current) => current + 1);
+          setViewVisible(true);
+        },
+      }),
+    [clearSignerSession]
+  );
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const expectedSessionId = session.sessionId;
+    return scheduleOpsSessionExpiry(session.expiresAt, () => {
+      invalidateSession(expectedSessionId);
+    });
+  }, [invalidateSession, session]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      statusAbortRef.current?.abort();
       loginAbortRef.current?.abort();
+      sessionAbortRef.current?.abort();
       recoveryAbortRef.current?.abort();
       const token = bearerRef.current;
       bearerRef.current = "";
       activeSessionIdRef.current = "";
       commandKeysRef.current.clear();
       if (token) {
-        void fetch(`${API}/ops/auth/logout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-          credentials: "same-origin",
-          redirect: "error",
-          referrerPolicy: "same-origin",
-          keepalive: true,
-        }).catch(() => {});
+        void logoutOpsOperator({ bearerToken: token, keepalive: true }).catch(() => {});
       }
     };
   }, []);
 
   const loadQueue = useCallback(
-    async ({ signal = null } = {}) => {
+    async ({ signal = sessionAbortRef.current?.signal || null } = {}) => {
       const expectedSessionId = activeSessionIdRef.current;
       if (!expectedSessionId) return;
       setQueueBusy(true);
@@ -753,7 +811,10 @@ export default function OpsSignerStationPage() {
   );
 
   const loadWorkspaceRecoveries = useCallback(
-    async (installationId, { signal = null } = {}) => {
+    async (
+      installationId,
+      { signal = sessionAbortRef.current?.signal || null } = {}
+    ) => {
       const expectedSessionId = activeSessionIdRef.current;
       if (!expectedSessionId || !installationId) return;
       setRecoveriesBusy(true);
@@ -795,16 +856,16 @@ export default function OpsSignerStationPage() {
 
   useEffect(() => {
     if (!sessionId) return undefined;
-    const controller = new AbortController();
-    void loadQueue({ signal: controller.signal });
-    return () => controller.abort();
+    const signal = sessionAbortRef.current?.signal || null;
+    void loadQueue({ signal });
+    return undefined;
   }, [loadQueue, sessionId]);
 
   async function login(event) {
     event.preventDefault();
-    if (authStatus?.individual_login_enabled !== true || loginLockRef.current) {
+    if (authStatus?.individualLoginEnabled !== true || loginLockRef.current) {
       setPassword("");
-      if (authStatus?.individual_login_enabled !== true) {
+      if (authStatus?.individualLoginEnabled !== true) {
         setError("La autenticación individual del puesto local no está habilitada.");
       }
       return;
@@ -817,73 +878,38 @@ export default function OpsSignerStationPage() {
     const submittedPassword = password;
     setPassword("");
     try {
-      const payload = await readAuthJson(
-        await fetch(`${API}/ops/auth/login`, {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email: email.trim(), password: submittedPassword }),
-          cache: "no-store",
-          credentials: "same-origin",
-          redirect: "error",
-          referrerPolicy: "same-origin",
-          signal: controller.signal,
-        })
-      );
-      const permissions = Array.isArray(payload?.operator?.permissions)
-        ? payload.operator.permissions
-        : [];
-      const authorized =
-        payload?.operator?.role_code === REQUIRED_ROLE &&
-        permissions.length === REQUIRED_PERMISSIONS.length &&
-        REQUIRED_PERMISSIONS.every((permission) => permissions.includes(permission));
-      if (
-        typeof payload?.token !== "string" ||
-        payload.token.length < 32 ||
-        typeof payload?.session_id !== "string" ||
-        !payload.session_id.trim() ||
-        payload?.operator?.must_change_password !== false ||
-        payload?.operator?.mfa_required !== false ||
-        !authorized
-      ) {
-        if (typeof payload?.token === "string") {
-          await fetch(`${API}/ops/auth/logout`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${payload.token}` },
-            cache: "no-store",
-            credentials: "same-origin",
-            redirect: "error",
-            referrerPolicy: "same-origin",
-          }).catch(() => {});
-        }
+      const authenticated = await loginOpsOperator({
+        email,
+        password: submittedPassword,
+        signal: controller.signal,
+      });
+      if (!isExactSignerOperator(authenticated.operator)) {
+        await logoutOpsOperator({
+          bearerToken: authenticated.bearerToken,
+        }).catch(() => {});
         throw new Error(
           "Esta pantalla exige la cuenta separada rtm.signer con sus tres permisos exactos."
         );
       }
       if (controller.signal.aborted || !mountedRef.current) {
-        await fetch(`${API}/ops/auth/logout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${payload.token}` },
-          cache: "no-store",
-          credentials: "same-origin",
-          redirect: "error",
-          referrerPolicy: "same-origin",
+        await logoutOpsOperator({
+          bearerToken: authenticated.bearerToken,
         }).catch(() => {});
         return;
       }
-      bearerRef.current = payload.token;
-      activeSessionIdRef.current = payload.session_id;
+      sessionAbortRef.current?.abort();
+      sessionAbortRef.current = new AbortController();
+      bearerRef.current = authenticated.bearerToken;
+      activeSessionIdRef.current = authenticated.sessionId;
       commandKeysRef.current.clear();
       setEmail("");
       setStation(null);
       setWorkspaces({});
       setWorkspaceRecoveries(null);
       setSession({
-        sessionId: payload.session_id,
-        expiresAt: payload.expires_at,
-        operator: payload.operator,
+        sessionId: authenticated.sessionId,
+        expiresAt: authenticated.expiresAt,
+        operator: authenticated.operator,
       });
     } catch (loginError) {
       bearerRef.current = "";
@@ -902,35 +928,10 @@ export default function OpsSignerStationPage() {
   }
 
   async function logout() {
-    recoveryAbortRef.current?.abort();
-    recoveryAbortRef.current = null;
     const token = bearerRef.current;
-    bearerRef.current = "";
-    activeSessionIdRef.current = "";
-    commandKeysRef.current.clear();
-    setEmail("");
-    setSession(null);
-    setQueue([]);
-    setClaims({});
-    setStation(null);
-    setWorkspaces({});
-    setWorkspaceRecoveries(null);
-    setQueueBusy(false);
-    setStationBusy(false);
-    setRecoveriesBusy(false);
-    setRecoveryBusyWorkspaceId("");
-    setBusyDeliveryId("");
-    setActiveDeliveryId("");
-    setError("");
+    clearSignerSession();
     if (!token) return;
-    await fetch(`${API}/ops/auth/logout`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      credentials: "same-origin",
-      redirect: "error",
-      referrerPolicy: "same-origin",
-    }).catch(() => {});
+    await logoutOpsOperator({ bearerToken: token }).catch(() => {});
   }
 
   function retainedCommandKey(scope, prefix) {
@@ -954,6 +955,7 @@ export default function OpsSignerStationPage() {
     try {
       const payload = await client.claimTask(deliveryId, {
         idempotencyKey: retainedCommandKey(commandScope, "signer-claim"),
+        signal: sessionAbortRef.current?.signal || null,
       });
       if (activeSessionIdRef.current !== expectedSessionId) return;
       forgetCommandKey(commandScope);
@@ -982,6 +984,7 @@ export default function OpsSignerStationPage() {
     try {
       await client.releaseTask(deliveryId, claimId, {
         idempotencyKey: retainedCommandKey(commandScope, "signer-release"),
+        signal: sessionAbortRef.current?.signal || null,
       });
       if (activeSessionIdRef.current !== expectedSessionId) return;
       forgetCommandKey(commandScope);
@@ -1032,13 +1035,16 @@ export default function OpsSignerStationPage() {
           "Esta sesión ya está vinculada a otro candidato. Cierra la sesión antes de cambiar de PC."
         );
       }
-      const payload = await client.registerInstallation({
-        clientInstanceId: descriptor.clientInstanceId,
-        clientBindingSha256: descriptor.clientBindingSha256,
-        stationLabel: descriptor.stationLabel,
-        platform: descriptor.platform,
-        clientVersion: descriptor.clientVersion,
-      });
+      const payload = await client.registerInstallation(
+        {
+          clientInstanceId: descriptor.clientInstanceId,
+          clientBindingSha256: descriptor.clientBindingSha256,
+          stationLabel: descriptor.stationLabel,
+          platform: descriptor.platform,
+          clientVersion: descriptor.clientVersion,
+        },
+        { signal: sessionAbortRef.current?.signal || null }
+      );
       if (activeSessionIdRef.current !== expectedSessionId) return;
       setStation(payload.station);
       setWorkspaceRecoveries(null);
@@ -1184,6 +1190,7 @@ export default function OpsSignerStationPage() {
             commandScope,
             "workspace-prepare"
           ),
+          signal: sessionAbortRef.current?.signal || null,
         }
       );
       if (activeSessionIdRef.current !== expectedSessionId) return;
@@ -1232,6 +1239,7 @@ export default function OpsSignerStationPage() {
             commandScope,
             action === "expire" ? "workspace-expired" : "workspace-resume"
           ),
+          signal: sessionAbortRef.current?.signal || null,
         }
       );
       if (activeSessionIdRef.current !== expectedSessionId) return;
@@ -1258,7 +1266,12 @@ export default function OpsSignerStationPage() {
     : null;
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
+    <main
+      key={viewEpoch}
+      ref={sensitiveRootRef}
+      hidden={!viewVisible}
+      className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950"
+    >
       <Helmet>
         <title>Puesto local de firma · RTM Presenter</title>
         <meta name="robots" content="noindex,nofollow,noarchive,nosnippet" />
@@ -1295,10 +1308,10 @@ export default function OpsSignerStationPage() {
                   Puesto local · sesión individual en memoria
                 </p>
                 <h1 className="mt-1 text-2xl font-black">
-                  {session.operator.display_name || session.operator.email}
+                  {session.operator.displayName || session.operator.email}
                 </h1>
                 <p className="mt-1 text-xs text-slate-400">
-                  {session.operator.role_code} · caduca {String(session.expiresAt || "—")}
+                  {session.operator.roleCode} · caduca {String(session.expiresAt || "—")}
                 </p>
               </div>
               <button

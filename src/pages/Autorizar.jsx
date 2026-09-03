@@ -1,6 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { apiFetch, openCaseFile, RTM_API_CANDIDATES } from "../lib/api.js";
+import {
+  apiFetch,
+  openCaseFile,
+  requireSameOriginApiUrl,
+  RTM_API_CANDIDATES,
+} from "../lib/api.js";
+import { getCaseScopedData } from "../lib/caseSession.js";
+import {
+  buildAuthorizationForm,
+  createCaseRequestGuard,
+  EMPTY_AUTHORIZATION_FORM,
+} from "../lib/authorizationCase.js";
+import {
+  appendAuthorizationDocumentBinding,
+  isVehicleRemovalCase,
+  parseAuthorizationCandidateEnvelope,
+  parseAuthorizationIssueEnvelope,
+} from "../lib/authorizationEvidence.js";
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
@@ -39,6 +56,7 @@ async function fetchJsonFallback(path, options = {}) {
       const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (e) {
+      if (options.signal?.aborted || e?.name === "AbortError") throw e;
       errors.push(`${url} → ${e?.message || "Failed to fetch"}`);
     }
   }
@@ -46,10 +64,9 @@ async function fetchJsonFallback(path, options = {}) {
   throw new Error(errors.join(" | "));
 }
 
-function openPdf(pathOrUrl, caseId) {
-  const url = String(pathOrUrl || "");
-  if (!url) return;
-  return openCaseFile(url.startsWith("http") ? url : buildUrl("/api", url), caseId);
+function openPdf(pathOrUrl, caseId, signal) {
+  const url = requireSameOriginApiUrl(pathOrUrl);
+  return openCaseFile(url, caseId, { signal });
 }
 
 function unwrapExtracted(value) {
@@ -57,26 +74,13 @@ function unwrapExtracted(value) {
   return value?.extracted?.extracted || value?.extracted || value || {};
 }
 
-function firstValue(...values) {
-  for (const v of values) {
-    if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
-  }
-  return "";
-}
-
 export default function Autorizar() {
   const location = useLocation();
   const navigate = useNavigate();
   const caseId = useMemo(() => getCaseId(location.search), [location.search]);
 
-  const [form, setForm] = useState({
-    full_name: "",
-    dni_nie: "",
-    domicilio_notif: "",
-    matricula: "",
-    email: "",
-    telefono: "",
-  });
+  const [stateCaseId, setStateCaseId] = useState(caseId);
+  const [form, setForm] = useState(() => ({ ...EMPTY_AUTHORIZATION_FORM }));
 
   const [checks, setChecks] = useState({
     autorizo_gestion: false,
@@ -86,12 +90,55 @@ export default function Autorizar() {
   const [caseData, setCaseData] = useState(null);
   const [signedFile, setSignedFile] = useState(null);
   const [generated, setGenerated] = useState(false);
+  const [authorizationBinding, setAuthorizationBinding] = useState(null);
   const [msg, setMsg] = useState("");
   const [debug, setDebug] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingCase, setLoadingCase] = useState(true);
+  const loadGuardRef = useRef(null);
+  const mutationAbortRef = useRef(null);
+  const mutationPendingRef = useRef(false);
+  const navigationTimerRef = useRef(null);
+  const signedFileInputRef = useRef(null);
+  const currentCaseIdRef = useRef(caseId);
+  currentCaseIdRef.current = caseId;
+  if (!loadGuardRef.current) loadGuardRef.current = createCaseRequestGuard();
+
+  const caseStateIsCurrent = stateCaseId === caseId;
+  const visibleForm = caseStateIsCurrent ? form : EMPTY_AUTHORIZATION_FORM;
+  const visibleChecks = caseStateIsCurrent
+    ? checks
+    : { autorizo_gestion: false, acepto_responsabilidad: false };
+  const visibleCaseData = caseStateIsCurrent ? caseData : null;
+  const visibleSignedFile = caseStateIsCurrent ? signedFile : null;
+  const visibleGenerated = caseStateIsCurrent && generated;
+  const visibleAuthorizationBinding = caseStateIsCurrent
+    ? authorizationBinding
+    : null;
+  const visibleMsg = caseStateIsCurrent ? msg : "";
+  const visibleDebug = caseStateIsCurrent ? debug : "";
 
   useEffect(() => {
+    const request = loadGuardRef.current.begin(caseId);
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = null;
+    mutationPendingRef.current = false;
+    if (navigationTimerRef.current) {
+      window.clearTimeout(navigationTimerRef.current);
+      navigationTimerRef.current = null;
+    }
+    setStateCaseId(caseId);
+    setForm({ ...EMPTY_AUTHORIZATION_FORM });
+    setChecks({ autorizo_gestion: false, acepto_responsabilidad: false });
+    setCaseData(null);
+    setSignedFile(null);
+    if (signedFileInputRef.current) signedFileInputRef.current.value = "";
+    setGenerated(false);
+    setAuthorizationBinding(null);
+    setLoading(false);
+    setMsg("");
+    setDebug("");
+
     async function loadCase() {
       if (!caseId) {
         setLoadingCase(false);
@@ -103,124 +150,75 @@ export default function Autorizar() {
       setDebug("");
 
       try {
-        const status = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+        const status = await fetchJsonFallback(`/cases/${caseId}/public-status`, {
+          signal: request.controller.signal,
+        });
+        if (!request.isCurrent()) return;
+        if (isVehicleRemovalCase(status)) {
+          navigate(`/eliminar-coche?case=${encodeURIComponent(caseId)}`, {
+            replace: true,
+          });
+          return;
+        }
         setCaseData(status);
 
-        const interested = status?.interested_data || {};
-        const extracted = unwrapExtracted(status?.extracted || {});
-        const analysis = (() => {
-          try {
-            return JSON.parse(localStorage.getItem("rtm_last_analysis") || "{}");
-          } catch {
-            return {};
-          }
-        })();
-        const localExtracted = unwrapExtracted(analysis);
-
-        setForm((prev) => ({
-          full_name: firstValue(
-            interested.full_name,
-            interested.contact_name,
-            interested.name,
-            extracted.full_name,
-            extracted.nombre_completo,
-            extracted.titular,
-            extracted.nombre_multado,
-            extracted.interesado,
-            localExtracted.full_name,
-            localExtracted.nombre_completo,
-            localExtracted.titular,
-            localExtracted.nombre_multado,
-            localExtracted.interesado,
-            prev.full_name
-          ),
-          dni_nie: firstValue(
-            interested.dni_nie,
-            interested.dni,
-            interested.nie,
-            extracted.dni_nie,
-            extracted.dni,
-            extracted.nie,
-            extracted.documento_identidad,
-            localExtracted.dni_nie,
-            localExtracted.dni,
-            localExtracted.nie,
-            localExtracted.documento_identidad,
-            prev.dni_nie
-          ),
-          domicilio_notif: firstValue(
-            interested.domicilio_notif,
-            interested.domicilio,
-            interested.address,
-            extracted.domicilio_notif,
-            extracted.domicilio,
-            extracted.direccion,
-            extracted.domicilio_multado,
-            localExtracted.domicilio_notif,
-            localExtracted.domicilio,
-            localExtracted.direccion,
-            localExtracted.domicilio_multado,
-            prev.domicilio_notif
-          ),
-          matricula: firstValue(
-            interested.matricula,
-            interested.plate,
-            interested.vehicle_plate,
-            extracted.matricula,
-            extracted.matrícula,
-            extracted.plate,
-            extracted.vehicle_plate,
-            extracted.matricula_vehiculo,
-            localExtracted.matricula,
-            localExtracted.matrícula,
-            localExtracted.plate,
-            localExtracted.vehicle_plate,
-            localExtracted.matricula_vehiculo,
-            prev.matricula
-          ),
-          email: firstValue(
-            interested.email,
-            status?.contact_email,
-            localExtracted.email,
-            prev.email
-          ),
-          telefono: firstValue(
-            interested.telefono,
-            interested.phone,
-            extracted.telefono,
-            extracted.phone,
-            localExtracted.telefono,
-            localExtracted.phone,
-            prev.telefono
-          ),
-        }));
+        const localExtracted = getCaseScopedData(caseId)?.case_data || {};
+        setForm(buildAuthorizationForm(status, localExtracted));
       } catch (e) {
+        if (e?.name === "AbortError" || !request.isCurrent()) return;
         setMsg("❌ No se pudieron cargar los datos del expediente.");
         setDebug(e?.message || "");
       } finally {
-        setLoadingCase(false);
+        if (request.isCurrent()) setLoadingCase(false);
       }
     }
 
     loadCase();
+    return () => request.controller.abort();
   }, [caseId]);
 
+  useEffect(() => () => {
+    loadGuardRef.current?.cancel();
+    mutationAbortRef.current?.abort();
+    mutationAbortRef.current = null;
+    mutationPendingRef.current = false;
+    if (navigationTimerRef.current) {
+      window.clearTimeout(navigationTimerRef.current);
+      navigationTimerRef.current = null;
+    }
+  }, []);
+
+  function invalidateGeneratedArtifact() {
+    setGenerated(false);
+    setAuthorizationBinding(null);
+    setSignedFile(null);
+    if (signedFileInputRef.current) signedFileInputRef.current.value = "";
+  }
+
+  function resetAcceptanceAndGeneratedArtifact() {
+    setChecks({ autorizo_gestion: false, acepto_responsabilidad: false });
+    invalidateGeneratedArtifact();
+  }
+
   function update(field, value) {
+    if (!caseStateIsCurrent || loading) return;
     setForm((prev) => ({ ...prev, [field]: value }));
+    resetAcceptanceAndGeneratedArtifact();
     setMsg("");
     setDebug("");
   }
 
   function validateDetails() {
     if (!caseId) return "No se ha encontrado el expediente.";
-    if (!form.full_name.trim()) return "Indica nombre y apellidos.";
-    if (!form.dni_nie.trim()) return "Indica DNI/NIE.";
-    if (!form.matricula.trim()) return "Indica la matrícula del vehículo.";
-    if (!form.domicilio_notif.trim()) return "Indica domicilio de notificaciones.";
-    if (!checks.autorizo_gestion) return "Debes marcar la autorización de gestión.";
-    if (!checks.acepto_responsabilidad) return "Debes confirmar que los datos son correctos.";
-    if (!form.email.trim()) return "Indica email.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Indica un email válido.";
+    if (!caseStateIsCurrent || loadingCase) return "Espera a que se cargue este expediente.";
+    if (!visibleForm.full_name.trim()) return "Indica nombre y apellidos.";
+    if (!visibleForm.dni_nie.trim()) return "Indica DNI/NIE.";
+    if (!visibleForm.matricula.trim()) return "Indica la matrícula del vehículo.";
+    if (!visibleForm.domicilio_notif.trim()) return "Indica domicilio de notificaciones.";
+    if (!visibleChecks.autorizo_gestion) return "Debes marcar la autorización de gestión.";
+    if (!visibleChecks.acepto_responsabilidad) return "Debes confirmar que los datos son correctos.";
+    if (!visibleForm.email.trim()) return "Indica email.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(visibleForm.email.trim())) return "Indica un email válido.";
     return "";
   }
 
@@ -233,44 +231,64 @@ export default function Autorizar() {
       setMsg(`❌ ${error}`);
       return;
     }
+    if (mutationPendingRef.current) return;
 
+    const targetCaseId = caseId;
+    const formSnapshot = { ...visibleForm };
+    const checksSnapshot = { ...visibleChecks };
+    const controller = new AbortController();
+    mutationPendingRef.current = true;
+    mutationAbortRef.current = controller;
     setLoading(true);
 
     try {
-      await fetchJsonFallback(`/cases/${caseId}/details`, {
+      await fetchJsonFallback(`/cases/${targetCaseId}/details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
-          full_name: form.full_name.trim(),
-          dni_nie: form.dni_nie.trim().toUpperCase(),
-          matricula: form.matricula.trim().toUpperCase(),
-          domicilio_notif: form.domicilio_notif.trim(),
-          autorizo_gestion: checks.autorizo_gestion,
-          acepto_responsabilidad: checks.acepto_responsabilidad,
-          email: form.email.trim(),
-          telefono: form.telefono.trim() || null,
+          full_name: formSnapshot.full_name.trim(),
+          dni_nie: formSnapshot.dni_nie.trim().toUpperCase(),
+          matricula: formSnapshot.matricula.trim().toUpperCase(),
+          domicilio_notif: formSnapshot.domicilio_notif.trim(),
+          autorizo_gestion: checksSnapshot.autorizo_gestion,
+          acepto_responsabilidad: checksSnapshot.acepto_responsabilidad,
+          email: formSnapshot.email.trim(),
+          telefono: formSnapshot.telefono.trim() || null,
         }),
       });
+      if (controller.signal.aborted || currentCaseIdRef.current !== targetCaseId) return;
 
-      const auth = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
+      const auth = await fetchJsonFallback(`/cases/${targetCaseId}/authorize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           authority_version: "v1_dgt_homologado",
           consent: true,
           representation_confirmed: true,
         }),
       });
-      const pdfUrl = auth?.download_url || `/cases/${caseId}/authorization-pdf`;
+      if (controller.signal.aborted || currentCaseIdRef.current !== targetCaseId) return;
+      const issued = parseAuthorizationIssueEnvelope(auth, targetCaseId);
+      const pdfUrl = requireSameOriginApiUrl(
+        `/api/cases/${encodeURIComponent(targetCaseId)}/authorization-pdf`
+      );
 
+      setAuthorizationBinding(issued.binding);
       setGenerated(true);
       setMsg("✅ Datos guardados. Se ha abierto la autorización para descargar, firmar y volver a subir.");
-      await openPdf(pdfUrl, caseId);
+      await openPdf(pdfUrl, targetCaseId, controller.signal);
     } catch (e) {
+      if (e?.name === "AbortError" || controller.signal.aborted) return;
       setMsg("❌ No se pudo generar la autorización.");
       setDebug(e?.message || "");
     } finally {
-      setLoading(false);
+      if (mutationAbortRef.current === controller) {
+        mutationAbortRef.current = null;
+        mutationPendingRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
@@ -278,42 +296,67 @@ export default function Autorizar() {
     setMsg("");
     setDebug("");
 
-    if (!signedFile) {
+    if (!caseStateIsCurrent || loadingCase) {
+      setMsg("❌ Espera a que se cargue este expediente.");
+      return;
+    }
+    if (!visibleGenerated) {
+      setMsg("❌ Regenera la autorización con los datos actuales antes de subirla.");
+      return;
+    }
+    if (!visibleAuthorizationBinding) {
+      setMsg("❌ Falta la ligadura segura del documento generado.");
+      return;
+    }
+    if (!visibleSignedFile) {
       setMsg("❌ Selecciona la autorización firmada antes de subirla.");
       return;
     }
-    if (signedFile.type !== "application/pdf") {
+    if (visibleSignedFile.type !== "application/pdf") {
       setMsg("❌ La autorización firmada debe ser un PDF.");
       return;
     }
+    if (mutationPendingRef.current) return;
 
+    const targetCaseId = caseId;
+    const fileSnapshot = visibleSignedFile;
+    const controller = new AbortController();
+    mutationPendingRef.current = true;
+    mutationAbortRef.current = controller;
     setLoading(true);
 
     try {
       const fd = new FormData();
-      fd.append("file", signedFile);
+      fd.append("file", fileSnapshot);
+      appendAuthorizationDocumentBinding(fd, visibleAuthorizationBinding);
 
-      await fetchJsonFallback(`/cases/${caseId}/upload-authorization-signed`, {
+      const result = await fetchJsonFallback(`/cases/${targetCaseId}/upload-authorization-signed`, {
         method: "POST",
         body: fd,
+        signal: controller.signal,
       });
+      if (controller.signal.aborted || currentCaseIdRef.current !== targetCaseId) return;
+      parseAuthorizationCandidateEnvelope(result, targetCaseId);
 
-      setMsg("✅ Autorización firmada subida correctamente. Ya puedes continuar con la gestión.");
-
-      setTimeout(() => {
-        navigate(`/resumen?case=${encodeURIComponent(caseId)}`);
-      }, 700);
+      setSignedFile(null);
+      if (signedFileInputRef.current) signedFileInputRef.current.value = "";
+      setMsg("✅ Documento recibido como candidato. Queda pendiente de revisión humana antes de habilitar cualquier pago o presentación.");
     } catch (e) {
+      if (e?.name === "AbortError" || controller.signal.aborted) return;
       setMsg("❌ No se pudo subir la autorización firmada.");
       setDebug(e?.message || "");
     } finally {
-      setLoading(false);
+      if (mutationAbortRef.current === controller) {
+        mutationAbortRef.current = null;
+        mutationPendingRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
-  const extracted = unwrapExtracted(caseData?.extracted || {});
-  const organismo = caseData?.organismo || extracted?.organismo || extracted?.organismo_cabecera || "";
-  const expediente = caseData?.expediente_ref || extracted?.expediente_ref || extracted?.numero_expediente || "";
+  const extracted = unwrapExtracted(visibleCaseData?.extracted || {});
+  const organismo = visibleCaseData?.organismo || extracted?.organismo || extracted?.organismo_cabecera || "";
+  const expediente = visibleCaseData?.expediente_ref || extracted?.expediente_ref || extracted?.numero_expediente || "";
 
   return (
     <main className="sr-page">
@@ -350,7 +393,7 @@ export default function Autorizar() {
             <Info label="Expediente sancionador" value={expediente || "Pendiente de revisar"} />
           </div>
 
-          {loadingCase ? (
+          {!caseStateIsCurrent || loadingCase ? (
             <div className="sr-card" style={{ marginTop: 16 }}>
               Cargando datos del expediente…
             </div>
@@ -368,18 +411,19 @@ export default function Autorizar() {
                 gap: 12,
               }}
             >
-              <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} />
-              <Field label="DNI/NIE/Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} />
-              <Field label="Matrícula" value={form.matricula} onChange={(v) => update("matricula", v.toUpperCase())} />
-              <Field label="Email" value={form.email} onChange={(v) => update("email", v)} type="email" />
-              <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} />
+              <Field label="Nombre y apellidos" value={visibleForm.full_name} onChange={(v) => update("full_name", v)} disabled={!caseStateIsCurrent || loadingCase || loading} />
+              <Field label="DNI/NIE/Pasaporte" value={visibleForm.dni_nie} onChange={(v) => update("dni_nie", v)} disabled={!caseStateIsCurrent || loadingCase || loading} />
+              <Field label="Matrícula" value={visibleForm.matricula} onChange={(v) => update("matricula", v.toUpperCase())} disabled={!caseStateIsCurrent || loadingCase || loading} />
+              <Field label="Email" value={visibleForm.email} onChange={(v) => update("email", v)} type="email" disabled={!caseStateIsCurrent || loadingCase || loading} />
+              <Field label="Teléfono" value={visibleForm.telefono} onChange={(v) => update("telefono", v)} disabled={!caseStateIsCurrent || loadingCase || loading} />
             </div>
 
             <label style={{ display: "block", marginTop: 12 }}>
               <span style={labelStyle}>Domicilio a efectos de notificaciones</span>
               <textarea
-                value={form.domicilio_notif}
+                value={visibleForm.domicilio_notif}
                 onChange={(e) => update("domicilio_notif", e.target.value)}
+                disabled={!caseStateIsCurrent || loadingCase || loading}
                 placeholder="Calle, número, piso, CP, ciudad"
                 rows={3}
                 style={inputStyle}
@@ -397,7 +441,7 @@ export default function Autorizar() {
                 lineHeight: 1.55,
               }}
             >
-              Yo, {form.full_name || "el/la interesado/a"}, autorizo a LA TALAMANQUINA, S.L.
+              Yo, {visibleForm.full_name || "el/la interesado/a"}, autorizo a LA TALAMANQUINA, S.L.
               (RecurreTuMulta) a actuar en mi nombre para la tramitación administrativa
               del expediente asociado a este proceso, incluyendo la preparación y presentación
               de alegaciones y/o recursos ante la DGT u organismo competente.
@@ -406,8 +450,11 @@ export default function Autorizar() {
 
             <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
               <CheckRow
-                checked={checks.autorizo_gestion}
+                checked={visibleChecks.autorizo_gestion}
+                disabled={!caseStateIsCurrent || loadingCase || loading}
                 onChange={(value) => {
+                  if (!caseStateIsCurrent || loading) return;
+                  invalidateGeneratedArtifact();
                   setChecks((prev) => ({ ...prev, autorizo_gestion: value }));
                   setMsg("");
                   setDebug("");
@@ -417,8 +464,11 @@ export default function Autorizar() {
               </CheckRow>
 
               <CheckRow
-                checked={checks.acepto_responsabilidad}
+                checked={visibleChecks.acepto_responsabilidad}
+                disabled={!caseStateIsCurrent || loadingCase || loading}
                 onChange={(value) => {
+                  if (!caseStateIsCurrent || loading) return;
+                  invalidateGeneratedArtifact();
                   setChecks((prev) => ({ ...prev, acepto_responsabilidad: value }));
                   setMsg("");
                   setDebug("");
@@ -467,7 +517,7 @@ export default function Autorizar() {
                 type="button"
                 className="sr-btn-primary"
                 onClick={saveDetailsAndDownloadPdf}
-                disabled={loading}
+                disabled={loading || loadingCase || !caseStateIsCurrent}
               >
                 {loading ? "Generando…" : "Guardar datos y descargar autorización"}
               </button>
@@ -480,10 +530,11 @@ export default function Autorizar() {
             </h2>
 
             <p className="sr-p">
-              Firma el PDF descargado y súbelo aquí. Después podrás continuar con el pago y la gestión.
+              Firma el PDF descargado y súbelo aquí. El documento quedará pendiente
+              de revisión humana y no habilita por sí solo el pago ni la presentación.
             </p>
 
-            {!generated ? (
+            {!visibleGenerated ? (
               <div
                 style={{
                   background: "#fff7ed",
@@ -500,19 +551,22 @@ export default function Autorizar() {
             ) : null}
 
             <input
+              ref={signedFileInputRef}
               type="file"
               accept=".pdf,application/pdf"
               onChange={(e) => {
+                if (!caseStateIsCurrent || loadingCase) return;
                 setSignedFile(e.target.files?.[0] || null);
                 setMsg("");
                 setDebug("");
               }}
               style={inputStyle}
+              disabled={!caseStateIsCurrent || loadingCase || loading}
             />
 
-            {signedFile ? (
+            {visibleSignedFile ? (
               <p className="sr-small" style={{ marginTop: 8, color: "#475569" }}>
-                Archivo seleccionado: {signedFile.name}
+                Archivo seleccionado: {visibleSignedFile.name}
               </p>
             ) : null}
 
@@ -521,30 +575,30 @@ export default function Autorizar() {
                 type="button"
                 className="sr-btn-primary"
                 onClick={uploadSignedAuthorization}
-                disabled={loading || !signedFile}
+                disabled={loading || loadingCase || !caseStateIsCurrent || !visibleSignedFile}
               >
                 {loading ? "Subiendo…" : "Subir autorización firmada"}
               </button>
             </div>
           </div>
 
-          {msg ? (
+          {visibleMsg ? (
             <div
               style={{
                 marginTop: 16,
-                color: msg.startsWith("✅") ? "#166534" : "#991b1b",
-                background: msg.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
-                border: msg.startsWith("✅") ? "1px solid #bbf7d0" : "1px solid #fecaca",
+                color: visibleMsg.startsWith("✅") ? "#166534" : "#991b1b",
+                background: visibleMsg.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
+                border: visibleMsg.startsWith("✅") ? "1px solid #bbf7d0" : "1px solid #fecaca",
                 borderRadius: 14,
                 padding: 14,
                 fontWeight: 900,
               }}
             >
-              {msg}
+              {visibleMsg}
             </div>
           ) : null}
 
-          {debug ? (
+          {visibleDebug ? (
             <div
               style={{
                 marginTop: 10,
@@ -557,7 +611,7 @@ export default function Autorizar() {
                 wordBreak: "break-word",
               }}
             >
-              Detalle técnico: {debug}
+              Detalle técnico: {visibleDebug}
             </div>
           ) : null}
         </div>
@@ -566,7 +620,7 @@ export default function Autorizar() {
   );
 }
 
-function CheckRow({ checked, onChange, children }) {
+function CheckRow({ checked, onChange, children, disabled = false }) {
   return (
     <label
       style={{
@@ -586,6 +640,7 @@ function CheckRow({ checked, onChange, children }) {
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         style={{ marginTop: 3, width: 18, height: 18, flex: "0 0 auto" }}
       />
@@ -614,13 +669,14 @@ function Info({ label, value }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text" }) {
+function Field({ label, value, onChange, type = "text", disabled = false }) {
   return (
     <label style={{ display: "block" }}>
       <span style={labelStyle}>{label}</span>
       <input
         type={type}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         style={inputStyle}
       />

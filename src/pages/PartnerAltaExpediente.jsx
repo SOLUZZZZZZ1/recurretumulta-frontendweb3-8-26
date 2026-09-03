@@ -1,10 +1,12 @@
 import React, { useMemo, useRef, useState } from "react";
+import { safeInternalPath } from "../lib/safeNavigation.js";
+import { partnerFetch } from "../lib/partnerApi.js";
 
 const API = "/api";
 const MAX_FILES = 5;
 
-async function fetchJson(url, options = {}) {
-  const r = await fetch(url, options);
+async function fetchJson(url, options = {}, security = {}) {
+  const r = await partnerFetch(url, options, security);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || data?.message || "Error API");
   return data;
@@ -15,7 +17,7 @@ function formatBytes(bytes) {
   return `${mb.toFixed(2)} MB`;
 }
 
-export default function PartnerAltaExpediente({ partnerToken = "" }) {
+export default function PartnerAltaExpediente() {
   const originalsRef = useRef(null);
   const authRef = useRef(null);
 
@@ -30,8 +32,8 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
     client_email: "",
     partner_note: "",
     authorization_mode: "partner_custody",
-    confirm_client_informed: true,
-    confirm_authorization_held: true,
+    confirm_client_informed: false,
+    confirm_authorization_held: false,
     full_name: "",
     dni_nie: "",
     domicilio_notif: "",
@@ -40,6 +42,10 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
   });
 
   const maxFilesReached = useMemo(() => files.length >= MAX_FILES, [files.length]);
+  const safeResumeUrl = useMemo(
+    () => safeInternalPath(result?.resume_url),
+    [result?.resume_url]
+  );
 
   function setField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -77,8 +83,8 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
     setMsg("");
     setResult(null);
 
-    if (!partnerToken.trim()) {
-      setMsg("Falta el token de partner.");
+    if (!form.confirm_client_informed) {
+      setMsg("Debes confirmar que el cliente ha sido informado.");
       return;
     }
     if (!form.client_name.trim()) {
@@ -93,8 +99,8 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
       setMsg("Añade al menos un documento del expediente.");
       return;
     }
-    if (form.authorization_mode === "partner_custody" && !form.confirm_authorization_held) {
-      setMsg("Debes confirmar que la gestoría custodia la autorización.");
+    if (!authorizationFile || !form.confirm_authorization_held) {
+      setMsg("Debes adjuntar la autorización firmada y confirmar su recepción.");
       return;
     }
 
@@ -121,17 +127,16 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
 
       files.forEach((x) => fd.append("files", x.file));
 
-      if (authorizationFile) {
-        fd.append("authorization_file", authorizationFile);
-      }
+      fd.append("authorization_file", authorizationFile);
 
-      const data = await fetchJson(`${API}/partner/cases`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${partnerToken.trim()}`,
+      const data = await fetchJson(
+        `${API}/partner/cases`,
+        {
+          method: "POST",
+          body: fd,
         },
-        body: fd,
-      });
+        { requireCsrf: true }
+      );
 
       setResult(data);
       setMsg("✅ Expediente de gestoría creado correctamente.");
@@ -239,7 +244,7 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
 
             <div style={{ marginTop: 12 }}>
               <label className="sr-small" style={{ fontWeight: 800 }}>
-                PDF de autorización (opcional pero recomendado)
+                PDF o imagen de la autorización firmada (obligatoria)
               </label>
               <input
                 ref={authRef}
@@ -358,11 +363,15 @@ export default function PartnerAltaExpediente({ partnerToken = "" }) {
           <div className="sr-small">
             <b>authorization_document_uploaded:</b> {String(result.authorization_document_uploaded)}
           </div>
-          {result.resume_url ? (
+          {safeResumeUrl ? (
             <div className="sr-small" style={{ marginTop: 8 }}>
-              <a href={result.resume_url} target="_blank" rel="noreferrer">
+              <a href={safeResumeUrl} target="_blank" rel="noreferrer">
                 Abrir expediente
               </a>
+            </div>
+          ) : result.resume_url ? (
+            <div className="sr-small" style={{ marginTop: 8, color: "#991b1b" }}>
+              La dirección de continuación recibida no es segura.
             </div>
           ) : null}
         </div>

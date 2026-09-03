@@ -2,11 +2,11 @@ import React from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 
-const REVIEW_PRICES = [
+const REVIEW_OPTIONS = [
   {
     icon: "🚗",
     title: "Multas y vehículos",
-    price: "10 €",
+    priceNotice: "Cotización en tu expediente",
     text: "Revisión inicial de la documentación y de la situación del expediente.",
     to: "/trafico",
     action: "Ver Multas y vehículos",
@@ -14,7 +14,7 @@ const REVIEW_PRICES = [
   {
     icon: "💳",
     title: "Deudas y morosidad",
-    price: "10 €",
+    priceNotice: "Cotización en tu expediente",
     text: "Revisión inicial de inclusiones en ficheros de morosidad y problemas relacionados con deudas.",
     to: "/morosidad",
     action: "Ver Deudas y morosidad",
@@ -22,7 +22,7 @@ const REVIEW_PRICES = [
   {
     icon: "🏛️",
     title: "Administración pública",
-    price: "25 €",
+    priceNotice: "Cotización en tu expediente",
     text: "Revisión inicial de expedientes frente a administraciones y organismos públicos.",
     to: "/administracion",
     action: "Ver Administración",
@@ -30,7 +30,7 @@ const REVIEW_PRICES = [
   {
     icon: "🛒",
     title: "Reclamaciones de consumo",
-    price: "10 €",
+    priceNotice: "Cotización en tu expediente",
     label: "Estudio inicial del caso",
     text: "Estudiamos la documentación y el encaje de asuntos relacionados con bancos, energía, telecomunicaciones, seguros, viajes y otros servicios de consumo.",
     to: "/iniciar-expediente",
@@ -43,7 +43,7 @@ export default function Precios() {
     <>
       <Seo
         title="Precios · RTM"
-        description="Consulta las tarifas de revisión inicial, incluido el estudio de reclamaciones de consumo por 10 €, y cómo se descuentan del precio o presupuesto posterior."
+        description="Consulta cómo se cotiza la revisión inicial y cómo se informa cualquier precio o presupuesto posterior antes de contratar."
       />
 
       <main
@@ -110,7 +110,7 @@ export default function Precios() {
               alignItems: "stretch",
             }}
           >
-            {REVIEW_PRICES.map((item) => (
+            {REVIEW_OPTIONS.map((item) => (
               <article
                 key={item.title}
                 style={{
@@ -160,7 +160,7 @@ export default function Precios() {
                     fontWeight: 950,
                   }}
                 >
-                  {item.price}
+                  {item.priceNotice}
                 </div>
 
                 <div
@@ -269,11 +269,11 @@ export default function Precios() {
                   fontWeight: 950,
                 }}
               >
-                39 €
+                Cotización previa
               </div>
               <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
-                Tarifa de gestión cuando corresponda esta actuación. Se
-                descontará lo abonado previamente por la revisión inicial.
+                El importe vigente se mostrará desde el servidor y ligado al
+                expediente antes de contratar esta actuación.
               </p>
             </article>
 

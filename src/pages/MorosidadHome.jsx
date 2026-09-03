@@ -177,7 +177,7 @@ export default function MorosidadHome() {
                 Empieza por conocer tu situación
               </h2>
               <p style={{ margin: 0, color: "#475569", maxWidth: 620 }}>
-                Abre tu expediente RTM y realizaremos la revisión inicial básica por 10 €.
+                Abre tu expediente RTM y consulta allí la cotización vigente de la revisión inicial.
               </p>
             </div>
 
@@ -185,7 +185,7 @@ export default function MorosidadHome() {
               style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }}
               onClick={() => navigate("/iniciar-expediente/debt/asnef_equifax?family=morosidad")}
             >
-              Iniciar revisión inicial · 10 €
+              Iniciar revisión inicial
             </button>
           </div>
         </section>

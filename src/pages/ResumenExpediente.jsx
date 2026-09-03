@@ -1,6 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
+import { requireStripeCheckoutUrl } from "../lib/safeNavigation.js";
+import {
+  isAuthorizationPendingReview,
+  isAuthorizationVerified,
+  isVehicleRemovalCase,
+} from "../lib/authorizationEvidence.js";
+import {
+  formatReviewQuote,
+  parseReviewCheckoutContext,
+  parseReviewCheckoutEnvelope,
+  sameReviewQuote,
+} from "../lib/reviewCheckout.js";
 
 function buildUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}${path}`;
@@ -43,67 +55,18 @@ function getCaseId(search) {
 }
 
 function isPaid(v) {
-  const s = String(v || "").toLowerCase();
-  return s === "paid" || s === "succeeded" || s === "complete" || s === "completed";
+  return String(v || "").trim().toLowerCase() === "paid";
 }
 
 function isAuthorized(data) {
-  if (!data) return false;
-  if (Object.prototype.hasOwnProperty.call(data?.progress || {}, "authorization_received")) {
-    return data.progress.authorization_received === true;
-  }
-  if (data.authorized === true) return true;
-  if (data.authorization_signed === true) return true;
-  const interested = data.interested_data || {};
-  if (interested.authorization_signed === true) return true;
-  return false;
-}
-
-function normalizeCode(value = "") {
-  return String(value || "").trim().toLowerCase().replace(/[-\s]+/g, "_");
-}
-
-function getServiceCode(data) {
-  return normalizeCode(
-    data?.department ||
-      data?.service ||
-      data?.service_code ||
-      data?.case_type ||
-      data?.product_code ||
-      data?.interested_data?.department ||
-      data?.interested_data?.service ||
-      data?.interested_data?.case_type ||
-      "review"
-  );
-}
-
-function getReviewInfo(data) {
-  const code = getServiceCode(data);
-  const isAdmin =
-    code === "administration" ||
-    code === "admin" ||
-    code === "administracion" ||
-    code === "administracion_publica" ||
-    code === "aeat" ||
-    code === "social_security" ||
-    code === "town_hall" ||
-    code === "ayuntamiento" ||
-    code === "hacienda" ||
-    code === "seguridad_social" ||
-    code === "catastro" ||
-    code === "general_administration";
-
-  return {
-    product: isAdmin ? "administration" : code || "review",
-    amount: isAdmin ? 25 : 10,
-    label: isAdmin ? "Revisión inicial administrativa" : "Revisión inicial del expediente",
-  };
+  return isAuthorizationVerified(data);
 }
 
 function statusLabel(data) {
   if (!data) return "Expediente recibido";
   if (isPaid(data.payment_status)) return "Revisión inicial pagada";
-  if (isAuthorized(data)) return "Autorización recibida";
+  if (isAuthorized(data)) return "Representación firmada verificada";
+  if (isAuthorizationPendingReview(data)) return "Autorización pendiente de revisión";
   if (data.status === "generated") return "Documentación preparada";
   return "Expediente recibido";
 }
@@ -115,7 +78,10 @@ function messageFor(data, loading) {
     return "La revisión inicial está confirmada. El expediente pasa ahora a valoración por RTM.";
   }
   if (isAuthorized(data)) {
-    return "Ya tenemos tu autorización. Antes de continuar te explicamos el coste y el alcance de la revisión inicial.";
+    return "La representación firmada consta como verificada. Antes de continuar te mostramos la cotización autoritativa y el alcance de la revisión inicial.";
+  }
+  if (isAuthorizationPendingReview(data)) {
+    return "Hemos recibido el documento firmado como candidato. Una persona debe revisarlo antes de habilitar cualquier pago o presentación.";
   }
   return "Hemos recibido tu solicitud. Para continuar necesitamos tus datos y la autorización firmada.";
 }
@@ -130,6 +96,7 @@ export default function Resumen() {
   const [technicalError, setTechnicalError] = useState("");
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [reviewContext, setReviewContext] = useState(null);
 
   async function loadStatus({ silent = false } = {}) {
     if (!caseId) {
@@ -150,6 +117,21 @@ export default function Resumen() {
         await new Promise((resolve) => setTimeout(resolve, 900));
       }
       setData(last);
+      if (isAuthorized(last) && !isPaid(last?.payment_status)) {
+        try {
+          const contextPayload = await fetchJsonFallback(
+            `/billing/review-context/${encodeURIComponent(caseId)}`
+          );
+          setReviewContext(parseReviewCheckoutContext(contextPayload, caseId));
+        } catch (contextError) {
+          setReviewContext(null);
+          setTechnicalError(
+            contextError?.message || "No se pudo verificar la cotización."
+          );
+        }
+      } else {
+        setReviewContext(null);
+      }
     } catch (e) {
       // No mostramos “Error API” al cliente como estado principal.
       setTechnicalError(e?.message || "");
@@ -178,6 +160,32 @@ export default function Resumen() {
         navigate(`/pago-ok?case=${encodeURIComponent(caseId)}`);
         return;
       }
+      if (!isAuthorized(current)) {
+        throw new Error("La autorización firmada todavía no está verificada.");
+      }
+
+      const contextPayload = await fetchJsonFallback(
+        `/billing/review-context/${encodeURIComponent(caseId)}`
+      );
+      const latestContext = parseReviewCheckoutContext(contextPayload, caseId);
+      if (!latestContext.signedAuthorityVerified || !latestContext.ready) {
+        setReviewContext(latestContext);
+        throw new Error(
+          "El servidor todavía no confirma que el expediente esté listo para pagar."
+        );
+      }
+      if (!reviewContext?.quote) {
+        setReviewContext(latestContext);
+        throw new Error(
+          "La cotización acaba de actualizarse. Revísala antes de iniciar el pago."
+        );
+      }
+      if (!sameReviewQuote(reviewContext.quote, latestContext.quote)) {
+        setReviewContext(latestContext);
+        throw new Error(
+          "La cotización ha cambiado. Revisa el nuevo importe antes de continuar."
+        );
+      }
 
       const email =
         current?.contact_email ||
@@ -190,22 +198,22 @@ export default function Resumen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           case_id: caseId,
-          product: getReviewInfo(current).product,
+          product: latestContext.quote.serviceCode,
           payment_stage: "review",
           email: email || null,
         }),
       });
+      const verifiedCheckout = parseReviewCheckoutEnvelope(
+        checkout,
+        latestContext.quote
+      );
 
-      if (checkout?.redirect) {
-        window.location.href = checkout.redirect;
+      if (verifiedCheckout.alreadyPaid) {
+        navigate(`/pago-ok?case=${encodeURIComponent(caseId)}`);
         return;
       }
 
-      if (!checkout?.url) {
-        throw new Error("No se recibió URL de Stripe.");
-      }
-
-      window.location.href = checkout.url;
+      window.location.assign(requireStripeCheckoutUrl(verifiedCheckout.url));
     } catch (e) {
       setPayError(e?.message || "No se pudo iniciar el pago.");
     } finally {
@@ -215,9 +223,22 @@ export default function Resumen() {
 
   const paid = isPaid(data?.payment_status);
   const authorized = isAuthorized(data);
-  const reviewInfo = getReviewInfo(data);
-  const showPayButton = authorized && !paid;
-  const showAuthNeeded = !authorized && !paid;
+  const authorizationPending = isAuthorizationPendingReview(data);
+  const reviewQuote = reviewContext?.quote || null;
+  const authoritativeReady = Boolean(
+    reviewQuote && reviewContext?.ready && reviewContext?.signedAuthorityVerified
+  );
+  const showPayButton = authorized && !paid && authoritativeReady;
+  const showAuthNeeded = !authorized && !authorizationPending && !paid;
+
+  if (data && isVehicleRemovalCase(data)) {
+    return (
+      <Navigate
+        to={`/eliminar-coche?case=${encodeURIComponent(caseId)}`}
+        replace
+      />
+    );
+  }
 
   return (
     <main className="sr-page">
@@ -232,7 +253,7 @@ export default function Resumen() {
             <tbody>
               <Row label="Expediente interno" value={caseId} />
               <Row label="Estado" value={statusLabel(data)} />
-              <Row label="Autorización firmada" value={authorized ? "Recibida" : loading ? "Revisando…" : "Pendiente"} />
+              <Row label="Autorización firmada" value={authorized ? "Verificada" : authorizationPending ? "Pendiente de revisión humana" : loading ? "Revisando…" : "Pendiente"} />
               <Row label="Pago" value={paid ? "paid" : data?.payment_status || (loading ? "Revisando…" : "Pendiente")} />
             </tbody>
           </table>
@@ -266,6 +287,17 @@ export default function Resumen() {
           </div>
         ) : null}
 
+        {authorizationPending && !paid ? (
+          <div className="sr-card" style={{ marginTop: 16 }} role="status">
+            <h2 className="sr-h2">Autorización en revisión</h2>
+            <p className="sr-p">
+              El documento está recibido como candidato, pero todavía no ha sido
+              verificado por una persona. No se habilitarán pagos ni presentaciones
+              hasta completar esa revisión.
+            </p>
+          </div>
+        ) : null}
+
         {showPayButton ? (
           <>
             <div className="sr-card" style={{ marginTop: 16 }}>
@@ -277,7 +309,7 @@ export default function Resumen() {
             </div>
 
             <div className="sr-card" style={{ marginTop: 0 }}>
-              <h2 className="sr-h2">{reviewInfo.label}</h2>
+              <h2 className="sr-h2">{reviewQuote.label}</h2>
 
               <div
                 style={{
@@ -292,7 +324,7 @@ export default function Resumen() {
                     Importe ahora
                   </div>
                   <div style={{ marginTop: 4, color: "#0f172a", fontSize: 30, fontWeight: 950 }}>
-                    {reviewInfo.amount} €
+                    {formatReviewQuote(reviewQuote)}
                   </div>
                 </div>
 
@@ -313,7 +345,9 @@ export default function Resumen() {
               </p>
 
               <button className="sr-btn-primary" onClick={startPayment} disabled={paying || loading}>
-                {paying ? "Abriendo pago…" : `Pagar revisión inicial · ${reviewInfo.amount} €`}
+                {paying
+                  ? "Abriendo pago…"
+                  : `Pagar revisión inicial · ${formatReviewQuote(reviewQuote)}`}
               </button>
 
               {payError ? (
@@ -325,18 +359,37 @@ export default function Resumen() {
           </>
         ) : null}
 
+        {authorized && !paid && !authoritativeReady ? (
+          <div className="sr-card" style={{ marginTop: 16 }} role="status">
+            <h2 className="sr-h2">Cotización pendiente de verificación</h2>
+            <p className="sr-p">
+              El pago permanece bloqueado hasta que el servidor confirme el importe,
+              la moneda, el servicio y que el expediente está listo.
+            </p>
+            {payError ? (
+              <div style={{ marginTop: 12, color: "#991b1b", fontWeight: 800 }}>
+                ❌ {payError}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {paid ? (
           <div className="sr-card" style={{ marginTop: 16 }}>
             <h2 className="sr-h2">Revisión inicial en curso</h2>
             <p className="sr-p">
-              Hemos recibido el pago y la autorización. RTM revisará el expediente y te
+              El servidor confirma el pago. RTM revisará el expediente y te
               explicará el resultado, las opciones disponibles y el coste de cualquier
               gestión posterior antes de que tengas que decidir.
             </p>
           </div>
         ) : null}
 
-        {!showPayButton && !showAuthNeeded && !paid ? (
+        {!authorized &&
+        !authorizationPending &&
+        !showPayButton &&
+        !showAuthNeeded &&
+        !paid ? (
           <div className="sr-card" style={{ marginTop: 16 }}>
             <h2 className="sr-h2">Gestión iniciada</h2>
             <p className="sr-p">

@@ -9,6 +9,8 @@ import React, {
 import { Link, useParams } from "react-router-dom";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
+import { isLegalRepresentationVerified } from "../lib/authorizationEvidence.js";
+import OpsAuthorizationReview from "../components/OpsAuthorizationReview.jsx";
 
 const API = "/api";
 const JSON_HEADERS = Object.freeze({ "Content-Type": "application/json" });
@@ -443,12 +445,12 @@ function resolveAutomaticDelivery(ai, detail, sendInfo) {
   };
 }
 
-function buildPackageStatus(documents) {
+function buildPackageStatus(documents, caseRecord) {
   const docs = Array.isArray(documents) ? documents : [];
   const lowerKinds = docs.map((d) => String(d?.kind || "").toLowerCase());
 
   const hasRecurso = lowerKinds.some((k) => k.endsWith("_pdf") || (k.includes("pdf") && !k.includes("authorization") && !k.includes("autoriz")));
-  const hasAutorizacion = lowerKinds.some((k) => k.includes("authorization") || k.includes("autoriz"));
+  const hasAutorizacion = isLegalRepresentationVerified(caseRecord);
   const hasOriginal = lowerKinds.some((k) => k.includes("original"));
 
   return {
@@ -511,7 +513,7 @@ function pickLatestAiEvent(events) {
 }
 
 export default function OpsCaseDetailPro() {
-  const { authFetch, canSupervise } = useOpsAuth();
+  const { authFetch, canSupervise, session } = useOpsAuth();
   const canManageLegacy = canSupervise;
   const { caseId } = useParams();
 
@@ -627,7 +629,7 @@ export default function OpsCaseDetailPro() {
 
     try {
       const docsRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/documents`, { signal: controller.signal });
-      const evRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/events`, { signal: controller.signal });
+      const evRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/events?limit=1000`, { signal: controller.signal });
       const detailRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}`, { signal: controller.signal });
       const overridesRes = await fetchJson(authFetch, `${API}/ops/cases/${encodeURIComponent(requestedCaseId)}/ai-overrides`, { signal: controller.signal });
 
@@ -737,7 +739,10 @@ export default function OpsCaseDetailPro() {
   const deadlines = useMemo(() => extractDeadlines(aiResult, detail, events), [aiResult, detail, events]);
   const sendInfo = useMemo(() => extractSendInfo(aiResult, detail, events), [aiResult, detail, events]);
   const autoDelivery = useMemo(() => resolveAutomaticDelivery(aiResult, detail, sendInfo), [aiResult, detail, sendInfo]);
-  const packageStatus = useMemo(() => buildPackageStatus(documents), [documents]);
+  const packageStatus = useMemo(
+    () => buildPackageStatus(documents, detail),
+    [documents, detail]
+  );
   const presenterAvailable =
     detail?.actions?.presenter_available === true;
   const recursoDoc = useMemo(
@@ -750,7 +755,7 @@ export default function OpsCaseDetailPro() {
   const autorizacionDoc = useMemo(
     () => documents.find((d) => {
       const kind = String(d?.kind || "").toLowerCase();
-      return kind.includes("authorization") || kind.includes("autoriz");
+      return kind === "authorization_signed_verified";
     }) || null,
     [documents]
   );
@@ -873,7 +878,7 @@ export default function OpsCaseDetailPro() {
               disabled
               aria-describedby="approval-blocked-reason"
             >
-              Aprobación CORE pendiente
+              Aprobación final del recurso · pendiente
             </button>
             <button className="min-w-[118px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50" onClick={manual} disabled={caseControlsDisabled}>
               {busyManual ? "Enviando..." : "Manual"}
@@ -890,8 +895,8 @@ export default function OpsCaseDetailPro() {
       {!canManageLegacy ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">Fase de acceso individual: esta vista es de consulta para el operador. La edición y regeneración CORE siguen pendientes.</div> : null}
 
       <p id="approval-blocked-reason" className="mt-3 text-xs font-semibold text-slate-600">
-        La aprobación desde este puente se ha retirado. Se habilitará mediante un
-        flujo CORE auditado y ligado al hash del PDF.
+        La aprobación final del recurso continúa retirada. La revisión de la
+        autorización firmada usa abajo su propio flujo auditado y ligado al hash.
       </p>
       <p id="core-edit-blocked-reason" className="mt-1 text-xs font-semibold text-slate-600">
         Guardado, corrección y regeneración permanecen deshabilitados para todos
@@ -901,6 +906,18 @@ export default function OpsCaseDetailPro() {
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
         <b>Última IA ejecutada:</b> {latestAiEvent ? fmt(latestAiEvent.created_at) : "—"}
       </div>
+
+      {canManageLegacy ? (
+        <OpsAuthorizationReview
+          authFetch={authFetch}
+          caseId={caseId}
+          documents={documents}
+          events={events}
+          loading={loading || !caseProjectionReady}
+          onReviewed={() => loadCase({ silent: true })}
+          sessionId={session?.sessionId || ""}
+        />
+      ) : null}
 
       <div className={`mt-4 rounded-2xl border px-4 py-4 shadow-sm ${autoDelivery.tone === "info" ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -1083,7 +1100,7 @@ export default function OpsCaseDetailPro() {
                 <div className="font-semibold text-slate-900">Adjuntos previstos en el envío</div>
                 <div className="mt-2 space-y-1">
                   <div>{recursoDoc ? "✔" : "❌"} Recurso: {recursoDoc ? `${recursoDoc.kind || "pdf"} · ${fmt(recursoDoc.created_at)}` : "Falta"}</div>
-                  <div>{autorizacionDoc ? "✔" : "❌"} Autorización: {autorizacionDoc ? `${autorizacionDoc.kind || "authorization_pdf"} · ${fmt(autorizacionDoc.created_at)}` : "Falta"}</div>
+                  <div>{packageStatus.hasAutorizacion ? "✔" : "❌"} Representación verificada: {autorizacionDoc ? `${autorizacionDoc.kind} · ${fmt(autorizacionDoc.created_at)}` : packageStatus.hasAutorizacion ? "Verificada por CORE; documento no proyectado en esta lista" : "Falta"}</div>
                   <div>{originalDoc ? "✔" : "❌"} Multa original: {originalDoc ? `${originalDoc.kind || "original"} · ${fmt(originalDoc.created_at)}` : "Falta"}</div>
                 </div>
               </div>
@@ -1157,7 +1174,7 @@ export default function OpsCaseDetailPro() {
               : "Consulta únicamente. La confirmación auditada se habilitará en CORE."}
           </p>
           <div className="space-y-2.5">
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><input type="checkbox" checked={checkPdf} disabled aria-describedby="secure-pdf-review-reason" className="mt-1" /><div><div className="font-semibold text-slate-900">Revisión del PDF pendiente de evidencia</div><div id="secure-pdf-review-reason" className="text-xs text-slate-500">Se habilitará al existir un visor interno con recibo individual, hash y auditoría.</div></div></label>
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><input type="checkbox" checked={checkPdf} disabled aria-describedby="secure-pdf-review-reason" className="mt-1" /><div><div className="font-semibold text-slate-900">Revisión del recurso final pendiente de evidencia</div><div id="secure-pdf-review-reason" className="text-xs text-slate-500">Este control corresponde al recurso final, no a la autorización firmada revisada arriba.</div></div></label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkHecho} onChange={() => setCheckHecho(!checkHecho)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">El hecho denunciado es correcto y limpio</div><div className="text-xs text-slate-500">Debe reflejar la conducta real sin ruido OCR.</div></div></label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkFamilia} onChange={() => setCheckFamilia(!checkFamilia)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">La familia jurídica es la correcta</div><div className="text-xs text-slate-500">Semáforo, velocidad, móvil, etc.</div></div></label>
             <label className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-3 text-sm"><input type="checkbox" checked={checkPlazos} onChange={() => setCheckPlazos(!checkPlazos)} disabled={caseControlsDisabled} aria-describedby="checklist-local-only" className="mt-1" /><div><div className="font-semibold text-slate-900">He revisado los plazos del expediente</div><div className="text-xs text-slate-500">Plazo inicial y, si aplica, plazo post-presentación.</div></div></label>

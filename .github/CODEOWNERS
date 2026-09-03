@@ -1,0 +1,10 @@
+* @SOLUZZZZZZ1
+
+# Authentication, routing and deployment policy require explicit owner review.
+/.github/ @SOLUZZZZZZ1
+/src/auth/ @SOLUZZZZZZ1
+/src/lib/ @SOLUZZZZZZ1
+/src/ops/ @SOLUZZZZZZ1
+/src/pages/ @SOLUZZZZZZ1
+/vercel.json @SOLUZZZZZZ1
+/scripts/ @SOLUZZZZZZ1

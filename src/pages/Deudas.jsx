@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import { RTM_API_BASE } from "../lib/api.js";
+import { rememberCaseScopedData } from "../lib/caseSession.js";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -183,15 +184,14 @@ export default function Deudas() {
         throw new Error("El expediente se creó, pero no se recibió su número interno.");
       }
 
-      localStorage.setItem(
-        "rtm_last_intake",
-        JSON.stringify({
-          ...data,
-          department: "debt",
-          case_type: "asnef_equifax",
-          created_at: new Date().toISOString(),
-        })
-      );
+      rememberCaseScopedData(caseId, {
+        client_data: {
+          full_name: form.full_name.trim(),
+          dni_nie: normalizedDni,
+          email: form.email.trim(),
+          telefono: form.phone.trim(),
+        },
+      });
 
       navigate(`/resumen?case=${encodeURIComponent(caseId)}`);
     } catch (error) {

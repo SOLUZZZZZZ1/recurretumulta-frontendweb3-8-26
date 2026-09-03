@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import {
   PUBLIC_SERVICE_FAMILIES,
+  VEHICLE_REMOVAL_PATH,
   getPublicService,
 } from "../data/publicServices.js";
 import {
@@ -11,6 +12,12 @@ import {
   rememberCaseAccessToken,
   RTM_API_CANDIDATES,
 } from "../lib/api.js";
+import {
+  appendAuthorizationDocumentBinding,
+  parseAuthorizationCandidateEnvelope,
+  parseAuthorizationIssueEnvelope,
+} from "../lib/authorizationEvidence.js";
+import { safeInternalPath } from "../lib/safeNavigation.js";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
@@ -61,6 +68,13 @@ const SERVICE_CONFIG = {
     },
   },
 };
+
+function nextPathForCase(department, caseType, defaultPath) {
+  if (department === "traffic" && caseType === "vehicle_removal") {
+    return VEHICLE_REMOVAL_PATH;
+  }
+  return defaultPath;
+}
 
 function buildUrl(base, path) {
   return `${String(base || "").replace(/\/$/, "")}${path}`;
@@ -185,6 +199,8 @@ export default function IniciarExpedienteRTM() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const isVehicleRemoval =
+    department === "traffic" && form.case_type === "vehicle_removal";
 
   const dniFrontRef = useRef(null);
   const dniBackRef = useRef(null);
@@ -219,7 +235,9 @@ export default function IniciarExpedienteRTM() {
     if (!dniBack) return "Adjunta la parte posterior del documento de identidad.";
     if (dniFront.size > MAX_FILE_BYTES || dniBack.size > MAX_FILE_BYTES) return "Alguna imagen supera 12 MB.";
     if (form.customer_comment.trim().length < 15) return "Cuéntanos brevemente qué ha ocurrido.";
-    if (!form.representation_confirmed) return "Confirma la generación de la autorización.";
+    if (!isVehicleRemoval && !form.representation_confirmed) {
+      return "Confirma la generación de la autorización.";
+    }
     if (!form.privacy_accepted) return "Acepta la política de privacidad.";
     return "";
   }
@@ -255,9 +273,11 @@ export default function IniciarExpedienteRTM() {
         customer_comment: selectedFamily
           ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
           : form.customer_comment.trim(),
-        representation_confirmed: String(form.representation_confirmed),
+        representation_confirmed: String(
+          isVehicleRemoval ? false : form.representation_confirmed
+        ),
         prejudicial_counsel_requested: String(
-          form.prejudicial_counsel_requested
+          isVehicleRemoval ? false : form.prejudicial_counsel_requested
         ),
         privacy_accepted: String(form.privacy_accepted),
       }).forEach(([key, value]) => fd.append(key, value));
@@ -272,6 +292,22 @@ export default function IniciarExpedienteRTM() {
         throw new Error("El backend no devolvió la capacidad segura del expediente.");
       }
 
+      const fallbackNextPath = nextPathForCase(
+        department,
+        form.case_type,
+        config.nextPath
+      );
+      const nextPath =
+        safeInternalPath(data?.next_path, {
+          allowedPathnames: [fallbackNextPath],
+          pathOnly: true,
+        }) || fallbackNextPath;
+
+      if (isVehicleRemoval) {
+        navigate(`${nextPath}?case=${encodeURIComponent(caseId)}`);
+        return;
+      }
+
       const authority = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -281,12 +317,10 @@ export default function IniciarExpedienteRTM() {
           representation_confirmed: true,
         }),
       });
+      const issued = parseAuthorizationIssueEnvelope(authority, caseId);
 
-      const pdfPath =
-        authority?.download_url ||
-        data?.authorization_download_url ||
-        `/cases/${caseId}/authorization-pdf`;
-      setDraftCase({ caseId, pdfPath, nextPath: data?.next_path || config.nextPath });
+      const pdfPath = `/cases/${caseId}/authorization-pdf`;
+      setDraftCase({ caseId, pdfPath, nextPath, authorizationBinding: issued.binding });
       setMessage("✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
       await openBackendFile(pdfPath, caseId);
     } catch (error) {
@@ -307,9 +341,11 @@ export default function IniciarExpedienteRTM() {
     try {
       const fd = new FormData();
       fd.append("file", signedAuthorization);
-      await fetchJsonFallback(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
+      appendAuthorizationDocumentBinding(fd, draftCase.authorizationBinding);
+      const result = await fetchJsonFallback(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
+      parseAuthorizationCandidateEnvelope(result, draftCase.caseId);
       setAuthorizationUploaded(true);
-      setMessage("✅ Autorización firmada recibida. Ya puedes continuar con la documentación del expediente.");
+      setMessage("✅ Documento recibido como candidato y pendiente de revisión humana. Puedes continuar aportando documentación; por sí solo no habilita pagos ni presentaciones que exijan apoderamiento verificado.");
     } catch (error) {
       setMessage(error?.message || "No se pudo subir la autorización.");
     } finally {
@@ -515,17 +551,29 @@ export default function IniciarExpedienteRTM() {
 
   return (
     <>
-      <Seo title={`Iniciar expediente · ${config.label} · RTM`} description="Crea tu expediente RTM y descarga la autorización." canonical="https://www.recurretumulta.eu/iniciar-expediente" />
+      <Seo
+        title={`Iniciar expediente · ${config.label} · RTM`}
+        description={
+          isVehicleRemoval
+            ? "Crea tu expediente RTM y continúa al flujo específico de retirada del vehículo."
+            : "Crea tu expediente RTM y descarga la autorización."
+        }
+        canonical="https://www.recurretumulta.eu/iniciar-expediente"
+      />
 
       <main style={{ minHeight: "calc(100vh - 120px)", padding: "42px 16px 68px", background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 56%,#0f766e 100%)" }}>
         <section style={{ maxWidth: 1040, margin: "0 auto", padding: "30px 22px", borderRadius: 26, background: "rgba(255,255,255,.98)", boxShadow: "0 24px 70px rgba(15,23,42,.34)" }}>
           <header style={{ marginBottom: 26 }}>
             <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>Inicia tu expediente</h1>
             <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
-              Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación.
+              {isVehicleRemoval
+                ? "Cuéntanos lo necesario para abrir el expediente. Después comprobarás el permiso de circulación y revisarás el consentimiento y la cotización específicos antes del pago."
+                : "Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación."}
             </p>
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
-              Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración
+              {isVehicleRemoval
+                ? "Un único expediente RTM · Datos → Verificación del vehículo → Consentimiento específico → Cotización → Pago"
+                : "Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración"}
             </div>
             {selectedFamily ? (
               <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 14, background: "#ecfdf5", color: "#166534", fontWeight: 900, lineHeight: 1.5 }}>
@@ -582,17 +630,34 @@ export default function IniciarExpedienteRTM() {
             </Section>
 
             {!draftCase && <>
-              <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
-              <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f" }}>
-                <Check checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
-                  Quiero valorar una autorización separada y opcional para que un abogado pueda realizar reclamaciones prejudiciales por escrito en este expediente.
-                </Check>
-                <p style={{ margin: "6px 0 0", lineHeight: 1.55 }}>
-                  Esta elección no autoriza todavía al abogado y no es necesaria para que RTM gestione el expediente. El Documento 2 se explicará y firmará aparte; no incluye aceptar acuerdos, renunciar a derechos, someterse a arbitraje, cobrar cantidades ni iniciar actuaciones judiciales. La mediación y cualquier fase judicial requieren un encargo específico.
-                </p>
-              </div>
+              {isVehicleRemoval ? (
+                <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f", lineHeight: 1.55 }}>
+                  Esta alta no genera ni solicita una autorización DGT genérica. El
+                  consentimiento limitado a preparar la retirada se mostrará completo,
+                  sin marcar, después de verificar el permiso de circulación y junto a
+                  la cotización vigente.
+                </div>
+              ) : (
+                <>
+                  <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
+                  <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f" }}>
+                    <Check checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
+                      Quiero valorar una autorización separada y opcional para que un abogado pueda realizar reclamaciones prejudiciales por escrito en este expediente.
+                    </Check>
+                    <p style={{ margin: "6px 0 0", lineHeight: 1.55 }}>
+                      Esta elección no autoriza todavía al abogado y no es necesaria para que RTM gestione el expediente. El Documento 2 se explicará y firmará aparte; no incluye aceptar acuerdos, renunciar a derechos, someterse a arbitraje, cobrar cantidades ni iniciar actuaciones judiciales. La mediación y cualquier fase judicial requieren un encargo específico.
+                    </p>
+                  </div>
+                </>
+              )}
               <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
-              <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : "Crear expediente y descargar autorización"}</button>
+              <button type="submit" disabled={loading} style={primaryButton}>
+                {loading
+                  ? "Creando expediente…"
+                  : isVehicleRemoval
+                    ? "Crear expediente y continuar"
+                    : "Crear expediente y descargar autorización"}
+              </button>
             </>}
           </form>
 
@@ -603,7 +668,7 @@ export default function IniciarExpedienteRTM() {
               <UploadBox label="Autorización firmada" file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
             </div>
             <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : "Subir autorización firmada"}</button>
-            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación del caso</button>}
+            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación (autorización pendiente de revisión)</button>}
           </Section>}
 
           {message && <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850 }}>{message}</div>}

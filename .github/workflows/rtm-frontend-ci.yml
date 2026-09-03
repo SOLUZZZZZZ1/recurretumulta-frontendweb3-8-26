@@ -1,0 +1,68 @@
+name: RTM Frontend CI
+
+on:
+  push:
+    branches:
+      - main
+      - "rtm-frontend-staging-*"
+      - "rtm-presenter-no-export-*"
+      - "rtm-ops-controlled-delivery-*"
+      - "rtm-ops-individual-auth-*"
+      - "rtm-ai-security-hardening-*"
+  pull_request:
+    branches:
+      - main
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rtm-frontend-ci-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+
+    env:
+      NPM_CONFIG_AUDIT: "false"
+      NPM_CONFIG_FUND: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Node.js 24 LTS
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.20.0"
+          cache: npm
+
+      - name: Scan repository files for accidental secrets
+        run: npm run security:secrets -- --history
+
+      - name: Python 3.12 for repository contracts
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Run Python repository contract tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Install exact dependency graph
+        run: npm ci --ignore-scripts
+
+      - name: Audit complete dependency graph
+        run: npm audit --audit-level=high
+
+      - name: Run security and regression tests
+        run: npm test
+
+      - name: Build and inspect production bundle
+        run: npm run build

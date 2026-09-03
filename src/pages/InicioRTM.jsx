@@ -3,6 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import { PUBLIC_SERVICE_FAMILIES } from "../data/publicServices.js";
 import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
+import {
+  isAuthorizationPendingReview,
+  isAuthorizationVerified,
+  isVehicleRemovalCase,
+} from "../lib/authorizationEvidence.js";
 
 async function parseResponse(response) {
   const text = await response.text().catch(() => "");
@@ -76,11 +81,14 @@ async function fetchContinueLookupWithFallback(caseIdOrExpediente) {
 }
 
 function getCasePhase(data) {
-  const authorized = Boolean(data?.authorized);
+  if (isVehicleRemovalCase(data)) return "vehicle_removal";
+  const authorized = isAuthorizationVerified(data);
   const paymentStatus = String(data?.payment_status || "").toLowerCase();
   const status = String(data?.status || "").toLowerCase();
 
-  if (!authorized) return "authorize";
+  if (!authorized) {
+    return isAuthorizationPendingReview(data) ? "summary" : "authorize";
+  }
   if (paymentStatus !== "paid") return "pay";
 
   if (
@@ -148,6 +156,11 @@ export default function InicioRTM() {
 
       const caseKey = data?.case_id || data?.id || clean;
       const phase = getCasePhase(data);
+
+      if (phase === "vehicle_removal") {
+        navigate(`/eliminar-coche?case=${encodeURIComponent(caseKey)}`);
+        return;
+      }
 
       if (phase === "authorize") {
         navigate(`/autorizar?case=${encodeURIComponent(caseKey)}`);

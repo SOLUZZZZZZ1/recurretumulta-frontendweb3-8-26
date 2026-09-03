@@ -1,8 +1,14 @@
 export const CONSUMER_INTAKE_PATH = "/iniciar-expediente/claims/consumer";
+export const VEHICLE_REMOVAL_PATH = "/eliminar-coche";
 
 function withFamily(path, familyId) {
   return `${path}?family=${familyId}`;
 }
+
+export const VEHICLE_REMOVAL_INTAKE_PATH = withFamily(
+  "/iniciar-expediente/traffic/vehicle_removal",
+  "trafico"
+);
 
 export const PUBLIC_SERVICE_FAMILIES = [
   {
@@ -21,7 +27,7 @@ export const PUBLIC_SERVICE_FAMILIES = [
     },
     menuLinks: [
       { to: withFamily("/iniciar-expediente/traffic/fine", "trafico"), label: "Multas y sanciones" },
-      { to: "/eliminar-coche", label: "Eliminación de vehículos" },
+      { to: VEHICLE_REMOVAL_INTAKE_PATH, label: "Eliminación de vehículos" },
       { to: withFamily("/iniciar-expediente/traffic/other_traffic", "trafico"), label: "Otros trámites de tráfico" },
     ],
   },

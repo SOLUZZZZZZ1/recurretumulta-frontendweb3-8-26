@@ -167,7 +167,7 @@ export default function AdministracionHome() {
               <div style={{ fontSize: 40 }}>📑</div>
               <h2 style={{ margin: "4px 0 7px", fontSize: 31, color: "#123b73" }}>Empieza por saber dónde estás</h2>
               <p style={{ margin: 0, color: "#475569", maxWidth: 620 }}>
-                Abre tu expediente RTM y realizaremos la revisión inicial administrativa por 25 €.
+                Abre tu expediente RTM y consulta allí la cotización vigente de la revisión inicial administrativa.
               </p>
             </div>
 
@@ -175,7 +175,7 @@ export default function AdministracionHome() {
               style={{ ...greenButton, width: "auto", padding: "15px 24px", fontSize: 16 }}
               onClick={() => navigate("/iniciar-expediente/administration/general_administration?family=administracion")}
             >
-              Iniciar revisión inicial · 25 €
+              Iniciar revisión inicial
             </button>
           </div>
         </section>

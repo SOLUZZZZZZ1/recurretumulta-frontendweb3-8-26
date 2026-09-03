@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
+import { canonicalVehicleAuthorizationSnapshot } from "../lib/vehicleRemovalAccess.js";
 
 const API = "/api";
 
@@ -85,12 +86,14 @@ export default function OpsVehicleRemoval() {
   const [noteCase, setNoteCase] = useState("");
   const [savingNote, setSavingNote] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [reviewAttestation, setReviewAttestation] = useState(null);
   const mutationLockRef = useRef(false);
   const mutationBusy = Boolean(assigning || completing || savingNote);
 
   const jsonHeaders = useMemo(() => ({ "Content-Type": "application/json" }), []);
 
   const load = useCallback(async () => {
+    setReviewAttestation(null);
     setLoading(true);
     setError("");
     try {
@@ -111,8 +114,34 @@ export default function OpsVehicleRemoval() {
     void load();
   }, [load]);
 
-  async function assign(caseId) {
+  function isReviewAttestedFor(item) {
+    const snapshot = canonicalVehicleAuthorizationSnapshot(item);
+    return Boolean(
+      snapshot &&
+        item?.vehicle_preparation_consent === true &&
+        reviewAttestation?.caseId === item.case_id &&
+        reviewAttestation?.authorizationVersion === snapshot.authorizationVersion &&
+        reviewAttestation?.authorizationSha256 === snapshot.authorizationSha256
+    );
+  }
+
+  async function assign(item) {
     if (!canManageLegacy || mutationLockRef.current) return;
+    const caseId = String(item?.case_id || "");
+    const authorization = canonicalVehicleAuthorizationSnapshot(item);
+    if (
+      !caseId ||
+      item?.status !== "vehicle_removal_paid" ||
+      item?.payment_status !== "paid" ||
+      item?.vehicle_preparation_consent !== true ||
+      !authorization ||
+      !isReviewAttestedFor(item)
+    ) {
+      setError(
+        "La asignación exige pago confirmado, consentimiento de preparación canónico y revisión humana explícita."
+      );
+      return;
+    }
     const desguace_name = window.prompt("Nombre del desguace / CAT autorizado:");
     if (!desguace_name) return;
 
@@ -126,8 +155,16 @@ export default function OpsVehicleRemoval() {
       await fetchJson(authFetch, `${API}/ops/vehicle-removal/${encodeURIComponent(caseId)}/assign`, {
         method: "POST",
         headers: jsonHeaders,
-        body: JSON.stringify({ desguace_name, desguace_phone, note }),
+        body: JSON.stringify({
+          desguace_name,
+          desguace_phone,
+          note,
+          human_review_attested: true,
+          authorization_version: authorization.authorizationVersion,
+          authorization_sha256: authorization.authorizationSha256,
+        }),
       });
+      setReviewAttestation(null);
       await load();
     } catch (mutationError) {
       setError(mutationError.message || "No se pudo asignar el desguace");
@@ -137,8 +174,17 @@ export default function OpsVehicleRemoval() {
     }
   }
 
-  async function complete(caseId) {
+  async function complete(item) {
     if (!canManageLegacy || mutationLockRef.current) return;
+    const caseId = String(item?.case_id || "");
+    if (
+      !caseId ||
+      item?.status !== "vehicle_removal_assigned" ||
+      item?.payment_status !== "paid"
+    ) {
+      setError("La retirada debe estar pagada y asignada antes de completarse.");
+      return;
+    }
     const certificate_ref = window.prompt("Referencia certificado / baja DGT (opcional):") || "";
     const note = window.prompt("Nota de cierre (opcional):") || "";
 
@@ -365,19 +411,53 @@ export default function OpsVehicleRemoval() {
                     </div>
                   ) : null}
 
-                  {item.status !== "vehicle_removal_completed" ? (
+                  {item.status === "vehicle_removal_paid" && item.payment_status === "paid" ? (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-950">
+                      {canonicalVehicleAuthorizationSnapshot(item) &&
+                      item.vehicle_preparation_consent === true ? (
+                        <label className="flex items-start gap-2 font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={isReviewAttestedFor(item)}
+                            disabled={!canManageLegacy || mutationBusy}
+                            onChange={(event) => {
+                              const snapshot = canonicalVehicleAuthorizationSnapshot(item);
+                              setReviewAttestation(
+                                event.target.checked && snapshot
+                                  ? {
+                                      caseId: item.case_id,
+                                      authorizationVersion: snapshot.authorizationVersion,
+                                      authorizationSha256: snapshot.authorizationSha256,
+                                    }
+                                  : null
+                              );
+                            }}
+                          />
+                          <span>
+                            Confirmo que he revisado íntegramente el expediente y el consentimiento específico de preparación. Esta revisión no acredita representación ni ejecuta la retirada.
+                          </span>
+                        </label>
+                      ) : (
+                        <div className="font-semibold text-amber-900">
+                          Falta la proyección canónica del consentimiento de preparación; asignación bloqueada.
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {item.status === "vehicle_removal_paid" && item.payment_status === "paid" ? (
                     <button
-                      onClick={() => assign(item.case_id)}
-                      disabled={!canManageLegacy || mutationBusy}
+                      onClick={() => assign(item)}
+                      disabled={!canManageLegacy || mutationBusy || !isReviewAttestedFor(item)}
                       className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                     >
                       {assigning === item.case_id ? "Asignando…" : "🏭 Asignar desguace"}
                     </button>
                   ) : null}
 
-                  {item.status !== "vehicle_removal_completed" ? (
+                  {item.status === "vehicle_removal_assigned" && item.payment_status === "paid" ? (
                     <button
-                      onClick={() => complete(item.case_id)}
+                      onClick={() => complete(item)}
                       disabled={!canManageLegacy || mutationBusy}
                       className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                     >

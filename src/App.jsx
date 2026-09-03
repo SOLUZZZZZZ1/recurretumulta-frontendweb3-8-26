@@ -19,11 +19,9 @@ import Contacto from "./pages/Contacto.jsx";
 import Gestorias from "./pages/Gestorias.jsx";
 import ReservasRestaurante from "./pages/ReservasRestaurante.jsx";
 import AdminRestaurantes from "./pages/AdminRestaurantes.jsx";
-import PartnerUpload from "./pages/PartnerUpload";
 import PartnerChangePassword from "./pages/PartnerChangePassword.jsx";
 import PartnerPanelExpedientes from "./pages/PartnerPanelExpedientes.jsx";
 import SolicitarAltaGestoria from "./pages/SolicitarAltaGestoria.jsx";
-import AdminCrearAsesoria from "./pages/AdminCrearAsesoria.jsx";
 import OPSQueueSmart from "./pages/OPSQueueSmart.jsx";
 import OpsVehicleRemoval from "./pages/OpsVehicleRemoval.jsx";
 import EliminarCoche from "./pages/EliminarCoche.jsx";
@@ -171,11 +169,10 @@ export default function App() {
         <Route path="/gestorias" element={<Gestorias />} />
         <Route path="/resumen" element={<ResumenExpediente />} />
         <Route path="/autorizar" element={<Autorizar />} />
-        <Route path="/partner/upload" element={<PartnerUpload />} />
+        <Route path="/partner/upload" element={<Navigate to="/gestorias" replace />} />
         <Route path="/partner/change-password" element={<PartnerChangePassword />} />
         <Route path="/partner/panel" element={<PartnerPanelExpedientes />} />
         <Route path="/gestorias/alta" element={<SolicitarAltaGestoria />} />
-        <Route path="/admin/crear-asesoria" element={<AdminCrearAsesoria />} />
         <Route path="/pago-ok" element={<PagoOk />} />
         <Route path="/pago-cancel" element={<PagoCancel />} />
 

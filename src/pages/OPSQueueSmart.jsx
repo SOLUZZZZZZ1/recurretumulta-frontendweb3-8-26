@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
+import {
+  hasVehiclePreparationConsent,
+  isLegalRepresentationVerified,
+  isVehicleRemovalCase,
+} from "../lib/authorizationEvidence.js";
 
 const API = "/api";
 
@@ -69,7 +74,9 @@ function isClosedStatus(status) {
     s === "lead" ||
     s === "resolved" ||
     s === "estimado" ||
-    s === "desestimado"
+    s === "desestimado" ||
+    s === "vehicle_removal_completed" ||
+    s === "vehicle_removal_cancelled"
   );
 }
 
@@ -97,10 +104,9 @@ function itemScoreForDedup(item) {
   let score = 0;
 
   if (item?.payment_status === "paid") score += 30;
-  if (item?.authorized) score += 30;
+  if (isLegalRepresentationVerified(item)) score += 30;
   if (item?.has_generated_pdf) score += 10;
   if (item?.has_generated_docx) score += 10;
-  if (item?.has_authorization_pdf) score += 5;
   if (String(item?.organismo || item?.entity || item?.destination || "").trim()) score += 5;
 
   const updated = new Date(item?.updated_at || item?.created_at || 0).getTime();
@@ -142,15 +148,6 @@ function dedupeLogicalCases(items) {
   return Array.from(grouped.values());
 }
 
-function hasAuthorizationEvidence(item) {
-  return (
-    !!item?.authorized ||
-    !!item?.has_authorization_pdf ||
-    !!item?.authorization_url ||
-    !!item?.authorization_document_id
-  );
-}
-
 function statusPillTone(status) {
   if (isPresentedStatus(status)) return "success";
   if (isClosedStatus(status)) return "default";
@@ -178,13 +175,15 @@ function classifyLane(item) {
 
   const tipo = String(item?.familia || item?.tipo_infraccion || "").trim().toLowerCase();
   const conf = confidenceNumber(item?.confidence);
-  const authorized = !!item?.authorized;
+  const authorized = isLegalRepresentationVerified(item);
   const paid = item?.payment_status === "paid";
   const hasPdf = !!item?.has_generated_pdf;
   const hasDocx = !!item?.has_generated_docx;
   const hasOrg = !!String(item?.entity || item?.organismo || item?.destination || "").trim();
   const reviewReason = !!item?.needs_operator_review || !!item?.manual_required || !!item?.has_generation_error;
   const isGeneric = ["generic", "otro", ""].includes(tipo);
+
+  if (isVehicleRemovalCase(item)) return "MANUAL";
 
   const automatic =
     !reviewReason &&
@@ -256,6 +255,9 @@ function QueueSection({ title, tone, items, emptyText }) {
         <div className="space-y-3">
           {items.map((item) => {
             const lane = classifyLane(item);
+            const vehicleRemoval = isVehicleRemovalCase(item);
+            const representationVerified = isLegalRepresentationVerified(item);
+            const preparationConsent = hasVehiclePreparationConsent(item);
             const conf = confidenceLabel(item.confidence);
             const deadlineLabel =
               item.days_to_deadline === null || item.days_to_deadline === undefined
@@ -286,9 +288,23 @@ function QueueSection({ title, tone, items, emptyText }) {
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <RowBool ok={!!item.authorized} yes="Autorizado" no="Sin autorización" />
+                      {vehicleRemoval ? (
+                        preparationConsent ? (
+                          <Pill tone="info">Consentimiento de preparación</Pill>
+                        ) : (
+                          <Pill tone="warn">Revisión humana requerida</Pill>
+                        )
+                      ) : (
+                        <RowBool
+                          ok={representationVerified}
+                          yes="Representación verificada"
+                          no="Representación no verificada"
+                        />
+                      )}
                       <RowBool ok={item.payment_status === "paid"} yes="Pagado" no="Sin pago" />
-                      <RowBool ok={hasAuthorizationEvidence(item)} yes="Autorización registrada" no="Sin autorización" />
+                      {item.has_authorization_pdf ? (
+                        <Pill tone="info">Documento de autorización presente · sin inferir validez</Pill>
+                      ) : null}
                       <RowBool ok={!!item.has_generated_pdf} yes="PDF generado" no="Sin PDF generado" />
                       <RowBool ok={!!item.has_generated_docx} yes="DOCX generado" no="Sin DOCX generado" />
                       <RowBool ok={!!String(item.entity || item.organismo || item.destination || "").trim()} yes="Organismo OK" no="Organismo dudoso" />

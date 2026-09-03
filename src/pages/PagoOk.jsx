@@ -7,7 +7,6 @@ function paramsFromSearch(search) {
   const qs = new URLSearchParams(search);
   return {
     caseId: qs.get("case") || qs.get("case_id") || qs.get("id") || "",
-    sessionId: qs.get("session_id") || "",
   };
 }
 
@@ -28,21 +27,6 @@ async function readJson(response) {
   return data;
 }
 
-async function postConfirm(caseId, sessionId) {
-  const response = await apiFetch(`${RTM_API_BASE}/billing/confirm`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      case_id: caseId,
-      session_id: sessionId,
-    }),
-  });
-
-  return readJson(response);
-}
-
 async function getPublicStatus(caseId) {
   const response = await apiFetch(`${RTM_API_BASE}/cases/${encodeURIComponent(caseId)}/public-status`, {
     method: "GET",
@@ -60,15 +44,14 @@ async function getBillingStatus(caseId) {
 }
 
 function isPaid(value) {
-  const v = String(value || "").toLowerCase();
-  return v === "paid" || v === "succeeded" || v === "complete" || v === "completed";
+  return String(value || "").trim().toLowerCase() === "paid";
 }
 
 export default function PagoOk() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { caseId, sessionId } = useMemo(
+  const { caseId } = useMemo(
     () => paramsFromSearch(location.search),
     [location.search]
   );
@@ -88,12 +71,8 @@ export default function PagoOk() {
       }
 
       try {
-        if (!sessionId) {
-          setState("processing");
-          setMessage("Pago recibido. Estamos sincronizando el expediente.");
-        } else {
-          await postConfirm(caseId, sessionId);
-        }
+        setState("processing");
+        setMessage("Estamos comprobando el estado del pago con el servidor.");
 
         let finalStatus = null;
 
@@ -120,7 +99,7 @@ export default function PagoOk() {
           setMessage("Tu pago se ha realizado correctamente. Estamos gestionando tu expediente.");
         } else {
           setState("processing");
-          setMessage("Pago recibido. Estamos terminando de sincronizar el expediente.");
+          setMessage("El pago aún no consta como confirmado. Volveremos al expediente para que puedas comprobarlo.");
         }
 
         setTimeout(() => {
@@ -132,7 +111,7 @@ export default function PagoOk() {
         // No mostramos al cliente que “falló el pago” si Stripe lo ha cobrado.
         // Guardamos el detalle técnico y lo mandamos al resumen.
         setState("processing");
-        setMessage("Pago recibido. Estamos terminando de confirmar el expediente.");
+        setMessage("No hemos podido confirmar el pago todavía. Volveremos al expediente sin afirmar que se haya cobrado.");
         setDetail(e?.message || "");
 
         setTimeout(() => {
@@ -146,14 +125,22 @@ export default function PagoOk() {
     return () => {
       cancelled = true;
     };
-  }, [caseId, sessionId, navigate]);
+  }, [caseId, navigate]);
 
   return (
     <>
-      <Seo title="Pago confirmado · RecurreTuMulta" />
+      <Seo
+        title={
+          state === "ok"
+            ? "Pago confirmado · RecurreTuMulta"
+            : "Comprobando pago · RecurreTuMulta"
+        }
+      />
 
       <main className="sr-container py-12" style={{ minHeight: "calc(100vh - 160px)" }}>
-        <h1 className="sr-h1">Pago confirmado</h1>
+        <h1 className="sr-h1">
+          {state === "ok" ? "Pago confirmado" : "Comprobando pago"}
+        </h1>
 
         <div className="sr-card">
           <p
@@ -163,7 +150,7 @@ export default function PagoOk() {
               color: state === "error" ? "#991b1b" : "#166534",
             }}
           >
-            {state === "error" ? "❌" : "✅"} {message}
+            {state === "error" ? "❌" : state === "ok" ? "✅" : "🔄"} {message}
           </p>
 
           {caseId ? (

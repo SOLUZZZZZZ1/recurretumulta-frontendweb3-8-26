@@ -5,6 +5,10 @@ import { BrowserRouter as Router } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App.jsx";
 import { bootstrapCaseAccessFromUrl } from "./lib/caseAccess.js";
+import { purgeLegacyCaseLocalStorage } from "./lib/caseSession.js";
+import { migratePartnerSession } from "./lib/partnerSession.js";
+import { purgeLegacyRestaurantPinStorage } from "./lib/restaurantPin.js";
+import { migrateLegacyHashRoute } from "./lib/legacyHashRoute.js";
 import "./index.css";
 
 /*
@@ -15,16 +19,11 @@ import "./index.css";
  * enlaces guardados siguen funcionando y las nuevas landings tienen una URL
  * pública limpia, compartible e indexable.
  */
-function migrateLegacyHashRoute() {
-  const { hash, pathname } = window.location;
-
-  if (pathname === "/" && hash.startsWith("#/")) {
-    window.history.replaceState(null, "", hash.slice(1));
-  }
-}
-
-migrateLegacyHashRoute();
+purgeLegacyRestaurantPinStorage();
 bootstrapCaseAccessFromUrl();
+migrateLegacyHashRoute(window);
+purgeLegacyCaseLocalStorage();
+migratePartnerSession();
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

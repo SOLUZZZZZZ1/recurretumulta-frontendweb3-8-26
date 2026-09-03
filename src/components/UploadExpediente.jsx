@@ -2,9 +2,14 @@ import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   apiFetch,
-  redactCaseAccessToken,
   rememberCaseAccessToken,
 } from "../lib/api.js";
+import { rememberCaseScopedData } from "../lib/caseSession.js";
+import {
+  appendAiDocumentConsent,
+  DOCUMENT_ANALYSIS_PRIVACY_VERSION,
+} from "../lib/aiDocumentConsent.js";
+import AiDocumentConsent from "./AiDocumentConsent.jsx";
 
 const API = "/api";
 const MAX_FILES = 5;
@@ -58,6 +63,7 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
   const [dragOver, setDragOver] = useState(false);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [aiProcessingConsent, setAiProcessingConsent] = useState(false);
 
   const maxBytes = useMemo(() => maxSizeMB * 1024 * 1024, [maxSizeMB]);
 
@@ -71,6 +77,7 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
 
   function addFiles(fileList) {
     setMsg("");
+    setAiProcessingConsent(false);
     const incoming = Array.from(fileList || []);
     if (!incoming.length) return;
 
@@ -96,11 +103,13 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
 
   function removeFile(id) {
     setFiles((prev) => prev.filter((x) => x.id !== id));
+    setAiProcessingConsent(false);
   }
 
   function clearAll() {
     setFiles([]);
     setMsg("");
+    setAiProcessingConsent(false);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -119,14 +128,10 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
       body: JSON.stringify(payload),
     });
 
-    // Guardamos matrícula en local para usarla en resumen/autorización si el backend todavía no la expone ahí.
-    localStorage.setItem(
-      `rtm_client_${caseId}`,
-      JSON.stringify({
-        ...payload,
-        matricula: cleanPlate(client.matricula),
-      })
-    );
+    return {
+      ...payload,
+      matricula: cleanPlate(client.matricula),
+    };
   }
 
   async function analyze() {
@@ -143,6 +148,11 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
       return;
     }
 
+    if (!aiProcessingConsent) {
+      setMsg("❌ Debes autorizar expresamente el procesamiento documental con IA.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -152,6 +162,10 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
       if (files.length === 1) {
         const fd = new FormData();
         fd.append("file", files[0].file);
+        appendAiDocumentConsent(fd, {
+          consented: aiProcessingConsent,
+          privacyVersion: DOCUMENT_ANALYSIS_PRIVACY_VERSION,
+        });
 
         data = await fetchJson(`${API}/analyze`, {
           method: "POST",
@@ -169,6 +183,10 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
       } else {
         const fdMulti = new FormData();
         files.forEach((f) => fdMulti.append("files", f.file));
+        appendAiDocumentConsent(fdMulti, {
+          consented: aiProcessingConsent,
+          privacyVersion: DOCUMENT_ANALYSIS_PRIVACY_VERSION,
+        });
 
         data = await fetchJson(`${API}/analyze/expediente`, {
           method: "POST",
@@ -182,19 +200,10 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
       if (!rememberCaseAccessToken(caseId, data?.case_access_token)) {
         throw new Error("El backend no devolvió la capacidad segura del expediente.");
       }
-      await saveClientDetails(caseId);
-
-      localStorage.setItem(
-        "rtm_last_analysis",
-        JSON.stringify({
-          ...redactCaseAccessToken(data),
-          case_id: caseId,
-          client_data: {
-            ...client,
-            matricula: cleanPlate(client.matricula),
-          },
-        })
-      );
+      const clientData = await saveClientDetails(caseId);
+      rememberCaseScopedData(caseId, {
+        client_data: clientData,
+      });
 
       setMsg("✅ Documentación recibida. Ahora revisa el resumen, autoriza y completa el pago para iniciar la tramitación.");
       navigate(`/resumen?case=${encodeURIComponent(caseId)}`);
@@ -384,8 +393,20 @@ export default function UploadExpediente({ maxSizeMB = 12 }) {
         )}
       </div>
 
+      <AiDocumentConsent
+        id="upload-expediente-ai-processing-consent"
+        checked={aiProcessingConsent}
+        onChange={setAiProcessingConsent}
+        disabled={!files.length || loading}
+        documentLabel="los documentos seleccionados"
+      />
+
       <div className="sr-cta-row" style={{ marginTop: 14, justifyContent: "flex-start" }}>
-        <button className="sr-btn-primary" onClick={analyze} disabled={loading}>
+        <button
+          className="sr-btn-primary"
+          onClick={analyze}
+          disabled={loading || !files.length || !aiProcessingConsent}
+        >
           {loading ? "Procesando…" : labelBtn}
         </button>
 

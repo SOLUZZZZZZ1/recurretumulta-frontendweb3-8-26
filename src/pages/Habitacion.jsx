@@ -1,15 +1,11 @@
 // src/pages/HabitacionDetalle_PRO_Tabs.jsx — ficha sola (alto contraste), enlaces arriba y reservar
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-
-// BASE de HABITACIONES (backend API principal)
-const ROOMS_BASE =
-  (import.meta.env?.VITE_ROOMS_BASE?.trim?.() || "https://backend-spainroom.onrender.com");
-
-// helper imágenes servidas por backend de rooms (/instance/*)
-const isAbs = (u) => /^https?:\/\//i.test(u || "");
-const withBase = (u) =>
-  (u && !isAbs(u) && u.startsWith("/instance/")) ? `${ROOMS_BASE}${u}` : u;
+import {
+  fetchRoomRecord,
+  fetchRoomSheet,
+  normalizeRoomId,
+} from "../lib/roomAccess.js";
 
 // Meta demo por defecto para no dejar la vista vacía si la API viene incompleta
 const DEMO_META = {
@@ -20,7 +16,7 @@ const DEMO_META = {
   enchufes: "2",
   bano_privado: false,
   superficie_m2: 18,
-  precio: 400,
+  precio: null,
   estado: "Libre",
   fecha_disponibilidad: "2025-11-01",
   barrio: "Centro",
@@ -37,37 +33,93 @@ export default function HabitacionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [room, setRoom] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetError, setSheetError] = useState("");
+  const sheetAbortRef = useRef(null);
+  const roomId = normalizeRoomId(id);
 
   useEffect(() => {
-    let live = true;
+    const controller = new AbortController();
+    setRoom(null);
+    setLoadError("");
+    setLoading(true);
 
     // Si es DEMO, no llamamos a la API
-    if (id === "DEMO") {
-      setRoom({ code: "DEMO", ciudad: "—", provincia: "—", images: { meta: { ...DEMO_META } } });
-      return () => {};
+    if (roomId === "DEMO") {
+      setRoom({ code: "DEMO", ciudad: "—", provincia: "—", meta: { ...DEMO_META }, sheetUrl: "" });
+      setLoading(false);
+      return () => controller.abort();
+    }
+    if (!roomId) {
+      setLoadError("El identificador de habitación no es válido.");
+      setLoading(false);
+      return () => controller.abort();
     }
 
     (async () => {
       try {
-        const r = await fetch(`${ROOMS_BASE}/api/rooms/${id}`);
-        const j = await r.json();
-        const imgs = j?.images || j?.images_json || {};
-        const meta = { ...DEMO_META, ...(imgs.meta || {}) };
-        if (!live) return;
-        setRoom({ ...(j || {}), images: { ...imgs, meta } });
-      } catch {
-        if (!live) return;
-        // Fallback demo
-        setRoom({ code: id, ciudad: "—", provincia: "—", images: { meta: { ...DEMO_META } } });
+        const result = await fetchRoomRecord(roomId, { signal: controller.signal });
+        if (!controller.signal.aborted) setRoom(result);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setLoadError(error?.message || "No se pudo cargar la habitación.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
 
-    return () => { live = false; };
-  }, [id]);
+    return () => controller.abort();
+  }, [roomId]);
 
-  const images = room?.images || room?.images_json || {};
-  const meta = images.meta || {};
+  useEffect(() => {
+    const abortSheet = () => sheetAbortRef.current?.abort();
+    window.addEventListener("pagehide", abortSheet);
+    return () => {
+      window.removeEventListener("pagehide", abortSheet);
+      abortSheet();
+    };
+  }, []);
+
+  const meta = room?.meta || {};
   const precioToShow = meta.precio;
+
+  async function downloadSheet() {
+    if (!room?.sheetUrl || sheetBusy) return;
+    sheetAbortRef.current?.abort();
+    const controller = new AbortController();
+    sheetAbortRef.current = controller;
+    setSheetBusy(true);
+    setSheetError("");
+    try {
+      const result = await fetchRoomSheet(room.sheetUrl, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      const objectUrl = URL.createObjectURL(
+        new Blob([result.bytes], { type: result.mime })
+      );
+      const download = document.createElement("a");
+      download.href = objectUrl;
+      download.download = `ficha_${roomId}.pdf`;
+      download.rel = "noopener noreferrer";
+      document.body.append(download);
+      download.click();
+      download.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setSheetError(error?.message || "No se pudo descargar la ficha.");
+      }
+    } finally {
+      if (sheetAbortRef.current === controller) {
+        sheetAbortRef.current = null;
+        setSheetBusy(false);
+      }
+    }
+  }
 
   const val = (x, suffix = "") => {
     if (x === true) return "Sí";
@@ -98,15 +150,26 @@ export default function HabitacionDetalle() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button onClick={() => navigate("/habitaciones")} className="sr-btn sr-btn--ghost">← Volver a Habitaciones</button>
-            <div style={{ fontWeight: 900 }}>Habitación · {room?.code || id}</div>
+            <div style={{ fontWeight: 900 }}>Habitación · {room?.code || roomId || "no válida"}</div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <a href={`/habitaciones/${room?.code || id}/fotos`} target="_blank" rel="noreferrer" className="sr-btn sr-btn--ghost">Ver fotos</a>
-            <a href={`/habitaciones/${room?.code || id}/reservar`} target="_blank" rel="noreferrer" className="sr-btn sr-btn--primary">Reservar habitación</a>
-          </div>
+          {roomId && room ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <a href={`/habitaciones/${encodeURIComponent(roomId)}/fotos`} target="_blank" rel="noopener noreferrer" className="sr-btn sr-btn--ghost">Ver fotos</a>
+              <a href={`/habitaciones/${encodeURIComponent(roomId)}/reservar`} target="_blank" rel="noopener noreferrer" className="sr-btn sr-btn--primary">Reservar habitación</a>
+            </div>
+          ) : null}
         </div>
 
         {/* FICHA */}
+        {loadError ? (
+          <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
+            {loadError}
+          </div>
+        ) : loading || !room ? (
+          <div role="status" className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            Cargando habitación…
+          </div>
+        ) : (
         <div className="sr-room-card" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16, boxShadow: "0 8px 18px rgba(0,0,0,.08)" }}>
           <header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
             <h1 style={{ margin: 0 }}>{room?.direccion || ("Habitación " + (room?.code || id))}</h1>
@@ -168,14 +231,16 @@ export default function HabitacionDetalle() {
           </div>
 
           {/* Ficha subida / descargar */}
-          {images?.sheet?.url && (
+          {room.sheetUrl ? (
             <div style={{ marginTop: 12 }}>
-              <a className="sr-btn sr-btn--ghost" href={withBase(images.sheet.url)} target="_blank" rel="noreferrer">
-                Descargar última ficha
-              </a>
+              <button type="button" className="sr-btn sr-btn--ghost" onClick={downloadSheet} disabled={sheetBusy}>
+                {sheetBusy ? "Verificando ficha…" : "Descargar última ficha"}
+              </button>
+              {sheetError ? <p role="alert" style={{ color: "#b91c1c", marginTop: 8 }}>{sheetError}</p> : null}
             </div>
-          )}
+          ) : null}
         </div>
+        )}
       </section>
     </main>
   );

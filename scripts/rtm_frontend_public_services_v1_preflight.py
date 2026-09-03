@@ -467,13 +467,13 @@ def _audit_contract() -> dict[str, Any]:
         prices,
         (
             'title: "Reclamaciones de consumo"',
-            'price: "10 €"',
+            'priceNotice: "Cotización en tu expediente"',
             'label: "Estudio inicial del caso"',
             "bancos, energía, telecomunicaciones, seguros, viajes",
             "se descontará íntegramente del precio o presupuesto",
             'to: "/iniciar-expediente"',
         ),
-        "consumer_pricing",
+        "consumer_quote_notice",
     )
     _require_markers(
         contact,
