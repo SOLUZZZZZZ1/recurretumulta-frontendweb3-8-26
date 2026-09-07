@@ -52,5 +52,13 @@ test("CI pins actions, drops credentials and disables dependency lifecycle scrip
   assert.ok(workflow.indexOf("security:secrets") < workflow.indexOf("npm ci"));
   assert.match(workflow, /npm ci --ignore-scripts/);
   assert.match(workflow, /npm audit --audit-level=high/);
+  assert.ok(
+    workflow.indexOf("npm ci --ignore-scripts") < workflow.indexOf("npm audit --audit-level=high"),
+    "CI must install the locked dependency graph before auditing it"
+  );
+  assert.ok(
+    workflow.indexOf("npm audit --audit-level=high") < workflow.indexOf("python -m unittest"),
+    "Python contracts require the installed and audited JavaScript parser"
+  );
   assert.match(npmConfiguration, /^ignore-scripts=true$/m);
 });
