@@ -1,12 +1,17 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import {
+  fetchPublicReviewPrices,
+  formatPublicReviewPrice,
+  illustrativeFineAppealBalance,
+} from "../lib/publicReviewPrices.js";
 
 const REVIEW_OPTIONS = [
   {
     icon: "🚗",
     title: "Multas y vehículos",
-    priceNotice: "Cotización en tu expediente",
+    service: "traffic",
     text: "Revisión inicial de la documentación y de la situación del expediente.",
     to: "/trafico",
     action: "Ver Multas y vehículos",
@@ -14,7 +19,7 @@ const REVIEW_OPTIONS = [
   {
     icon: "💳",
     title: "Deudas y morosidad",
-    priceNotice: "Cotización en tu expediente",
+    service: "debt",
     text: "Revisión inicial de inclusiones en ficheros de morosidad y problemas relacionados con deudas.",
     to: "/morosidad",
     action: "Ver Deudas y morosidad",
@@ -22,7 +27,7 @@ const REVIEW_OPTIONS = [
   {
     icon: "🏛️",
     title: "Administración pública",
-    priceNotice: "Cotización en tu expediente",
+    service: "administration",
     text: "Revisión inicial de expedientes frente a administraciones y organismos públicos.",
     to: "/administracion",
     action: "Ver Administración",
@@ -30,7 +35,7 @@ const REVIEW_OPTIONS = [
   {
     icon: "🛒",
     title: "Reclamaciones de consumo",
-    priceNotice: "Cotización en tu expediente",
+    service: "claims",
     label: "Estudio inicial del caso",
     text: "Estudiamos la documentación y el encaje de asuntos relacionados con bancos, energía, telecomunicaciones, seguros, viajes y otros servicios de consumo.",
     to: "/iniciar-expediente",
@@ -39,11 +44,45 @@ const REVIEW_OPTIONS = [
 ];
 
 export default function Precios() {
+  const [catalog, setCatalog] = useState(null);
+  const [loadingPrices, setLoadingPrices] = useState(true);
+  const [priceError, setPriceError] = useState(false);
+  const [priceAttempt, setPriceAttempt] = useState(0);
+  const prices = catalog?.reviewPrices;
+  const fineAppealOffer = catalog?.fineAppealOffer;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setCatalog(null);
+    setLoadingPrices(true);
+    setPriceError(false);
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    fetchPublicReviewPrices({ signal: controller.signal })
+      .then((catalog) => {
+        if (active) setCatalog(catalog);
+      })
+      .catch(() => {
+        if (active) setPriceError(true);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (active) setLoadingPrices(false);
+      });
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [priceAttempt]);
+
   return (
     <>
       <Seo
         title="Precios · RTM"
-        description="Consulta cómo se cotiza la revisión inicial y cómo se informa cualquier precio o presupuesto posterior antes de contratar."
+        description="Consulta las tarifas de revisión inicial y cómo se informa cualquier precio o presupuesto posterior antes de contratar."
       />
 
       <main
@@ -100,12 +139,16 @@ export default function Precios() {
               Primero revisamos el expediente. Si existe una vía razonable de
               actuación, podrás decidir si quieres continuar con la gestión.
             </p>
+            <p style={{ margin: "14px 0 0", color: "#475569", lineHeight: 1.6 }}>
+              Estas tarifas corresponden a la revisión o al estudio inicial.
+              Confirmaremos el precio de tu expediente antes del pago.
+            </p>
           </header>
 
           <section
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(245px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(245px, 100%), 1fr))",
               gap: 18,
               alignItems: "stretch",
             }}
@@ -152,15 +195,21 @@ export default function Precios() {
                 </h2>
 
                 <div
+                  aria-live="polite"
+                  aria-busy={loadingPrices}
                   style={{
                     margin: "5px 0 14px",
                     color: "#0b4aa2",
-                    fontSize: 38,
-                    lineHeight: 1,
+                    fontSize: prices ? "clamp(32px, 4vw, 42px)" : "clamp(17px, 2vw, 21px)",
+                    lineHeight: 1.2,
                     fontWeight: 950,
                   }}
                 >
-                  {item.priceNotice}
+                  {loadingPrices
+                    ? "Consultando tarifa…"
+                    : prices
+                      ? formatPublicReviewPrice(prices[item.service])
+                      : "Tarifa no disponible"}
                 </div>
 
                 <div
@@ -207,6 +256,19 @@ export default function Precios() {
             ))}
           </section>
 
+          {priceError && (
+            <div style={{ marginTop: 18, color: "#475569", textAlign: "center" }}>
+              <p role="status">No hemos podido consultar las tarifas. Puedes seguir explorando los servicios.</p>
+              <button
+                type="button"
+                onClick={() => setPriceAttempt((attempt) => attempt + 1)}
+                style={{ padding: "10px 16px", border: "1px solid #0b4aa2", borderRadius: 10, background: "#fff", color: "#0b4aa2", cursor: "pointer", fontWeight: 800 }}
+              >
+                Reintentar tarifas
+              </button>
+            </div>
+          )}
+
           <section
             style={{
               marginTop: 22,
@@ -242,7 +304,7 @@ export default function Precios() {
           <section
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))",
               gap: 18,
               marginTop: 22,
             }}
@@ -262,18 +324,36 @@ export default function Precios() {
                 Recurso administrativo de multa
               </h2>
               <div
+                aria-live="polite"
+                aria-busy={loadingPrices}
                 style={{
                   marginBottom: 12,
                   color: "#0b4aa2",
-                  fontSize: 34,
+                  fontSize: fineAppealOffer ? "clamp(32px, 4vw, 42px)" : "clamp(17px, 2vw, 21px)",
                   fontWeight: 950,
                 }}
               >
-                Cotización previa
+                {loadingPrices
+                  ? "Consultando tarifa…"
+                  : fineAppealOffer
+                    ? formatPublicReviewPrice(fineAppealOffer)
+                    : "Tarifa no disponible"}
               </div>
+              {fineAppealOffer && (
+                <>
+                  <p style={{ margin: "0 0 10px", color: "#334155", lineHeight: 1.55 }}>
+                    Precio total, incluida la revisión inicial de {formatPublicReviewPrice(prices.traffic)}, a cuenta del total.
+                  </p>
+                  <p style={{ margin: "0 0 10px", color: "#334155", lineHeight: 1.55 }}>
+                    Si ya has pagado {formatPublicReviewPrice(prices.traffic)}, quedarían {formatPublicReviewPrice(illustrativeFineAppealBalance(catalog))}.
+                  </p>
+                  <p style={{ margin: "0 0 10px", color: "#64748b", lineHeight: 1.55 }}>
+                    La revisión se descuenta una sola vez, cuando el pago conste confirmado en tu expediente.
+                  </p>
+                </>
+              )}
               <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
-                El importe vigente se mostrará desde el servidor y ligado al
-                expediente antes de contratar esta actuación.
+                Confirmaremos el importe pendiente antes de contratar esta actuación.
               </p>
             </article>
 

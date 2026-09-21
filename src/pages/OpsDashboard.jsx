@@ -158,6 +158,8 @@ export default function OpsDashboard(){
           {canSupervise?<button onClick={runTick} disabled={tickLoading} className="rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold disabled:opacity-60">{tickLoading?"Ejecutando…":"▶ Automatización"}</button>:null}
           <Link to="/ops/followups" className="rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950">⏰ Seguimientos{due.length?` (${due.length})`:""}</Link>
           <Link to="/ops/queue-smart" className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold">Cola técnica</Link>
+          <Link to="/ops/manual" className="rounded-xl border border-blue-300 bg-blue-950 px-4 py-2.5 text-sm font-bold">Manual del operador</Link>
+          <Link to="/ops/manual-presentador" className="rounded-xl border border-slate-500 px-4 py-2.5 text-sm font-bold">Manual del presentador</Link>
           <button onClick={logout} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold">Cerrar sesión</button>
         </div>
       </div>

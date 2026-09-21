@@ -10,6 +10,7 @@ import { Link, useParams } from "react-router-dom";
 import { derivePaymentDisplay } from "../lib/opsPayment.js";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
+import LocalIntakeRecovery from "../ops-auth/LocalIntakeRecovery.jsx";
 import {
   hasVehiclePreparationConsent,
   isLegalRepresentationVerified,
@@ -1134,6 +1135,9 @@ export default function OpsCaseDetail() {
         <Link to="/ops/queue-smart" className="sr-btn-secondary">
           Cola técnica
         </Link>
+        <Link to={`/ops/manual?caseId=${encodeURIComponent(caseId)}`} className="sr-btn-secondary">
+          Manual del operador
+        </Link>
         <Link to="/ops/followups" className="sr-btn-secondary">
           ⏰ Todos los seguimientos
         </Link>
@@ -1240,6 +1244,7 @@ export default function OpsCaseDetail() {
         </div>
       </Panel>
 
+      {caseProjectionReady && <LocalIntakeRecovery key={caseId} caseId={caseId} />}
       <div
         style={{
           display: "grid",

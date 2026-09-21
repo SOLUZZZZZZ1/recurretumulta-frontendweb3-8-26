@@ -86,7 +86,10 @@ test("public pages do not publish duplicated transactional prices", async () => 
   for (const [index, source] of sources.entries()) {
     assert.doesNotMatch(source, /\b(?:10|25|29|39)\s*€/, paths[index]);
   }
-  assert.match(sources[0], /Cotización en tu expediente/);
+  assert.match(sources[0], /fetchPublicReviewPrices/);
+  assert.match(sources[0], /formatPublicReviewPrice\(prices\[item\.service\]\)/);
+  assert.match(sources[0], /Tarifa no disponible/);
+  assert.doesNotMatch(sources[0], /priceNotice|Cotización en tu expediente/);
 });
 
 test("document and payment copy never invents authorization or payment evidence", async () => {
@@ -320,10 +323,11 @@ test("authorization UI is fail-closed across case changes and stale requests", a
 });
 
 test("OPS never treats vehicle preparation consent or an unreviewed PDF as representation", async () => {
-  const [queue, detail, detailPro] = await Promise.all([
+  const [queue, detail, detailPro, packageStatus] = await Promise.all([
     read("src/pages/OPSQueueSmart.jsx"),
     read("src/pages/OpsCaseDetail.jsx"),
     read("src/pages/OpsCaseDetailPro.jsx"),
+    read("src/lib/opsPackageStatus.js"),
   ]);
 
   assert.match(queue, /isLegalRepresentationVerified\(item\)/);
@@ -342,8 +346,10 @@ test("OPS never treats vehicle preparation consent or an unreviewed PDF as repre
   assert.doesNotMatch(detail, /Boolean\(caseData\.authorized\)/);
   assert.doesNotMatch(detail, /caseData\.authorized\s*\?/);
 
-  assert.match(detailPro, /const hasAutorizacion = isLegalRepresentationVerified\(caseRecord\)/);
-  assert.match(detailPro, /kind === "authorization_signed_verified"/);
+  assert.match(detailPro, /buildPackageStatus\(documents, detail\)/);
+  assert.match(detailPro, /authorizationVerified=\{packageStatus\.hasAutorizacion\}/);
+  assert.match(packageStatus, /const hasAutorizacion = isLegalRepresentationVerified\(caseRecord\)/);
+  assert.match(packageStatus, /kind\(doc\) === "authorization_signed_verified"/);
   assert.doesNotMatch(detailPro, /const hasAutorizacion = lowerKinds\.some/);
 });
 

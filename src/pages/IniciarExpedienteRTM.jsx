@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import {
@@ -9,6 +9,7 @@ import {
 import {
   apiFetch,
   openCaseFile,
+  normalizeCaseId,
   rememberCaseAccessToken,
   RTM_API_CANDIDATES,
 } from "../lib/api.js";
@@ -18,8 +19,20 @@ import {
   parseAuthorizationIssueEnvelope,
 } from "../lib/authorizationEvidence.js";
 import { safeInternalPath } from "../lib/safeNavigation.js";
+import { readOpsAuthStatus } from "../ops-auth/opsAuthApi.js";
+import { currentLocalOpsDevelopmentEnabled } from "../ops-auth/opsLocalDevelopment.js";
+import {
+  LOCAL_RTM_AUTHORIZATION_KIND,
+  appendLocalAuthorizationBinding,
+  authorizationRoutes,
+  continueIntakeAuthorization,
+  intakeAuthorizationFlow,
+  localSyntheticIdentityError,
+  parseLocalAuthorizationCandidate,
+  parseLocalAuthorizationIssue,
+} from "../lib/intakeAuthorizationFlow.js";
 
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 const SERVICE_CONFIG = {
   traffic: {
@@ -195,12 +208,37 @@ export default function IniciarExpedienteRTM() {
   const [dniBack, setDniBack] = useState(null);
   const [signedAuthorization, setSignedAuthorization] = useState(null);
   const [draftCase, setDraftCase] = useState(null);
+  const draftCaseRef = useRef(null);
+  const createRequestRef = useRef(false);
+  const localRuntimeEnabled = currentLocalOpsDevelopmentEnabled();
+  const [localProfileState, setLocalProfileState] = useState(localRuntimeEnabled ? "checking" : "disabled");
   const [authorizationUploaded, setAuthorizationUploaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const isVehicleRemoval =
     department === "traffic" && form.case_type === "vehicle_removal";
+  const localProfileReady = localProfileState === "ready";
+  const authorizationFlow = intakeAuthorizationFlow({
+    department, caseType: form.case_type, family: selectedFamily?.id,
+    localProfile: localProfileReady,
+  });
+  const isLocalGeneric = authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND;
+
+  useEffect(() => {
+    if (!localRuntimeEnabled) return undefined;
+    const controller = new AbortController();
+    void readOpsAuthStatus({ signal: controller.signal, allowLocalDevelopment: true })
+      .then((status) => {
+        if (!controller.signal.aborted) {
+          setLocalProfileState(status.authProfile === "local_development" && status.localOnly === true ? "ready" : "blocked");
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLocalProfileState("blocked");
+      });
+    return () => controller.abort();
+  }, [localRuntimeEnabled]);
 
   const dniFrontRef = useRef(null);
   const dniBackRef = useRef(null);
@@ -222,9 +260,15 @@ export default function IniciarExpedienteRTM() {
     if (!availableCaseTypes.includes(form.case_type)) {
       return "El tipo de expediente no corresponde al área elegida.";
     }
+    if (localRuntimeEnabled && !localProfileReady) return "Todavía no se ha confirmado el entorno local de pruebas.";
+    if (authorizationFlow === "unavailable") return "La autorización de este servicio todavía no está disponible en este entorno.";
     if (form.full_name.trim().length < 3) return "Indica el nombre y apellidos.";
     if (normalizeDni(form.dni_nie).length < 5) return "Indica el DNI, NIE o pasaporte.";
     if (!validEmail(form.email)) return "Indica un email válido.";
+    if (localProfileReady) {
+      const localError = localSyntheticIdentityError({ dni: normalizeDni(form.dni_nie), email: form.email });
+      if (localError) return localError;
+    }
     if (form.telefono.trim().length < 6) return "Indica un teléfono.";
     if (!form.street.trim()) return "Indica la calle.";
     if (!form.street_number.trim()) return "Indica el número.";
@@ -233,9 +277,9 @@ export default function IniciarExpedienteRTM() {
     if (!form.province.trim()) return "Indica la provincia.";
     if (!dniFront) return "Adjunta la parte frontal del documento de identidad.";
     if (!dniBack) return "Adjunta la parte posterior del documento de identidad.";
-    if (dniFront.size > MAX_FILE_BYTES || dniBack.size > MAX_FILE_BYTES) return "Alguna imagen supera 12 MB.";
+    if (dniFront.size > MAX_FILE_BYTES || dniBack.size > MAX_FILE_BYTES) return "Algún documento de identidad supera 8 MB.";
     if (form.customer_comment.trim().length < 15) return "Cuéntanos brevemente qué ha ocurrido.";
-    if (!isVehicleRemoval && !form.representation_confirmed) {
+    if (!isVehicleRemoval && !isLocalGeneric && !form.representation_confirmed) {
       return "Confirma la generación de la autorización.";
     }
     if (!form.privacy_accepted) return "Acepta la política de privacidad.";
@@ -244,108 +288,134 @@ export default function IniciarExpedienteRTM() {
 
   async function createDraftAndDownload(event) {
     event.preventDefault();
-    const error = validateDraft();
+    if (createRequestRef.current) return;
+    const error = draftCaseRef.current ? "" : validateDraft();
     if (error) return setMessage(error);
 
+    createRequestRef.current = true;
     setLoading(true);
     setMessage("");
 
     try {
-      const fd = new FormData();
-      Object.entries({
-        department,
-        case_type: form.case_type,
-        source_module: "rtm_web",
-        public_service_family: selectedFamily?.id || "",
-        full_name: form.full_name.trim(),
-        dni_nie: normalizeDni(form.dni_nie),
-        email: form.email.trim(),
-        telefono: form.telefono.trim(),
-        domicilio_notif: domicilio,
-        street: form.street.trim(),
-        street_number: form.street_number.trim(),
-        floor: form.floor.trim(),
-        door: form.door.trim(),
-        postal_code: form.postal_code.trim(),
-        city: form.city.trim(),
-        province: form.province.trim(),
-        preferred_contact: form.preferred_contact,
-        customer_comment: selectedFamily
-          ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
-          : form.customer_comment.trim(),
-        representation_confirmed: String(
-          isVehicleRemoval ? false : form.representation_confirmed
-        ),
-        prejudicial_counsel_requested: String(
-          isVehicleRemoval ? false : form.prejudicial_counsel_requested
-        ),
-        privacy_accepted: String(form.privacy_accepted),
-      }).forEach(([key, value]) => fd.append(key, value));
+      const completed = await continueIntakeAuthorization({
+        draft: draftCaseRef.current,
+        persistDraft: (saved) => {
+          draftCaseRef.current = saved;
+          setDraftCase(saved);
+        },
+        createDraft: async () => {
+          const fd = new FormData();
+          Object.entries({
+            department,
+            case_type: form.case_type,
+            source_module: "rtm_web",
+            public_service_family: selectedFamily?.id || "",
+            full_name: form.full_name.trim(),
+            dni_nie: normalizeDni(form.dni_nie),
+            email: form.email.trim(),
+            telefono: form.telefono.trim(),
+            domicilio_notif: domicilio,
+            street: form.street.trim(),
+            street_number: form.street_number.trim(),
+            floor: form.floor.trim(),
+            door: form.door.trim(),
+            postal_code: form.postal_code.trim(),
+            city: form.city.trim(),
+            province: form.province.trim(),
+            preferred_contact: form.preferred_contact,
+            customer_comment: selectedFamily
+              ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
+              : form.customer_comment.trim(),
+            representation_confirmed: String(
+              isVehicleRemoval || isLocalGeneric ? false : form.representation_confirmed
+            ),
+            prejudicial_counsel_requested: String(
+              isVehicleRemoval || isLocalGeneric ? false : form.prejudicial_counsel_requested
+            ),
+            privacy_accepted: String(form.privacy_accepted),
+          }).forEach(([key, value]) => fd.append(key, value));
 
-      fd.append("dni_front", dniFront);
-      fd.append("dni_back", dniBack);
+          fd.append("dni_front", dniFront);
+          fd.append("dni_back", dniBack);
 
-      const data = await fetchJsonFallback("/cases/intake-draft", { method: "POST", body: fd });
-      const caseId = data?.case_id || data?.id;
-      if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
-      if (!rememberCaseAccessToken(caseId, data?.case_access_token)) {
-        throw new Error("El backend no devolvió la capacidad segura del expediente.");
-      }
+          const data = await fetchJsonFallback("/cases/intake-draft", { method: "POST", body: fd });
+          const caseId = normalizeCaseId(data?.case_id || data?.id);
+          if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
+          let hasAccess = false;
+          try { hasAccess = rememberCaseAccessToken(caseId, data?.case_access_token); } catch { /* Preserve the created reference below. */ }
 
-      const fallbackNextPath = nextPathForCase(
-        department,
-        form.case_type,
-        config.nextPath
-      );
-      const nextPath =
-        safeInternalPath(data?.next_path, {
-          allowedPathnames: [fallbackNextPath],
-          pathOnly: true,
-        }) || fallbackNextPath;
+          const fallbackNextPath = nextPathForCase(
+            department,
+            form.case_type,
+            config.nextPath
+          );
+          const nextPath =
+            safeInternalPath(data?.next_path, {
+              allowedPathnames: [fallbackNextPath],
+              pathOnly: true,
+            }) || fallbackNextPath;
 
-      if (isVehicleRemoval) {
-        navigate(`${nextPath}?case=${encodeURIComponent(caseId)}`);
+          const routes = isVehicleRemoval ? {} : authorizationRoutes(caseId, authorizationFlow);
+          const blockedMessage = data.ok !== true
+            ? "El servidor no confirmó correctamente el alta. Conservamos la referencia para evitar duplicados."
+            : !hasAccess
+              ? "El backend no devolvió la capacidad segura del expediente. Conservamos la referencia para evitar duplicados."
+              : localProfileReady && data.test_mode !== true
+                ? "El servidor no confirmó que el expediente sea sintético. No se ha solicitado ninguna autorización."
+                : "";
+          return { caseId, nextPath, pdfPath: routes.pdf, authorizationFlow, blockedMessage };
+        },
+        issueAuthorization: async (saved) => {
+          const routes = authorizationRoutes(saved.caseId, saved.authorizationFlow);
+          const authority = await fetchJsonFallback(routes.issue, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(routes.issueBody),
+          });
+          return saved.authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND
+            ? parseLocalAuthorizationIssue(authority, saved.caseId)
+            : parseAuthorizationIssueEnvelope(authority, saved.caseId);
+        },
+        openAuthorization: (saved) => openBackendFile(saved.pdfPath, saved.caseId),
+      });
+      if (completed.authorizationFlow === "vehicle_removal") {
+        navigate(`${completed.nextPath}?case=${encodeURIComponent(completed.caseId)}`);
         return;
       }
-
-      const authority = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          authority_version: "v1_dgt_homologado",
-          consent: true,
-          representation_confirmed: true,
-        }),
-      });
-      const issued = parseAuthorizationIssueEnvelope(authority, caseId);
-
-      const pdfPath = `/cases/${caseId}/authorization-pdf`;
-      setDraftCase({ caseId, pdfPath, nextPath, authorizationBinding: issued.binding });
-      setMessage("✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
-      await openBackendFile(pdfPath, caseId);
+      setMessage(completed.authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND
+        ? "✅ Expediente sintético creado. PDF de prueba preparado; se ha solicitado su descarga. No tiene validez ni acredita representación."
+        : "✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
     } catch (error) {
       setMessage(error?.message || "No se pudo crear el expediente.");
     } finally {
+      createRequestRef.current = false;
       setLoading(false);
     }
   }
 
   async function uploadAuthorization() {
     if (!draftCase?.caseId) return setMessage("Primero crea el expediente.");
+    if (!draftCase.authorizationBinding) return setMessage("Primero hay que emitir el documento de autorización.");
     if (!signedAuthorization) return setMessage("Selecciona la autorización firmada.");
     if (signedAuthorization.type !== "application/pdf") return setMessage("La autorización firmada debe ser PDF.");
-    if (signedAuthorization.size > 10 * 1024 * 1024) return setMessage("La autorización supera 10 MB.");
+    if (signedAuthorization.size > MAX_FILE_BYTES) return setMessage("La autorización supera 8 MB.");
 
     setUploading(true);
     setMessage("");
     try {
       const fd = new FormData();
       fd.append("file", signedAuthorization);
-      appendAuthorizationDocumentBinding(fd, draftCase.authorizationBinding);
-      const result = await fetchJsonFallback(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
-      parseAuthorizationCandidateEnvelope(result, draftCase.caseId);
+      const localCandidate = draftCase.authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND;
+      if (localCandidate) appendLocalAuthorizationBinding(fd, draftCase.authorizationBinding, draftCase.caseId);
+      else appendAuthorizationDocumentBinding(fd, draftCase.authorizationBinding);
+      const routes = authorizationRoutes(draftCase.caseId, draftCase.authorizationFlow);
+      const result = await fetchJsonFallback(routes.candidate, { method: "POST", body: fd });
+      if (localCandidate) parseLocalAuthorizationCandidate(result, draftCase.caseId);
+      else parseAuthorizationCandidateEnvelope(result, draftCase.caseId);
       setAuthorizationUploaded(true);
-      setMessage("✅ Documento recibido como candidato y pendiente de revisión humana. Puedes continuar aportando documentación; por sí solo no habilita pagos ni presentaciones que exijan apoderamiento verificado.");
+      setMessage(localCandidate
+        ? "✅ Documento de prueba recibido como candidato pendiente de revisión. No acredita una firma ni representación y no habilita pagos o presentaciones."
+        : "✅ Documento recibido como candidato y pendiente de revisión humana. Puedes continuar aportando documentación; por sí solo no habilita pagos ni presentaciones que exijan apoderamiento verificado.");
     } catch (error) {
       setMessage(error?.message || "No se pudo subir la autorización.");
     } finally {
@@ -582,9 +652,23 @@ export default function IniciarExpedienteRTM() {
             ) : null}
           </header>
 
+          {localRuntimeEnabled ? (
+            <aside role="status" style={{ marginBottom: 22, padding: 16, borderRadius: 14, background: "#fffbeb", color: "#78350f", lineHeight: 1.6 }}>
+              <strong>Entorno local de pruebas · solo datos y archivos ficticios.</strong>
+              <p style={{ margin: "8px 0 0" }}>Utiliza el documento RTMTEST001 y un email terminado en @example.com. Los PDF de esta prueba no tienen validez ni acreditan representación.</p>
+              {localProfileState === "checking" ? <p>Comprobando la configuración local…</p> : null}
+              {localProfileState === "blocked" ? <p>No se ha podido confirmar la configuración local. El alta permanece cerrada.</p> : null}
+            </aside>
+          ) : null}
+          {authorizationFlow === "unavailable" && (!localRuntimeEnabled || localProfileReady) ? (
+            <p role="status" style={{ padding: 16, background: "#fff7ed", color: "#9a3412", borderRadius: 14 }}>
+              La generación de autorización para este servicio todavía no está disponible en este entorno. No se creará un expediente con una autorización de otro servicio.
+            </p>
+          ) : null}
+
           <form onSubmit={createDraftAndDownload}>
             <Section title="1. Tipo de expediente">
-              <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
+              <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase) || loading}>
                 {availableCaseTypes.map((value) => (
                   <option key={value} value={value}>{config.caseTypes[value]}</option>
                 ))}
@@ -593,14 +677,14 @@ export default function IniciarExpedienteRTM() {
 
             <Section title="2. Datos personales">
               <div style={gridStyle}>
-                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(draftCase)} />
-                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(draftCase)} />
-                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(draftCase)} />
-                <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(draftCase)} />
+                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(draftCase) || loading} />
+                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(draftCase) || loading} />
+                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(draftCase) || loading} />
+                <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(draftCase) || loading} />
               </div>
               <div style={{ marginTop: 16 }}>
                 <span style={labelStyle}>Preferencia de contacto</span>
-                <select value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
+                <select value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(draftCase) || loading}>
                   <option value="email">Email</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option>
                 </select>
               </div>
@@ -608,25 +692,26 @@ export default function IniciarExpedienteRTM() {
 
             <Section title="3. Domicilio a efectos de notificaciones">
               <div style={gridStyle}>
-                <Field label="Calle" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" disabled={Boolean(draftCase)} />
-                <Field label="Número" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" disabled={Boolean(draftCase)} />
-                <Field label="Piso" value={form.floor} onChange={(v) => update("floor", v)} placeholder="Opcional" disabled={Boolean(draftCase)} />
-                <Field label="Puerta" value={form.door} onChange={(v) => update("door", v)} placeholder="Opcional" disabled={Boolean(draftCase)} />
-                <Field label="Código postal" value={form.postal_code} onChange={(v) => update("postal_code", v)} placeholder="Código postal" disabled={Boolean(draftCase)} />
-                <Field label="Población" value={form.city} onChange={(v) => update("city", v)} placeholder="Población" disabled={Boolean(draftCase)} />
-                <Field label="Provincia" value={form.province} onChange={(v) => update("province", v)} placeholder="Provincia" disabled={Boolean(draftCase)} />
+                <Field label="Calle" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" disabled={Boolean(draftCase) || loading} />
+                <Field label="Número" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" disabled={Boolean(draftCase) || loading} />
+                <Field label="Piso" value={form.floor} onChange={(v) => update("floor", v)} placeholder="Opcional" disabled={Boolean(draftCase) || loading} />
+                <Field label="Puerta" value={form.door} onChange={(v) => update("door", v)} placeholder="Opcional" disabled={Boolean(draftCase) || loading} />
+                <Field label="Código postal" value={form.postal_code} onChange={(v) => update("postal_code", v)} placeholder="Código postal" disabled={Boolean(draftCase) || loading} />
+                <Field label="Población" value={form.city} onChange={(v) => update("city", v)} placeholder="Población" disabled={Boolean(draftCase) || loading} />
+                <Field label="Provincia" value={form.province} onChange={(v) => update("province", v)} placeholder="Provincia" disabled={Boolean(draftCase) || loading} />
               </div>
             </Section>
 
             <Section title="4. Documento de identidad">
+              <p style={{ marginTop: 0, color: "#475569" }}>Imagen o PDF, máximo 8 MB por archivo.{localProfileReady ? " Adjunta únicamente los documentos ficticios de la prueba." : ""}</p>
               <div style={gridStyle}>
-                <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} disabled={Boolean(draftCase)} />
-                <UploadBox label="Parte posterior" file={dniBack} inputRef={dniBackRef} onChange={setDniBack} disabled={Boolean(draftCase)} />
+                <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} disabled={Boolean(draftCase) || loading} />
+                <UploadBox label="Parte posterior" file={dniBack} inputRef={dniBackRef} onChange={setDniBack} disabled={Boolean(draftCase) || loading} />
               </div>
             </Section>
 
             <Section title="5. Cuéntanos brevemente qué ha ocurrido">
-              <textarea rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(draftCase)} />
+              <textarea rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(draftCase) || loading} />
             </Section>
 
             {!draftCase && <>
@@ -637,11 +722,15 @@ export default function IniciarExpedienteRTM() {
                   sin marcar, después de verificar el permiso de circulación y junto a
                   la cotización vigente.
                 </div>
+              ) : isLocalGeneric ? (
+                <p style={{ padding: 16, borderRadius: 14, background: "#fffbeb", color: "#78350f" }}>
+                  Se generará un documento genérico RTM marcado como prueba local. Esta operación no concede representación ni solicita una firma real.
+                </p>
               ) : (
                 <>
-                  <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
+                  <Check disabled={loading} checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
                   <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f" }}>
-                    <Check checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
+                    <Check disabled={loading} checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
                       Quiero valorar una autorización separada y opcional para que un abogado pueda realizar reclamaciones prejudiciales por escrito en este expediente.
                     </Check>
                     <p style={{ margin: "6px 0 0", lineHeight: 1.55 }}>
@@ -650,25 +739,31 @@ export default function IniciarExpedienteRTM() {
                   </div>
                 </>
               )}
-              <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
-              <button type="submit" disabled={loading} style={primaryButton}>
+              <Check disabled={loading} checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
+              <button type="submit" disabled={loading || authorizationFlow === "unavailable" || (localRuntimeEnabled && !localProfileReady)} style={primaryButton}>
                 {loading
                   ? "Creando expediente…"
                   : isVehicleRemoval
                     ? "Crear expediente y continuar"
-                    : "Crear expediente y descargar autorización"}
+                    : isLocalGeneric ? "Crear expediente de prueba y descargar documento" : "Crear expediente y descargar autorización"}
               </button>
             </>}
           </form>
 
           {draftCase && <Section title="6. Descargar y subir la autorización RTM">
             <div style={{ padding: 14, marginBottom: 16, borderRadius: 14, background: "#dcfce7", color: "#166534", fontWeight: 900, overflowWrap: "anywhere" }}>Expediente: {draftCase.caseId}</div>
-            <button type="button" className="sr-btn-primary" onClick={() => openBackendFile(draftCase.pdfPath, draftCase.caseId)}>⬇ Descargar autorización RTM</button>
+            {!draftCase.authorizationBinding ? <>
+              <p role="status">El expediente ya tiene referencia. La emisión del documento todavía no se ha completado; el reintento conserva este mismo expediente.</p>
+              <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading || Boolean(draftCase.blockedMessage)}>{loading ? "Emitiendo documento…" : "Reintentar autorización"}</button>
+            </> : <>
+            <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading}>{loading ? "Descargando…" : isLocalGeneric ? "⬇ Descargar PDF de prueba RTM" : "⬇ Descargar autorización RTM"}</button>
             <div style={{ marginTop: 18 }}>
-              <UploadBox label="Autorización firmada" file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
+              <UploadBox label={isLocalGeneric ? "PDF candidato de prueba · sin firma real" : "Autorización firmada"} file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
             </div>
-            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : "Subir autorización firmada"}</button>
+            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : isLocalGeneric ? "Subir candidato de prueba" : "Subir autorización firmada"}</button>
             {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación (autorización pendiente de revisión)</button>}
+            </>}
+            {isLocalGeneric ? <button type="button" className="sr-btn-primary" onClick={() => navigate(`/ops/case/${encodeURIComponent(draftCase.caseId)}`)} style={{ marginTop: 16 }}>Ver expediente en OPS</button> : null}
           </Section>}
 
           {message && <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850 }}>{message}</div>}
@@ -690,8 +785,8 @@ function UploadBox({ label, file, inputRef, onChange, accept = "image/*,applicat
   return <div><span style={labelStyle}>{label}</span><button type="button" onClick={() => !disabled && inputRef.current?.click()} disabled={disabled} style={{ width: "100%", minHeight: 118, padding: 16, border: "2px dashed #cbd5e1", borderRadius: 16, background: file ? "#f0fdf4" : "#f8fafc", cursor: disabled ? "not-allowed" : "pointer" }}><div style={{ fontSize: 30 }}>{file ? "✅" : "📷"}</div><strong>{file ? file.name : "Seleccionar archivo"}</strong>{file && <div style={{ color: "#64748b", fontSize: 13 }}>{formatBytes(file.size)}</div>}</button><input ref={inputRef} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} style={{ display: "none" }} disabled={disabled} /></div>;
 }
 
-function Check({ checked, onChange, children }) {
-  return <label style={{ display: "flex", gap: 10, marginBottom: 12, color: "#334155" }}><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /><span>{children}</span></label>;
+function Check({ checked, onChange, children, disabled = false }) {
+  return <label style={{ display: "flex", gap: 10, marginBottom: 12, color: "#334155" }}><input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /><span>{children}</span></label>;
 }
 
 const gridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 };

@@ -231,7 +231,7 @@ export function OpsAuthProvider({ children }) {
   useEffect(() => {
     const controller = new AbortController();
     activeFetchControllersRef.current.add(controller);
-    void readOpsAuthStatus({ signal: controller.signal })
+    void readOpsAuthStatus({ signal: controller.signal, allowLocalDevelopment: true })
       .then((nextStatus) => {
         if (!controller.signal.aborted) setStatus(nextStatus);
       })
@@ -459,6 +459,11 @@ export function OpsAuthProvider({ children }) {
   return (
     <OpsAuthContext.Provider value={value}>
       <div key={viewEpoch} ref={sensitiveRootRef} hidden={!viewVisible}>
+        {status?.authProfile === "local_development" ? (
+          <p role="status" className="bg-amber-50 px-4 py-3 text-center text-sm font-bold text-amber-950">
+            Entorno local de pruebas · cuentas y expedientes de este PC
+          </p>
+        ) : null}
         {children}
       </div>
     </OpsAuthContext.Provider>

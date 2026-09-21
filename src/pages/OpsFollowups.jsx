@@ -57,6 +57,9 @@ function isNextSevenDays(item) {
 }
 
 function caseLink(item) {
+  if (["rtm_local_filing_review", "rtm_local_filing_reference"].includes(item?.kind)) {
+    return `/ops/review/${encodeURIComponent(item.case_id)}`;
+  }
   const department = normalize(item?.department);
   const caseType = normalize(item?.case_type);
   if (department === "traffic" && caseType === "vehicle_removal") {
@@ -183,6 +186,7 @@ export default function OpsFollowups() {
               <p className="mt-2 text-sm text-slate-300">Todos los avisos operativos, con acceso directo a su expediente.</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link to="/ops/manual#seguimientos" className="rounded-xl border border-slate-500 px-4 py-2.5 text-sm font-bold text-white">Ayuda con seguimientos</Link>
               <Link to="/ops" className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950">
                 ← Volver al panel
               </Link>

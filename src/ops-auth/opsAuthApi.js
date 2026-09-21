@@ -1,3 +1,8 @@
+import {
+  currentLocalOpsDevelopmentEnabled,
+  isExactLocalOpsProfile,
+} from "./opsLocalDevelopment.js";
+
 export const OPS_AUTH_STATUS_ROUTE = "/api/ops/auth/status";
 export const OPS_AUTH_LOGIN_ROUTE = "/api/ops/auth/login";
 export const OPS_AUTH_LOGOUT_ROUTE = "/api/ops/auth/logout";
@@ -184,6 +189,7 @@ function baseOptions(signal = null) {
 export async function readOpsAuthStatus({
   signal = null,
   fetchImpl = globalThis.fetch?.bind(globalThis),
+  allowLocalDevelopment = false,
 } = {}) {
   let response;
   try {
@@ -197,22 +203,47 @@ export async function readOpsAuthStatus({
     fail("ops_auth.transport_failed", "No se pudo conectar con el servicio de identidad.");
   }
   const payload = await readJson(response, "status");
+  return validateOpsAuthStatus(payload, {
+    allowLocalDevelopment,
+    localRuntimeEnabled: currentLocalOpsDevelopmentEnabled(),
+  });
+}
+
+export function validateOpsAuthStatus(payload, {
+  allowLocalDevelopment = false,
+  localRuntimeEnabled = false,
+} = {}) {
+  const localProfile = isExactLocalOpsProfile(payload);
+  const acceptedLocalProfile =
+    localProfile && allowLocalDevelopment === true && localRuntimeEnabled === true;
+  // Existing staging envelopes remain valid. Contradictory local markers cannot
+  // turn a local backend into staging or sidestep the separate caller opt-in.
+  const acceptedStagingProfile =
+    payload?.staging_only === true &&
+    payload?.local_only !== true &&
+    payload?.auth_profile !== "local_development" &&
+    payload?.auth_environment !== "development";
   if (
     payload?.ok !== true ||
     typeof payload?.individual_login_enabled !== "boolean" ||
     payload?.configuration_valid !== true ||
-    payload?.staging_only !== true ||
+    (!acceptedStagingProfile && !acceptedLocalProfile) ||
     payload?.shared_ops_login_accepted !== false
   ) {
     fail(
       "ops_auth.status_contract_invalid",
-      "El estado del acceso individual no cumple el contrato de staging."
+      "El estado del acceso individual no cumple el contrato del entorno autorizado."
     );
   }
   return Object.freeze({
     individualLoginEnabled: payload.individual_login_enabled,
     configurationValid: payload.configuration_valid,
     sharedOpsLoginAccepted: false,
+    ...(acceptedLocalProfile ? {
+      authEnvironment: "development",
+      authProfile: "local_development",
+      localOnly: true,
+    } : {}),
   });
 }
 

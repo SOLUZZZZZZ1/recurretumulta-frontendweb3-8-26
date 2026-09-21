@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { extname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, extname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { scanText } from "./scan-secrets.mjs";
 
 const DIST_ROOT = new URL("../dist/", import.meta.url);
@@ -43,6 +43,9 @@ export const FORBIDDEN_PUBLIC_ARTIFACTS = Object.freeze(["Mod.24-ES.pdf"]);
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".map"]);
 
 export function assertDeploymentEnvironmentSafe(environment = process.env) {
+  if (!["", "0"].includes(String(environment.VITE_RTM_LOCAL_OPERATOR_AUTH ?? ""))) {
+    throw new Error("El build está bloqueado: VITE_RTM_LOCAL_OPERATOR_AUTH debe estar desactivado.");
+  }
   const vercelEnvironment = String(environment.VERCEL_ENV || "").trim().toLowerCase();
   if (vercelEnvironment === "preview") {
     for (const [key, expected] of Object.entries(EXPECTED_STAGING_ENVIRONMENT)) {
@@ -134,7 +137,10 @@ export async function verifyDeploymentPreflight(
   environment = process.env,
   configPath = VERCEL_CONFIG
 ) {
-  assertDeploymentEnvironmentSafe(environment);
+  const { loadEnv } = await import("vite");
+  const configDirectory = dirname(configPath instanceof URL ? fileURLToPath(configPath) : resolve(configPath));
+  const localAuthEnvironment = loadEnv("production", configDirectory, "VITE_RTM_LOCAL_OPERATOR_AUTH");
+  assertDeploymentEnvironmentSafe({ ...localAuthEnvironment, ...environment });
   const config = JSON.parse(await readFile(configPath, "utf8"));
   assertDeploymentRoutingSafe(environment, config);
 }

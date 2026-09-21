@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch, RTM_API_CANDIDATES } from "../lib/api.js";
 import { requireStripeCheckoutUrl } from "../lib/safeNavigation.js";
@@ -28,6 +28,11 @@ async function readResponse(response) {
   }
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const error = new Error("Demasiadas consultas. Espera unos minutos antes de revisar de nuevo.");
+      error.status = 429;
+      throw error;
+    }
     const detail = data?.detail || data?.message || text || `HTTP ${response.status}`;
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
@@ -43,6 +48,7 @@ async function fetchJsonFallback(path, options = {}) {
       const response = await apiFetch(url, options);
       return await readResponse(response);
     } catch (e) {
+      if (options.signal?.aborted || e?.status === 429) throw e;
       errors.push(`${url} → ${e?.message || "Error"}`);
     }
   }
@@ -97,33 +103,35 @@ export default function Resumen() {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
   const [reviewContext, setReviewContext] = useState(null);
+  const statusRequest = useRef(null);
 
-  async function loadStatus({ silent = false } = {}) {
+  async function loadStatus() {
+    if (statusRequest.current) return;
     if (!caseId) {
       setTechnicalError("No se ha encontrado el expediente.");
       setLoading(false);
       return;
     }
 
-    if (!silent) setLoading(true);
+    const controller = new AbortController();
+    statusRequest.current = controller;
+    setLoading(true);
     setTechnicalError("");
 
     try {
-      let last = null;
-      // varios intentos para evitar ver estados intermedios justo tras pago/autorización
-      for (let i = 0; i < 4; i += 1) {
-        last = await fetchJsonFallback(`/cases/${caseId}/public-status`);
-        if (isPaid(last?.payment_status) || isAuthorized(last)) break;
-        await new Promise((resolve) => setTimeout(resolve, 900));
-      }
+      const last = await fetchJsonFallback(`/cases/${caseId}/public-status`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       setData(last);
       if (isAuthorized(last) && !isPaid(last?.payment_status)) {
         try {
           const contextPayload = await fetchJsonFallback(
-            `/billing/review-context/${encodeURIComponent(caseId)}`
+            `/billing/review-context/${encodeURIComponent(caseId)}`,
+            { signal: controller.signal }
           );
+          if (controller.signal.aborted) return;
           setReviewContext(parseReviewCheckoutContext(contextPayload, caseId));
         } catch (contextError) {
+          if (controller.signal.aborted) return;
           setReviewContext(null);
           setTechnicalError(
             contextError?.message || "No se pudo verificar la cotización."
@@ -133,17 +141,25 @@ export default function Resumen() {
         setReviewContext(null);
       }
     } catch (e) {
+      if (controller.signal.aborted) return;
       // No mostramos “Error API” al cliente como estado principal.
       setTechnicalError(e?.message || "");
     } finally {
-      setLoading(false);
+      if (statusRequest.current === controller) {
+        statusRequest.current = null;
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
+    setData(null);
+    setReviewContext(null);
     loadStatus();
-    const id = setInterval(() => loadStatus({ silent: true }), 5000);
-    return () => clearInterval(id);
+    return () => {
+      statusRequest.current?.abort();
+      statusRequest.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
 

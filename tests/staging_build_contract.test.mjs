@@ -42,6 +42,31 @@ const cleanEnvironment = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !/^(VERCEL|RTM_STAGING_)/.test(key))
 );
 
+test("builds reject the local operator flag for staging, production and standalone output", () => {
+  for (const base of [STAGING, PRODUCTION, {}]) {
+    for (const value of ["1", "true", " 1", "unexpected"]) {
+      assert.throws(
+        () => assertDeploymentEnvironmentSafe({ ...base, VITE_RTM_LOCAL_OPERATOR_AUTH: value }),
+        /VITE_RTM_LOCAL_OPERATOR_AUTH/
+      );
+    }
+    assert.doesNotThrow(() => assertDeploymentEnvironmentSafe({ ...base, VITE_RTM_LOCAL_OPERATOR_AUTH: "0" }));
+  }
+});
+
+test("build preflight also rejects local authentication enabled by Vite environment files", async () => {
+  const directory = await mkdtemp(join(fileURLToPath(ROOT), ".local-auth-build-"));
+  try {
+    const configPath = join(directory, "vercel.json");
+    await writeFile(configPath, "{}");
+    await writeFile(join(directory, ".env.production.local"), "VITE_RTM_LOCAL_OPERATOR_AUTH=1\n");
+    await assert.rejects(verifyDeploymentPreflight({}, configPath), /VITE_RTM_LOCAL_OPERATOR_AUTH/);
+    await assert.doesNotReject(verifyDeploymentPreflight({ VITE_RTM_LOCAL_OPERATOR_AUTH: "0" }, configPath));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("reviewed staging contract passes against the actual Vercel rewrite before Vite", async () => {
   await assert.doesNotReject(verifyDeploymentPreflight(STAGING));
   await run(process.execPath, ["scripts/verify-production-build.mjs", "preflight"], {

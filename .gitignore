@@ -11,3 +11,6 @@ Thumbs.db
 # Python test artifacts
 __pycache__/
 *.py[cod]
+
+# Machine-local historical installers and source backups
+/RTM_ARRANCAR_FRONTEND_LOCAL.py

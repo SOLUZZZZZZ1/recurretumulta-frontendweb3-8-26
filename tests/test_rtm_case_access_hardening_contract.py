@@ -34,8 +34,11 @@ class CaseAccessHardeningContractTest(unittest.TestCase):
         for current in (intake, multa, upload):
             self.assertIn("rememberCaseAccessToken", current)
             self.assertIn("case_access_token", current)
-        self.assertIn('authority_version: "v1_dgt_homologado"', intake)
-        self.assertIn("representation_confirmed: true", intake)
+        flow = source("src/lib/intakeAuthorizationFlow.js")
+        self.assertIn("authorizationRoutes(saved.caseId, saved.authorizationFlow)", intake)
+        self.assertIn('authority_version: "v1_dgt_homologado"', flow)
+        self.assertIn("representation_confirmed: true", flow)
+        self.assertIn('department === "traffic" && caseType === "fine"', flow)
 
     def test_authority_and_pdf_calls_use_the_capability_aware_transport(self):
         api = source("src/lib/api.js")

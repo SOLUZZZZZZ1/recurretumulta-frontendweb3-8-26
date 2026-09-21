@@ -7,6 +7,8 @@ import React, {
 } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
+import { isLocalOpsOrigin } from "../ops-auth/opsLocalDevelopment.js";
+import LocalOpsPresenterUnavailable from "../ops-auth/LocalOpsPresenterUnavailable.jsx";
 import {
   loginOpsOperator,
   logoutOpsOperator,
@@ -570,6 +572,11 @@ function ClaimReview({
 }
 
 export default function OpsSignerStationPage() {
+  if (isLocalOpsOrigin()) return <LocalOpsPresenterUnavailable />;
+  return <StagingOpsSignerStationPage />;
+}
+
+function StagingOpsSignerStationPage() {
   const bearerRef = useRef("");
   const activeSessionIdRef = useRef("");
   const loginLockRef = useRef(false);

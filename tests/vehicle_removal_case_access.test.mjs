@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { continueIntakeAuthorization, intakeAuthorizationFlow } from "../src/lib/intakeAuthorizationFlow.js";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -80,14 +81,18 @@ test("vehicle removal bypasses generic DGT issuance and resumes only in its spec
     read("src/pages/ResumenExpediente.jsx"),
   ]);
 
-  const vehicleExit = intake.indexOf("if (isVehicleRemoval)");
-  const genericIssue = intake.indexOf("`/cases/${caseId}/authorize`");
-  assert.ok(vehicleExit > 0 && genericIssue > vehicleExit);
-  assert.match(intake, /isVehicleRemoval \? false : form\.representation_confirmed/);
+  const saved = { caseId: "11111111-1111-4111-8111-111111111111", authorizationFlow: intakeAuthorizationFlow({ department: "traffic", caseType: "vehicle_removal" }) };
+  assert.equal(await continueIntakeAuthorization({
+    draft: saved,
+    issueAuthorization: () => assert.fail("vehicle removal must not issue a DGT or generic authorization"),
+    openAuthorization: () => assert.fail("vehicle removal must continue to its specific flow"),
+  }), saved);
+  assert.match(intake, /continueIntakeAuthorization\(\{/);
+  assert.match(intake, /isVehicleRemoval \|\| isLocalGeneric \? false : form\.representation_confirmed/);
   assert.match(intake, /Esta alta no genera ni solicita una autorización DGT genérica/);
   assert.match(
     intake,
-    /navigate\(`\$\{nextPath\}\?case=\$\{encodeURIComponent\(caseId\)\}`\);\s*return;/
+    /if \(completed\.authorizationFlow === "vehicle_removal"\)[\s\S]*?navigate\(`\$\{completed\.nextPath\}\?case=\$\{encodeURIComponent\(completed\.caseId\)\}`\);\s*return;/
   );
 
   for (const source of [home, legacyHome]) {

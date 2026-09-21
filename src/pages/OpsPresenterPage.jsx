@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
+import { isLocalOpsOrigin } from "../ops-auth/opsLocalDevelopment.js";
+import LocalOpsPresenterUnavailable from "../ops-auth/LocalOpsPresenterUnavailable.jsx";
 import {
   createRtmPresenterClient,
   RtmPresenterWorkspace,
@@ -10,6 +12,14 @@ const EXACT_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function OpsPresenterPage() {
+  const { status } = useOpsAuth();
+  if (status?.authProfile === "local_development" || isLocalOpsOrigin()) {
+    return <LocalOpsPresenterUnavailable />;
+  }
+  return <StagingOpsPresenterPage />;
+}
+
+function StagingOpsPresenterPage() {
   const { caseId } = useParams();
   const { session, authFetch, invalidateSession, logout } = useOpsAuth();
   const [activeCaseId, setActiveCaseId] = useState(caseId || "");
@@ -51,6 +61,7 @@ export default function OpsPresenterPage() {
             ← Volver al expediente
           </Link>
           <div className="flex flex-wrap items-center gap-3">
+            <Link to={`/ops/manual-presentador?caseId=${encodeURIComponent(activeCaseId || "")}`} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700">Manual del presentador</Link>
             <Link
               to="/ops/presenter/signer"
               title="La estación de firma utiliza una cuenta y una sesión separadas."

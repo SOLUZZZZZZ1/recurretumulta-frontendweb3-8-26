@@ -9,8 +9,12 @@ import React, {
 import { Link, useParams } from "react-router-dom";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
-import { isLegalRepresentationVerified } from "../lib/authorizationEvidence.js";
+import { buildPackageStatus } from "../lib/opsPackageStatus.js";
 import OpsAuthorizationReview from "../components/OpsAuthorizationReview.jsx";
+import OpsFactsReview from "../components/OpsFactsReview.jsx";
+import OpsPostFilingDeadlines from "../components/OpsPostFilingDeadlines.jsx";
+import OpsWorkingDraft from "../components/OpsWorkingDraft.jsx";
+import { currentLocalOpsDevelopmentEnabled } from "../ops-auth/opsLocalDevelopment.js";
 
 const API = "/api";
 const JSON_HEADERS = Object.freeze({ "Content-Type": "application/json" });
@@ -302,36 +306,6 @@ function readAi(ai) {
   };
 }
 
-function extractDeadlines(ai, detail, events) {
-  const beforeDate = firstNonEmpty(
-    getByPath(ai, "deadlines.before_resource_deadline"),
-    getByPath(detail, "deadlines.before_resource_deadline"),
-    deepFindFirst(ai, ["before_resource_deadline"]),
-    deepFindFirst(detail, ["before_resource_deadline"])
-  );
-  const afterDate = firstNonEmpty(
-    getByPath(ai, "deadlines.after_resource_deadline"),
-    getByPath(detail, "deadlines.after_resource_deadline"),
-    deepFindFirst(ai, ["after_resource_deadline"]),
-    deepFindFirst(detail, ["after_resource_deadline"])
-  );
-  const beforeText = firstNonEmpty(
-    getByPath(ai, "deadlines.before_text"),
-    getByPath(detail, "deadlines.before_text"),
-    deepFindFirst(ai, ["before_text"]),
-    deepFindFirst(detail, ["before_text"])
-  );
-  const afterText = firstNonEmpty(
-    getByPath(ai, "deadlines.after_text"),
-    getByPath(detail, "deadlines.after_text"),
-    deepFindFirst(ai, ["after_text"]),
-    deepFindFirst(detail, ["after_text"])
-  );
-  const lastSubmitted = [...(events || [])].find((e) => e?.type === "submitted_to_dgt");
-  const submittedAt = lastSubmitted?.payload?.submitted_at || lastSubmitted?.created_at || "";
-  return { beforeDate, afterDate, beforeText, afterText, submittedAt };
-}
-
 function extractSendInfo(ai, detail, events) {
   const destination = firstNonEmpty(
     getByPath(ai, "delivery.destination"),
@@ -445,22 +419,6 @@ function resolveAutomaticDelivery(ai, detail, sendInfo) {
   };
 }
 
-function buildPackageStatus(documents, caseRecord) {
-  const docs = Array.isArray(documents) ? documents : [];
-  const lowerKinds = docs.map((d) => String(d?.kind || "").toLowerCase());
-
-  const hasRecurso = lowerKinds.some((k) => k.endsWith("_pdf") || (k.includes("pdf") && !k.includes("authorization") && !k.includes("autoriz")));
-  const hasAutorizacion = isLegalRepresentationVerified(caseRecord);
-  const hasOriginal = lowerKinds.some((k) => k.includes("original"));
-
-  return {
-    hasRecurso,
-    hasAutorizacion,
-    hasOriginal,
-    documentsComplete: hasRecurso && hasAutorizacion && hasOriginal,
-  };
-}
-
 function StatCard({ title, value, tone = "default", compact = false }) {
   const tones = {
     default: "border-slate-200 bg-white",
@@ -528,11 +486,8 @@ export default function OpsCaseDetailPro() {
   const [busyManual, setBusyManual] = useState(false);
   const [error, setError] = useState("");
   const [planningMsg, setPlanningMsg] = useState("");
+  const [factsRevision, setFactsRevision] = useState(0);
 
-  const [beforeDeadlineEdit, setBeforeDeadlineEdit] = useState("");
-  const [afterDeadlineEdit, setAfterDeadlineEdit] = useState("");
-  const [beforeTextEdit, setBeforeTextEdit] = useState("");
-  const [afterTextEdit, setAfterTextEdit] = useState("");
   const [channelEdit, setChannelEdit] = useState("");
   const [entityEdit, setEntityEdit] = useState("");
   const [destinationEdit, setDestinationEdit] = useState("");
@@ -576,10 +531,6 @@ export default function OpsCaseDetailPro() {
     setOpenEvent(null);
     setError("");
     setPlanningMsg("");
-    setBeforeDeadlineEdit("");
-    setAfterDeadlineEdit("");
-    setBeforeTextEdit("");
-    setAfterTextEdit("");
     setChannelEdit("");
     setEntityEdit("");
     setDestinationEdit("");
@@ -647,7 +598,7 @@ export default function OpsCaseDetailPro() {
       setDocuments(docs);
       setEvents(evs);
       setDetail(safeDetail);
-      setAiResult(payload);
+      setAiResult(aiEvent ? payload : null);
       loadedCaseIdRef.current = requestedCaseId;
       setLoadedCaseId(requestedCaseId);
 
@@ -722,7 +673,7 @@ export default function OpsCaseDetailPro() {
       if (!isCurrentMutation()) return;
       await loadCase({ silent: true });
       if (!isCurrentMutation()) return;
-      alert("Expediente enviado a revisión manual");
+      alert("Expediente marcado para revisión manual");
     } catch (e) {
       if (!isCurrentMutation()) return;
       setError(e.message || "Error enviando a revisión manual");
@@ -736,7 +687,6 @@ export default function OpsCaseDetailPro() {
   }
 
   const ai = useMemo(() => readAi(aiResult), [aiResult]);
-  const deadlines = useMemo(() => extractDeadlines(aiResult, detail, events), [aiResult, detail, events]);
   const sendInfo = useMemo(() => extractSendInfo(aiResult, detail, events), [aiResult, detail, events]);
   const autoDelivery = useMemo(() => resolveAutomaticDelivery(aiResult, detail, sendInfo), [aiResult, detail, sendInfo]);
   const packageStatus = useMemo(
@@ -745,38 +695,14 @@ export default function OpsCaseDetailPro() {
   );
   const presenterAvailable =
     detail?.actions?.presenter_available === true;
-  const recursoDoc = useMemo(
-    () => documents.find((d) => {
-      const kind = String(d?.kind || "").toLowerCase();
-      return (kind.endsWith("_pdf") || kind.includes("pdf")) && !kind.includes("authorization") && !kind.includes("autoriz");
-    }) || null,
-    [documents]
-  );
-  const autorizacionDoc = useMemo(
-    () => documents.find((d) => {
-      const kind = String(d?.kind || "").toLowerCase();
-      return kind === "authorization_signed_verified";
-    }) || null,
-    [documents]
-  );
-  const originalDoc = useMemo(
-    () => documents.find((d) => {
-      const kind = String(d?.kind || "").toLowerCase();
-      return kind.includes("original");
-    }) || null,
-    [documents]
-  );
+  const { recursoDoc, autorizacionDoc, originalDoc } = packageStatus;
 
   useEffect(() => {
-    setBeforeDeadlineEdit(fmtDateOnly(deadlines.beforeDate));
-    setAfterDeadlineEdit(fmtDateOnly(deadlines.afterDate));
-    setBeforeTextEdit(deadlines.beforeText || "");
-    setAfterTextEdit(deadlines.afterText || "");
     setChannelEdit(sendInfo.channel || "");
     setEntityEdit(sendInfo.entity || "");
     setDestinationEdit(sendInfo.destination || "");
     setAddressEdit(sendInfo.address || "");
-  }, [caseId, deadlines.beforeDate, deadlines.afterDate, deadlines.beforeText, deadlines.afterText, sendInfo.channel, sendInfo.entity, sendInfo.destination, sendInfo.address]);
+  }, [caseId, sendInfo.channel, sendInfo.entity, sendInfo.destination, sendInfo.address]);
 
 
   useEffect(() => {
@@ -864,14 +790,10 @@ export default function OpsCaseDetailPro() {
             >
               Reanálisis CORE pendiente
             </button>
-            <button
-              type="button"
-              className="min-w-[190px] cursor-not-allowed rounded-xl bg-slate-600 px-4 py-2.5 text-sm font-semibold text-white opacity-70"
-              disabled
-              aria-describedby="core-edit-blocked-reason"
-            >
-              Edición CORE pendiente
-            </button>
+            <a href="#ops-facts-review" className="min-w-[160px] rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-500">
+              Revisar hechos
+            </a>
+            {currentLocalOpsDevelopmentEnabled() ? <a href="#ops-working-draft" className="rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-500">Preparar borrador</a> : null}
             <button
               type="button"
               className="min-w-[160px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -881,11 +803,12 @@ export default function OpsCaseDetailPro() {
               Aprobación final del recurso · pendiente
             </button>
             <button className="min-w-[118px] rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50" onClick={manual} disabled={caseControlsDisabled}>
-              {busyManual ? "Enviando..." : "Manual"}
+              {busyManual ? "Marcando..." : "Pasar a revisión manual"}
             </button>
             <Link to={`/ops/case/${caseId}`} className="min-w-[118px] rounded-xl bg-slate-800 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-slate-700">
               Volver
             </Link>
+            <Link to={`/ops/manual?caseId=${encodeURIComponent(caseId)}`} className="rounded-xl border border-blue-300 bg-blue-950 px-4 py-2.5 text-center text-sm font-semibold text-white">Manual del operador</Link>
           </div>
         </div>
       </div>
@@ -899,8 +822,8 @@ export default function OpsCaseDetailPro() {
         autorización firmada usa abajo su propio flujo auditado y ligado al hash.
       </p>
       <p id="core-edit-blocked-reason" className="mt-1 text-xs font-semibold text-slate-600">
-        Guardado, corrección y regeneración permanecen deshabilitados para todos
-        los roles hasta que estén disponibles en el flujo CORE.
+        La corrección de hechos del borrador está disponible abajo para supervisión.
+        La regeneración y la aprobación final siguen pendientes en esta vista.
       </p>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
@@ -918,6 +841,19 @@ export default function OpsCaseDetailPro() {
           sessionId={session?.sessionId || ""}
         />
       ) : null}
+
+      <OpsFactsReview
+        authFetch={authFetch} caseId={caseId} canSupervise={canSupervise}
+        sessionId={session?.sessionId || ""}
+        authorizationVerified={caseProjectionReady && !loading && packageStatus.hasAutorizacion}
+        onReviewed={() => setFactsRevision(value => value + 1)}
+      />
+
+      {currentLocalOpsDevelopmentEnabled() && caseProjectionReady && !loading ? <OpsWorkingDraft
+        authFetch={authFetch} caseId={caseId} canSupervise={canSupervise}
+        sessionId={session?.sessionId || ""} factsRevision={factsRevision}
+        authorizationVerified={packageStatus.hasAutorizacion}
+      /> : null}
 
       <div className={`mt-4 rounded-2xl border px-4 py-4 shadow-sm ${autoDelivery.tone === "info" ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -983,7 +919,7 @@ export default function OpsCaseDetailPro() {
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-[11px] uppercase tracking-wide text-slate-400">Hecho imputado</div>
                 <textarea value={ai.hecho || ""} readOnly aria-describedby="core-result-read-only" className="mt-2 min-h-[90px] w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold leading-6 text-slate-900 outline-none" />
-                <div id="core-result-read-only" className="mt-2 text-xs text-slate-500">Consulta únicamente. La corrección se habilitará en el flujo CORE auditado.</div>
+                <div id="core-result-read-only" className="mt-2 text-xs text-slate-500">Lectura de IA en consulta. Las correcciones del borrador se realizan en «Hechos del expediente».</div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
@@ -1039,38 +975,17 @@ export default function OpsCaseDetailPro() {
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <Section title="Plazos" right={<InfoPill tone="warn">simulación local</InfoPill>}>
-          <p id="planning-local-only" className="mb-3 text-xs font-semibold text-slate-600">
-            {canManageLegacy
-              ? "Los cambios de esta sección son una simulación: no se guardan y se perderán al salir."
-              : "Consulta únicamente. La edición de plazos se habilitará en el flujo CORE auditado."}
-          </p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-[11px] uppercase tracking-wide text-slate-400">Plazo antes del recurso</div>
-              <input value={beforeDeadlineEdit} onChange={(e) => setBeforeDeadlineEdit(e.target.value)} type="date" disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" />
-              <textarea value={beforeTextEdit} onChange={(e) => setBeforeTextEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[72px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Notas de plazo previo..." />
-            </div>
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-[11px] uppercase tracking-wide text-slate-400">Plazo después del recurso</div>
-              <input value={afterDeadlineEdit} onChange={(e) => setAfterDeadlineEdit(e.target.value)} type="date" disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" />
-              <textarea value={afterTextEdit} onChange={(e) => setAfterTextEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[72px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Notas de plazo posterior..." />
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={confirmPlanningInMemory} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-slate-400">
-              Aplicar plazos en esta vista
-            </button>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Último envío registrado: {deadlines.submittedAt ? fmt(deadlines.submittedAt) : "todavía no enviado"}.
-            </div>
-          </div>
-        </Section>
+        <OpsPostFilingDeadlines
+          caseId={caseId} sessionId={session?.sessionId || ""} canSupervise={canSupervise}
+          authFetch={authFetch} onReviewed={() => loadCase({ silent: true })}
+          projection={caseProjectionReady ? detail?.post_filing : null}
+          loading={loading || !caseProjectionReady}
+        />
 
         <Section title="Envío de recursos" right={<InfoPill tone="info">consulta / simulación</InfoPill>}>
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="mb-3 text-xs font-semibold text-slate-600" aria-describedby="planning-local-only">
+              <p id="planning-local-only" className="mb-3 text-xs font-semibold text-slate-600">
                 {canManageLegacy
                   ? "La selección de canal es una simulación local y no se guarda."
                   : "El canal registrado se muestra en modo consulta; su edición CORE está pendiente."}
@@ -1184,9 +1099,10 @@ export default function OpsCaseDetailPro() {
 
         <Section title="Guía rápida operador">
           <div className="space-y-3 text-sm text-slate-700">
-            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Orden correcto del trabajo</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Revisar el hecho denunciado y la familia detectada.</li><li>Revisar el último PDF dentro de RTM antes de aprobar.</li><li>Comprobar plazos antes y después del recurso.</li><li>Preparar la presentación desde RTM cuando todo esté correcto.</li></ul></div>
-            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Cuándo tocar el hecho imputado</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Si ves ruido OCR o texto mezclado.</li><li>Si el hecho está jurídicamente bien pero mal redactado.</li><li>Si quieres una versión más limpia para revisión interna.</li></ul></div>
-            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Cuándo usar Manual</div><ul className="mt-2 list-disc space-y-1 pl-5 text-xs"><li>Cuando la familia no convence.</li><li>Cuando el PDF final no refleja bien el caso.</li><li>Cuando falte prueba, plazo o canal claro de presentación.</li></ul></div>
+            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Orden de revisión</div><ol className="mt-2 list-decimal space-y-1 pl-5 text-xs"><li>Comprobar expediente, pago y autorización firmada.</li><li>Contrastar los hechos con el original y guardar las correcciones.</li><li>Revisar recurso, plazos y actuaciones pendientes.</li><li>Continuar solo por las funciones habilitadas para el caso.</li></ol></div>
+            <div className="rounded-2xl border border-slate-200 p-3"><div className="font-semibold text-slate-900">Cuándo pasar a revisión manual</div><p className="mt-2 text-xs">Cuando haya dudas sobre la familia, el recurso, la prueba, el plazo o el canal. El botón marca el estado del expediente; deja un seguimiento con el problema concreto.</p></div>
+            <Link to={`/ops/manual?caseId=${encodeURIComponent(caseId)}`} className="block rounded-xl bg-blue-50 p-3 font-semibold text-blue-900">Abrir el manual completo del operador →</Link>
+            <Link to={`/ops/manual-presentador?caseId=${encodeURIComponent(caseId)}`} className="block rounded-xl bg-slate-50 p-3 font-semibold text-slate-800">Consultar el manual del presentador →</Link>
           </div>
         </Section>
       </div>

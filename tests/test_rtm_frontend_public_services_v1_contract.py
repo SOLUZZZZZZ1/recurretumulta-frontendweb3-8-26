@@ -285,11 +285,14 @@ class PublicServicesSurfaceTests(unittest.TestCase):
         ):
             self.assertNotIn(marker, public_surfaces)
 
-    def test_consumer_initial_study_defers_to_case_bound_quote(self):
+    def test_consumer_initial_study_uses_public_catalog_before_case_bound_quote(self):
         prices = read(PRICES)
         for marker in (
             'title: "Reclamaciones de consumo"',
-            'priceNotice: "Cotización en tu expediente"',
+            'service: "claims"',
+            "fetchPublicReviewPrices",
+            "formatPublicReviewPrice(prices[item.service])",
+            "Confirmaremos el precio de tu expediente antes del pago.",
             'label: "Estudio inicial del caso"',
             "bancos, energía, telecomunicaciones, seguros, viajes",
             "se descontará íntegramente del precio o presupuesto",
@@ -297,6 +300,7 @@ class PublicServicesSurfaceTests(unittest.TestCase):
         ):
             self.assertIn(marker, prices)
         self.assertNotIn('price: "10 €"', prices)
+        self.assertNotIn("priceNotice", prices)
 
     def test_housing_contact_has_specific_subject_and_no_auto_case_notice(self):
         self.assertIn('searchParams.get("area") === "vivienda"', self.contact)

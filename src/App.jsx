@@ -60,6 +60,7 @@ const OpsA1SSyntheticReadOnly = lazy(
   () => import("./pages/OpsA1SSyntheticReadOnly.jsx")
 );
 const OpsPresenterPage = lazy(() => import("./pages/OpsPresenterPage.jsx"));
+const OpsSupportManual = lazy(() => import("./pages/OpsSupportManual.jsx"));
 const OpsSignerStationPage = lazy(
   () => import("./pages/OpsSignerStationPage.jsx")
 );
@@ -179,6 +180,8 @@ export default function App() {
         <Route element={<OpsWorkspaceRoute />}>
           <Route path="/ops" element={<OpsDashboard />} />
           <Route path="/ops/followups" element={<OpsFollowups />} />
+          <Route path="/ops/manual" element={<Suspense fallback={<p role="status" className="p-6">Abriendo manual del operador…</p>}><OpsSupportManual key="operador" kind="operador" /></Suspense>} />
+          <Route path="/ops/manual-presentador" element={<Suspense fallback={<p role="status" className="p-6">Abriendo manual del presentador…</p>}><OpsSupportManual key="presentador" kind="presentador" /></Suspense>} />
           <Route path="/ops/queue-smart" element={<OPSQueueSmart />} />
           <Route path="/ops/vehicle-removal" element={<OpsVehicleRemoval />} />
           <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
