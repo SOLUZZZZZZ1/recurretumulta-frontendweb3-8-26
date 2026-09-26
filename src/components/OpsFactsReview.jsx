@@ -14,7 +14,7 @@ export default function OpsFactsReview(props) {
   return <FactsReviewPanel key={`${props.caseId}:${props.sessionId}:${props.canSupervise}:${props.authorizationVerified === true}`} {...props} />;
 }
 
-function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authorizationVerified = false, onReviewed }) {
+function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authorizationVerified = false, onReviewed, onEditingChange, externalBusy = false }) {
   const [workspace, setWorkspace] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,10 +54,15 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     if (field) editorRef.current?.focus();
   }, [field]);
 
+  useEffect(() => {
+    onEditingChange?.(!!field || saving);
+    return () => onEditingChange?.(false);
+  }, [field, saving, onEditingChange]);
+
   const record = workspace?.authority?.validated_facts?.latest_active;
   const blocked = reviewBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
   const documents = originalSources(workspace);
-  const disabled = loading || saving || stale || !!blocked || !documents.length;
+  const disabled = loading || saving || externalBusy || stale || !!blocked || !documents.length;
   const entries = Object.entries(record?.facts?.facts || {});
   const pending = entries.filter(([, fact]) => fact.status !== "validated").length;
   const missingGroups = missingFactGroups(record);
@@ -105,7 +110,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 id="facts-review-title" className="text-lg font-semibold text-slate-900">Hechos del expediente</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">Contrasta cada dato con el original. Puedes corregir los datos existentes o añadir los que falten; cada guardado conserva la versión anterior, el supervisor y el motivo.</p></div>
-      <button type="button" className={BUTTON} onClick={reload} disabled={loading || saving || !sessionId}>Recargar hechos</button>
+      <button type="button" className={BUTTON} onClick={reload} disabled={loading || saving || externalBusy || !sessionId}>Recargar hechos</button>
     </div>
     {error ? <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
     {message ? <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p> : null}

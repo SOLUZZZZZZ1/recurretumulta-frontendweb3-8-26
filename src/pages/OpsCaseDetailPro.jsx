@@ -12,6 +12,7 @@ import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import { buildPackageStatus } from "../lib/opsPackageStatus.js";
 import OpsAuthorizationReview from "../components/OpsAuthorizationReview.jsx";
 import OpsFactsReview from "../components/OpsFactsReview.jsx";
+import OpsCoreStudy from "../components/OpsCoreStudy.jsx";
 import OpsPostFilingDeadlines from "../components/OpsPostFilingDeadlines.jsx";
 import OpsWorkingDraft from "../components/OpsWorkingDraft.jsx";
 import { currentLocalOpsDevelopmentEnabled } from "../ops-auth/opsLocalDevelopment.js";
@@ -487,6 +488,9 @@ export default function OpsCaseDetailPro() {
   const [error, setError] = useState("");
   const [planningMsg, setPlanningMsg] = useState("");
   const [factsRevision, setFactsRevision] = useState(0);
+  const [studyRevision, setStudyRevision] = useState(0);
+  const [editingFacts, setEditingFacts] = useState(false);
+  const [studyBusy, setStudyBusy] = useState(false);
 
   const [channelEdit, setChannelEdit] = useState("");
   const [entityEdit, setEntityEdit] = useState("");
@@ -782,14 +786,9 @@ export default function OpsCaseDetailPro() {
             <button className="min-w-[118px] rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-60" onClick={() => loadCase()} disabled={loading}>
               {loading ? "Recargando..." : "Recargar"}
             </button>
-            <button
-              type="button"
-              className="min-w-[190px] cursor-not-allowed rounded-xl bg-slate-600 px-4 py-2.5 text-sm font-semibold text-white opacity-70"
-              disabled
-              title="El reanálisis se habilitará cuando esta vista use el flujo CORE auditado."
-            >
-              Reanálisis CORE pendiente
-            </button>
+            <a href="#ops-core-study" className="rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-500">
+              Continuar estudio
+            </a>
             <a href="#ops-facts-review" className="min-w-[160px] rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-500">
               Revisar hechos
             </a>
@@ -815,7 +814,7 @@ export default function OpsCaseDetailPro() {
 
       {error ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
       {planningMsg ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{planningMsg}</div> : null}
-      {!canManageLegacy ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">Fase de acceso individual: esta vista es de consulta para el operador. La edición y regeneración CORE siguen pendientes.</div> : null}
+      {!canManageLegacy ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">Fase de acceso individual: esta vista es de consulta para el operador. La continuación del estudio está disponible para supervisión.</div> : null}
 
       <p id="approval-blocked-reason" className="mt-3 text-xs font-semibold text-slate-600">
         La aprobación final del recurso continúa retirada. La revisión de la
@@ -823,7 +822,7 @@ export default function OpsCaseDetailPro() {
       </p>
       <p id="core-edit-blocked-reason" className="mt-1 text-xs font-semibold text-slate-600">
         La corrección de hechos del borrador está disponible abajo para supervisión.
-        La regeneración y la aprobación final siguen pendientes en esta vista.
+        Continúa después en «Estudio del expediente». La aprobación final requiere una revisión posterior.
       </p>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
@@ -843,10 +842,18 @@ export default function OpsCaseDetailPro() {
       ) : null}
 
       <OpsFactsReview
+        key={studyRevision} onEditingChange={setEditingFacts} externalBusy={studyBusy}
         authFetch={authFetch} caseId={caseId} canSupervise={canSupervise}
         sessionId={session?.sessionId || ""}
         authorizationVerified={caseProjectionReady && !loading && packageStatus.hasAutorizacion}
         onReviewed={() => setFactsRevision(value => value + 1)}
+      />
+
+      <OpsCoreStudy
+        authFetch={authFetch} caseId={caseId} canSupervise={canSupervise}
+        sessionId={session?.sessionId || ""} factsRevision={factsRevision}
+        editingFacts={editingFacts} onBusyChange={setStudyBusy}
+        onAdvanced={() => setStudyRevision(value => value + 1)}
       />
 
       {currentLocalOpsDevelopmentEnabled() && caseProjectionReady && !loading ? <OpsWorkingDraft
@@ -904,16 +911,16 @@ export default function OpsCaseDetailPro() {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      {aiResult ? <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <StatCard title="Familia" value={`${infractionEmoji(ai.familia)} ${infractionLabel(ai.familia)}`} tone={familyTone} compact />
         <StatCard title="Confianza" value={confianzaPct} compact />
         <StatCard title="Admisibilidad" value={ai.admisibilidad || "—"} tone={aiTone} compact />
         <StatCard title="Acción" value={shortText(ai.accion, 42)} tone={actionTone} compact />
         <StatCard title="Documentos" value={String(documents.length)} compact />
-      </div>
+      </div> : null}
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <Section title="Resultado IA" right={<div className="flex items-center gap-2"><InfoPill tone={familyTone}>{infractionEmoji(ai.familia)} {infractionLabel(ai.familia)}</InfoPill><InfoPill tone={aiTone}>{ai.admisibilidad || "—"}</InfoPill></div>}>
+        {aiResult ? <Section title="Lectura IA anterior" right={<div className="flex items-center gap-2"><InfoPill tone={familyTone}>{infractionEmoji(ai.familia)} {infractionLabel(ai.familia)}</InfoPill><InfoPill tone={aiTone}>{ai.admisibilidad || "—"}</InfoPill></div>}>
           {!aiResult ? <p className="text-slate-500">No hay resultado IA todavía.</p> : (
             <div className="space-y-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -954,9 +961,9 @@ export default function OpsCaseDetailPro() {
               </div>
             </div>
           )}
-        </Section>
+        </Section> : null}
 
-        <Section title="Último regenerado">
+        <Section title="Documentos recientes">
           {documents.length === 0 ? <p className="text-slate-500">No hay documentos.</p> : (
             <div className="space-y-2.5">
               {latestThreeDocs.map((d, i) => (
