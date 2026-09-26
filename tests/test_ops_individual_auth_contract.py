@@ -184,7 +184,14 @@ class OpsIndividualAuthFrontendContractTest(unittest.TestCase):
         self.assertNotIn("/mark-submitted", legacy_detail)
         self.assertNotIn("/upload-justificante", legacy_detail)
         self.assertIn("Pago pendiente de confirmación externa", vehicle)
-        self.assertIn("Reanálisis CORE pendiente", pro)
+        self.assertIn("<OpsCoreStudy", pro)
+        self.assertIn('href="#ops-core-study"', pro)
+        study_transport = (ROOT / "src" / "lib" / "opsCoreStudy.js").read_text(encoding="utf-8")
+        self.assertIn("/study/actions", study_transport)
+        for retired in ("/ai/expediente/run", "/save-ai-overrides",
+                        "/override-family-and-regenerate", "/rewrite-hecho-and-regenerate"):
+            self.assertNotIn(retired, study_transport)
+        self.assertNotIn("X-Operator-Actor", study_transport)
         self.assertIn("Edición CORE pendiente", pro)
         self.assertIn("Revisión del recurso final pendiente de evidencia", pro)
         self.assertIn(

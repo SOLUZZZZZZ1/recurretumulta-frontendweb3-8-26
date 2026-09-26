@@ -1,0 +1,8 @@
+# Preserve byte-exact archived evidence on Windows and CI.
+docs/rtm_connect/RTM_FRONTEND_CONNECT_A1S_F1.md text eol=lf
+docs/rtm_connect/RTM_FRONTEND_HISTORICAL_EVIDENCE_INTEGRITY_V1.json text eol=lf
+scripts/rtm_frontend_connect_a1s_f1_preflight.py text eol=lf
+src/lib/rtmConnectA1SReadClient.js text eol=lf
+src/lib/rtmConnectA1SReadContract.js text eol=lf
+tests/test_rtm_frontend_connect_a1s_f1_contract.py text eol=lf
+scripts/rtm_frontend_como_funciona_hero_v1_preflight.py text eol=lf
