@@ -223,7 +223,7 @@ function StatBox({ title, value, tone = "default" }) {
     info: "border-blue-200 bg-blue-50",
   };
   return (
-    <div className={`rounded-2xl border px-4 py-3 shadow-sm ${tones[tone] || tones.default}`}>
+    <div className={`rounded-2xl border px-4 py-3 shadow-xs ${tones[tone] || tones.default}`}>
       <div className="text-[11px] uppercase tracking-wide opacity-70">{title}</div>
       <div className="mt-2 text-xl font-semibold text-slate-900">{value}</div>
     </div>
@@ -241,7 +241,7 @@ function QueueSection({ title, tone, items, emptyText }) {
   };
 
   return (
-    <div className={`rounded-3xl border p-4 shadow-sm ${toneBox[tone] || "border-slate-200 bg-white"}`}>
+    <div className={`rounded-3xl border p-4 shadow-xs ${toneBox[tone] || "border-slate-200 bg-white"}`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         <Pill tone={tone === "success" ? "success" : "danger"}>{items.length}</Pill>
@@ -267,7 +267,7 @@ function QueueSection({ title, tone, items, emptyText }) {
                   : `${item.days_to_deadline} d`;
 
             return (
-              <div key={item.case_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div key={item.case_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -542,7 +542,7 @@ export default function OPSQueueSmart() {
         </div>
       </div>
 
-      <div className="mt-5 rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-5 rounded-3xl border border-slate-200 bg-white shadow-xs">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm font-semibold text-slate-900">Búsqueda rápida</div>
@@ -553,7 +553,7 @@ export default function OPSQueueSmart() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-hidden"
               placeholder="Buscar en cola..."
             />
           </div>

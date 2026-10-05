@@ -63,7 +63,7 @@ export default function OpsCaseDetail() {
           {docs.map((d, i) => (
             <div
               key={i}
-              className="block w-full text-left border rounded p-2 mt-2 text-xs"
+              className="block w-full text-left border rounded-sm p-2 mt-2 text-xs"
             >
               <strong>{d.kind}</strong>
               <div>{fmt(d.created_at)}</div>
@@ -77,7 +77,7 @@ export default function OpsCaseDetail() {
         <div className="sr-card">
           <h3 className="sr-h3">Logs</h3>
           {events.map((e, i) => (
-            <div key={i} className="border rounded p-2 mt-2 text-xs">
+            <div key={i} className="border rounded-sm p-2 mt-2 text-xs">
               <strong>{e.type}</strong>
               <div>{fmt(e.created_at)}</div>
             </div>

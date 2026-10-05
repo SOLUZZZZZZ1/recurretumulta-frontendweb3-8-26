@@ -106,7 +106,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     }
   }
 
-  return <section id="ops-facts-review" aria-labelledby="facts-review-title" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  return <section id="ops-facts-review" aria-labelledby="facts-review-title" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 id="facts-review-title" className="text-lg font-semibold text-slate-900">Hechos del expediente</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">Contrasta cada dato con el original. Puedes corregir los datos existentes o añadir los que falten; cada guardado conserva la versión anterior, el supervisor y el motivo.</p></div>

@@ -90,7 +90,7 @@ function DraftPanel({ authFetch, caseId, sessionId, canSupervise }) {
     finally { lockRef.current = false; if (!controller.signal.aborted) setBusy(false); }
   }
 
-  return <section id="ops-working-draft" aria-labelledby="working-draft-title" className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+  return <section id="ops-working-draft" aria-labelledby="working-draft-title" className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-xs">
     <div className="flex flex-wrap items-start justify-between gap-3"><div>
       <h2 id="working-draft-title" className="text-lg font-semibold text-slate-900">Borrador de trabajo del recurso</h2>
       <p className="mt-1 max-w-3xl text-sm text-slate-600">Prueba local: prepara el escrito con los datos confirmados y completa los motivos y la petición. Cada guardado conserva una versión y su PDF.</p>

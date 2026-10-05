@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@import "./tailwind-compat.css";
+@source "../index.html";
+@source "./";
 
 /* ===== TOKENS ===== */
 :root{ --muted:#6b7280; --ink:#1e1e1e }

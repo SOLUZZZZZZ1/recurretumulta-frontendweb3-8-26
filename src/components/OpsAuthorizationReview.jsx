@@ -392,7 +392,7 @@ export default function OpsAuthorizationReview({
   }
 
   return (
-    <section className="mt-5 rounded-3xl border border-indigo-200 bg-white shadow-sm">
+    <section className="mt-5 rounded-3xl border border-indigo-200 bg-white shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 px-4 py-3">
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-700">

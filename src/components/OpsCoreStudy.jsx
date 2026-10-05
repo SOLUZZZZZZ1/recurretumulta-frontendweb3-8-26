@@ -86,7 +86,7 @@ function StudyPanel({ authFetch, caseId, sessionId, canSupervise, editingFacts, 
 
   const family = study?.family?.resolution;
   const preview = study?.stage === "preview_available" ? study.preview.preview : null;
-  return <section id="ops-core-study" aria-labelledby="core-study-title" className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+  return <section id="ops-core-study" aria-labelledby="core-study-title" className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-xs">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 id="core-study-title" className="text-lg font-semibold text-slate-900">Estudio del expediente</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">Continúa desde los hechos revisados: cierre, clasificación y preparación de la previa. Cada paso conserva la versión y el supervisor que lo confirma.</p></div>

@@ -95,7 +95,7 @@ function Stat({ label, value, tone = "default", onClick, active = false }) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${tones[tone]} ${
+      className={`rounded-2xl border p-4 text-left shadow-xs transition hover:-translate-y-0.5 ${tones[tone]} ${
         active ? "ring-2 ring-slate-900 ring-offset-2" : ""
       }`}
     >
@@ -214,7 +214,7 @@ export default function OpsFollowups() {
           <Stat label="Resueltos" value={stats.resolved} tone="success" onClick={() => { setStatus("resolved"); setScope("all"); }} active={status === "resolved" && scope === "all"} />
         </section>
 
-        <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="grid gap-3 lg:grid-cols-[1.5fr_.6fr_.6fr]">
             <input
               value={search}
@@ -252,7 +252,7 @@ export default function OpsFollowups() {
                 <article
                   key={item.id}
                   style={{ contentVisibility: "auto", containIntrinsicSize: "190px" }}
-                  className={`rounded-3xl border bg-white p-5 shadow-sm ${overdue ? "border-rose-300" : upcoming ? "border-amber-300" : "border-slate-200"}`}
+                  className={`rounded-3xl border bg-white p-5 shadow-xs ${overdue ? "border-rose-300" : upcoming ? "border-amber-300" : "border-slate-200"}`}
                 >
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="min-w-0">

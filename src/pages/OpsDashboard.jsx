@@ -170,7 +170,7 @@ export default function OpsDashboard(){
     <section className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       {FAMILIES.map(f=>{const s=stats[f.key]||{};return <button key={f.key}
         onClick={()=>{setFamily(f.key);setType("all");setState("work");}}
-        className="text-left rounded-3xl p-5 shadow-sm transition hover:-translate-y-0.5"
+        className="text-left rounded-3xl p-5 shadow-xs transition hover:-translate-y-0.5"
         style={{background:f.bg,border:`1px solid ${f.border}`}}>
         <div className="text-4xl">{f.icon}</div><div className="mt-3 text-lg font-bold text-slate-900">{f.label}</div>
         <div className="mt-4 flex flex-wrap gap-2"><Pill tone="info">{s.total||0} total</Pill>
@@ -181,7 +181,7 @@ export default function OpsDashboard(){
       </button>})}
     </section>
 
-    <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-4 shadow-xs">
       <div className="grid gap-3 lg:grid-cols-[1.4fr_repeat(3,minmax(150px,.6fr))]">
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder="Buscar nombre, email, matrícula, organismo, referencia o Case ID…"
@@ -200,7 +200,7 @@ export default function OpsDashboard(){
       </div>
     </section>
 
-    <section className="mt-5 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <section className="mt-5 rounded-3xl border border-slate-200 bg-white shadow-xs overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b p-4">
         <div><h2 className="text-xl font-bold text-slate-900">Expedientes</h2>
           <div className="text-sm text-slate-500">{filtered.length} visibles · {items.length} cargados</div></div>

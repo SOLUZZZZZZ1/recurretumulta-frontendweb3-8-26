@@ -64,7 +64,7 @@ function Stat({ title, value, tone = "default" }) {
     info: "border-blue-200 bg-blue-50",
   };
   return (
-    <div className={`rounded-2xl border px-4 py-3 shadow-sm ${tones[tone] || tones.default}`}>
+    <div className={`rounded-2xl border px-4 py-3 shadow-xs ${tones[tone] || tones.default}`}>
       <div className="text-[11px] uppercase tracking-wide opacity-70">{title}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
     </div>
@@ -307,7 +307,7 @@ export default function OpsVehicleRemoval() {
           <Stat title="Completados" value={summary.completed ?? 0} tone="success" />
         </div>
 
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-semibold text-slate-700">Estado:</label>
             <select
@@ -328,7 +328,7 @@ export default function OpsVehicleRemoval() {
 
         <div className="space-y-4">
           {visibleItems.map((item) => (
-            <section key={item.case_id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section key={item.case_id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">

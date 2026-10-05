@@ -9,7 +9,7 @@ function dateLabel(value) {
 export default function OpsPostFilingDeadlines({ projection, loading, caseId, sessionId, canSupervise, authFetch, onReviewed }) {
   const clock = projection?.status === "presented_simulated" && projection.synthetic === true
     ? projection.calculation : null;
-  return <section id="ops-post-filing-deadlines" aria-labelledby="post-filing-title" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  return <section id="ops-post-filing-deadlines" aria-labelledby="post-filing-title" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 id="post-filing-title" className="text-lg font-semibold text-slate-900">Plazos tras la presentación</h2>
       {clock ? <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-900">Presentada · simulación</span> : null}

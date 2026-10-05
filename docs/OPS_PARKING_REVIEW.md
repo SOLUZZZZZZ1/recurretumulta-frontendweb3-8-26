@@ -22,3 +22,15 @@ No requiere migración ni cambia los contratos históricos. No genera argumentos
 
 ## Verificación
 Pruebas de control de acceso, estado obsoleto, firmas, fuentes, booleanos false, compensación documental y preservación de versiones. La suite PostgreSQL usa exclusivamente la base desechable de CI y prueba ocho guardados, reversión transaccional y documentación adicional. Las pruebas de navegador emplean datos ficticios locales; no registran decisiones en expedientes remotos.
+
+## Dependencias y compilación
+La auditoría del 05/10/2026 identificó avisos en pypdf 6.16.2 y en la cadena braces/brace-expansion del compilador Tailwind 3. El backend fija pypdf 6.19.0. El frontend utiliza Tailwind y @tailwindcss/postcss 4.3.3, sin la cadena vulnerable ni excepciones en la auditoría.
+
+La paleta anterior queda expresada en src/tailwind-compat.css; se adaptan los nombres de sombras, desenfoque y outline según la guía oficial. Las fuentes se limitan a index.html y src. tailwind.config.js se conserva como referencia histórica y no se carga en la compilación v4. La compatibilidad de navegador pasa a los mínimos de Tailwind 4: Safari 16.4+, Chrome 111+ y Firefox 128+.
+
+Fuentes:
+- https://github.com/py-pdf/pypdf/releases/tag/6.19.0
+- https://github.com/advisories/GHSA-vfj7-8cjw-p6xm
+- https://tailwindcss.com/docs/upgrade-guide
+
+La paleta procede de Tailwind CSS 3.4.19 (MIT, Tailwind Labs). Se conserva su licencia en src/tailwind-compat.css. La verificación local incluyó comparación visual de OPS, portada y navegación a Tráfico en móvil, sin desbordamiento horizontal.

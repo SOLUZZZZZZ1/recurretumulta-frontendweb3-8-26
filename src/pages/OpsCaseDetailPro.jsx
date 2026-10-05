@@ -428,7 +428,7 @@ function StatCard({ title, value, tone = "default", compact = false }) {
     info: "border-blue-200 bg-blue-50",
   };
   return (
-    <div className={`rounded-2xl border px-4 py-3 shadow-sm ${tones[tone] || tones.default}`}>
+    <div className={`rounded-2xl border px-4 py-3 shadow-xs ${tones[tone] || tones.default}`}>
       <div className="text-[11px] uppercase tracking-wide opacity-70">{title}</div>
       <div className={`mt-2 font-semibold break-words ${compact ? "text-sm leading-5" : "text-lg leading-tight"}`}>
         {value || "—"}
@@ -439,7 +439,7 @@ function StatCard({ title, value, tone = "default", compact = false }) {
 
 function Section({ title, children, right = null }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-xs">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
         {right}
@@ -825,7 +825,7 @@ export default function OpsCaseDetailPro() {
         Continúa después en «Estudio del expediente». La aprobación final requiere una revisión posterior.
       </p>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-xs">
         <b>Última IA ejecutada:</b> {latestAiEvent ? fmt(latestAiEvent.created_at) : "—"}
       </div>
 
@@ -862,7 +862,7 @@ export default function OpsCaseDetailPro() {
         authorizationVerified={packageStatus.hasAutorizacion}
       /> : null}
 
-      <div className={`mt-4 rounded-2xl border px-4 py-4 shadow-sm ${autoDelivery.tone === "info" ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
+      <div className={`mt-4 rounded-2xl border px-4 py-4 shadow-xs ${autoDelivery.tone === "info" ? "border-blue-200 bg-blue-50" : "border-amber-200 bg-amber-50"}`}>
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-wide text-slate-500">Destino automático del recurso</div>
@@ -891,7 +891,7 @@ export default function OpsCaseDetailPro() {
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-xs">
         <div className="text-[11px] uppercase tracking-wide text-slate-500">Paquete de envío</div>
         <div className="mt-3 grid gap-2 text-sm text-slate-800 md:grid-cols-3">
           <div>{packageStatus.hasRecurso ? "✔" : "❌"} Recurso generado</div>
@@ -925,14 +925,14 @@ export default function OpsCaseDetailPro() {
             <div className="space-y-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-[11px] uppercase tracking-wide text-slate-400">Hecho imputado</div>
-                <textarea value={ai.hecho || ""} readOnly aria-describedby="core-result-read-only" className="mt-2 min-h-[90px] w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold leading-6 text-slate-900 outline-none" />
+                <textarea value={ai.hecho || ""} readOnly aria-describedby="core-result-read-only" className="mt-2 min-h-[90px] w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold leading-6 text-slate-900 outline-hidden" />
                 <div id="core-result-read-only" className="mt-2 text-xs text-slate-500">Lectura de IA en consulta. Las correcciones del borrador se realizan en «Hechos del expediente».</div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-[11px] uppercase tracking-wide text-slate-400">Familia</div>
-                  <select value={ai.familia || ""} disabled className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold text-slate-900 outline-none">
+                  <select value={ai.familia || ""} disabled className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold text-slate-900 outline-hidden">
                     <option value="">Selecciona familia</option>
                     {FAMILY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
@@ -941,7 +941,7 @@ export default function OpsCaseDetailPro() {
 
                 <div className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-[11px] uppercase tracking-wide text-slate-400">Corrección</div>
-                  <input value="Edición CORE pendiente" readOnly className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold text-slate-700 outline-none" />
+                  <input value="Edición CORE pendiente" readOnly className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 p-3 text-sm font-semibold text-slate-700 outline-hidden" />
                   <div className="mt-2 text-xs text-slate-500">No se enviará ningún cambio desde esta vista.</div>
                 </div>
               </div>
@@ -998,21 +998,21 @@ export default function OpsCaseDetailPro() {
                   : "El canal registrado se muestra en modo consulta; su edición CORE está pendiente."}
               </p>
               <div className="text-[11px] uppercase tracking-wide text-slate-400">Canal de envío</div>
-              <select value={channelEdit} onChange={(e) => setChannelEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100">
+              <select value={channelEdit} onChange={(e) => setChannelEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-hidden disabled:cursor-not-allowed disabled:bg-slate-100">
                 <option value="">Selecciona canal</option>
                 {SEND_CHANNEL_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
 
               <div className="mt-4 text-[11px] uppercase tracking-wide text-slate-400">Entidad / organismo</div>
-              <select value={entityEdit} onChange={(e) => setEntityEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100">
+              <select value={entityEdit} onChange={(e) => setEntityEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-hidden disabled:cursor-not-allowed disabled:bg-slate-100">
                 <option value="">Selecciona entidad</option>
                 {ENTITY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
 
               <div className="mt-4 text-[11px] uppercase tracking-wide text-slate-400">Dirección / canal mostrado</div>
-              <input value={destinationEdit} onChange={(e) => setDestinationEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Ej. DGT / Ayuntamiento / Registro electrónico" />
+              <input value={destinationEdit} onChange={(e) => setDestinationEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-900 outline-hidden disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Ej. DGT / Ayuntamiento / Registro electrónico" />
 
-              <textarea value={addressEdit} onChange={(e) => setAddressEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[84px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-none disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Dirección o instrucciones de envío..." />
+              <textarea value={addressEdit} onChange={(e) => setAddressEdit(e.target.value)} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-2 min-h-[84px] w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 outline-hidden disabled:cursor-not-allowed disabled:bg-slate-100" placeholder="Dirección o instrucciones de envío..." />
 
               <button type="button" onClick={confirmPlanningInMemory} disabled={caseControlsDisabled} aria-describedby="planning-local-only" className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-400">
                 Aplicar envío en esta vista
@@ -1158,7 +1158,7 @@ export default function OpsCaseDetailPro() {
 
       {aiResult ? (
         <div className="mt-5">
-          <details className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <details className="rounded-3xl border border-slate-200 bg-white shadow-xs">
             <summary className="cursor-pointer list-none px-4 py-3 text-base font-semibold text-slate-900">Payload IA bruto</summary>
             <div className="border-t border-slate-100 p-4">
               <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-700">{JSON.stringify(sanitizePayload(aiResult), null, 2)}</pre>

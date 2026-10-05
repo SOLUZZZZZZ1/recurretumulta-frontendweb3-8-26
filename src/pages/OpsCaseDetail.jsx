@@ -1666,14 +1666,14 @@ export default function OpsCaseDetail() {
             value={followupTitle}
             onChange={(event) => setFollowupTitle(event.target.value)}
             placeholder="Título del seguimiento"
-            className="border rounded px-3 py-2 text-sm"
+            className="border rounded-sm px-3 py-2 text-sm"
             disabled={followupActionsDisabled}
           />
           <input
             type="datetime-local"
             value={followupDueAt}
             onChange={(event) => setFollowupDueAt(event.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border rounded-sm px-3 py-2 text-sm"
             disabled={followupActionsDisabled}
           />
           <input
@@ -1682,7 +1682,7 @@ export default function OpsCaseDetail() {
               setFollowupDescription(event.target.value)
             }
             placeholder="Descripción / nota"
-            className="border rounded px-3 py-2 text-sm"
+            className="border rounded-sm px-3 py-2 text-sm"
             disabled={followupActionsDisabled}
           />
         </div>

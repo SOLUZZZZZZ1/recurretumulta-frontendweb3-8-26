@@ -130,7 +130,7 @@ function QueueTaskCard({ task, busy, onClaim, onReview }) {
   const isOwn = task.claim_status === "claimed_by_you";
   const isBusy = task.claim_status === "busy";
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">

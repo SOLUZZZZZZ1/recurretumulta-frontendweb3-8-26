@@ -145,7 +145,7 @@ function Notice({ tone = "info", children, role = null }) {
 
 function Metric({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
       <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-black text-slate-950">{value}</div>
     </div>
@@ -170,7 +170,7 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
         <div className="text-xs font-black uppercase tracking-[0.25em] text-blue-700">
           Acceso privado F2
         </div>
-        <h1 ref={headingRef} tabIndex={-1} className="mt-3 text-3xl font-black tracking-tight text-slate-950 outline-none">
+        <h1 ref={headingRef} tabIndex={-1} className="mt-3 text-3xl font-black tracking-tight text-slate-950 outline-hidden">
           Sesión individual de operador
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -206,7 +206,7 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
               maxLength={320}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-950 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-950 outline-hidden transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
             />
           </div>
           <div>
@@ -223,11 +223,11 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
                 maxLength={256}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-950 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
+                className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-950 outline-hidden transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               />
               <button
                 type="button"
-                className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none hover:bg-slate-50 focus:ring-4 focus:ring-blue-100"
+                className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-hidden hover:bg-slate-50 focus:ring-4 focus:ring-blue-100"
                 aria-pressed={showPassword}
                 aria-controls="a1s-password"
                 onClick={() => setShowPassword((value) => !value)}
@@ -239,7 +239,7 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
           <button
             type="submit"
             disabled={!authReady || busy || !email.trim() || !password}
-            className="min-h-11 w-full rounded-xl bg-slate-950 px-5 py-3 font-black text-white outline-none transition hover:bg-blue-800 focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="min-h-11 w-full rounded-xl bg-slate-950 px-5 py-3 font-black text-white outline-hidden transition hover:bg-blue-800 focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             {busy ? "Verificando identidad…" : "Entrar en lectura sintética"}
           </button>
@@ -259,7 +259,7 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
           casos sintéticos. No introduzcas nombres de clientes, documentos reales,
           números de expediente reales ni otros datos de casos reales.
         </Notice>
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
           <h2 className="text-xl font-black text-slate-950">Privacidad del acceso</h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             Para autenticarte y proteger este entorno, LA TALAMANQUINA, S.L. trata
@@ -273,7 +273,7 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
             información al responsable.
           </p>
         </section>
-        <section className="rounded-3xl border border-blue-200 bg-blue-950 p-6 text-white shadow-sm">
+        <section className="rounded-3xl border border-blue-200 bg-blue-950 p-6 text-white shadow-xs">
           <h2 className="text-xl font-black">Revisión humana obligatoria</h2>
           <p className="mt-3 text-sm leading-6 text-blue-100">
             Esta vista muestra únicamente metadatos de una simulación. No adopta ni
@@ -296,7 +296,7 @@ function LoginPanel({ authReady, busy, error, onSubmit, headingRef }) {
 function QueueTable({ items, onOpenTask }) {
   return (
     <div
-      className="overflow-x-auto rounded-2xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-100"
+      className="overflow-x-auto rounded-2xl border border-slate-200 outline-hidden focus:ring-4 focus:ring-blue-100"
       tabIndex={0}
       role="region"
       aria-label="Tabla desplazable de tareas sintéticas"
@@ -329,7 +329,7 @@ function QueueTable({ items, onOpenTask }) {
                 <button
                   type="button"
                   onClick={(event) => onOpenTask(item.task_id, event.currentTarget)}
-                  className="min-h-11 rounded-xl border border-blue-300 bg-white px-4 font-bold text-blue-800 outline-none hover:bg-blue-50 focus:ring-4 focus:ring-blue-100"
+                  className="min-h-11 rounded-xl border border-blue-300 bg-white px-4 font-bold text-blue-800 outline-hidden hover:bg-blue-50 focus:ring-4 focus:ring-blue-100"
                 >
                   Ver detalle
                 </button>
@@ -348,7 +348,7 @@ function TaskDetail({ detail, loading, error, onClose, headingRef }) {
       aria-labelledby="a1s-detail-title"
       ref={headingRef}
       tabIndex={-1}
-      className="rounded-3xl border border-slate-300 bg-white p-5 shadow-xl outline-none focus:ring-4 focus:ring-blue-100"
+      className="rounded-3xl border border-slate-300 bg-white p-5 shadow-xl outline-hidden focus:ring-4 focus:ring-blue-100"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -362,7 +362,7 @@ function TaskDetail({ detail, loading, error, onClose, headingRef }) {
         <button
           type="button"
           onClick={onClose}
-          className="min-h-11 rounded-xl border border-slate-300 px-4 font-bold text-slate-700 outline-none hover:bg-slate-50 focus:ring-4 focus:ring-blue-100"
+          className="min-h-11 rounded-xl border border-slate-300 px-4 font-bold text-slate-700 outline-hidden hover:bg-slate-50 focus:ring-4 focus:ring-blue-100"
         >
           Cerrar detalle
         </button>
@@ -596,7 +596,7 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
             <div className="text-xs font-black uppercase tracking-[0.25em] text-emerald-300">
               RTM CONNECT · A1-S · F2
             </div>
-            <h1 ref={headingRef} tabIndex={-1} className="mt-2 text-3xl font-black outline-none">Cola sintética A1-S</h1>
+            <h1 ref={headingRef} tabIndex={-1} className="mt-2 text-3xl font-black outline-hidden">Cola sintética A1-S</h1>
             <p className="mt-2 text-sm text-slate-300">
               Operador: {auth.operator.display_name} · Rol: {auth.operator.role_code || "sin rol global"}
             </p>
@@ -605,7 +605,7 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
           <button
             type="button"
             onClick={() => onSessionClosed("Sesión cerrada en este navegador.", true)}
-            className="min-h-11 rounded-xl border border-slate-600 px-5 font-bold text-white outline-none hover:bg-slate-800 focus:ring-4 focus:ring-blue-400"
+            className="min-h-11 rounded-xl border border-slate-600 px-5 font-bold text-white outline-hidden hover:bg-slate-800 focus:ring-4 focus:ring-blue-400"
           >
             Cerrar sesión
           </button>
@@ -630,7 +630,7 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
         </Notice>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
         <h2 className="text-xl font-black text-slate-950">1. Alcance y filtros backend</h2>
         <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.8fr_0.6fr_auto]">
           <div>
@@ -640,7 +640,7 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
               value={tenantId}
               disabled={auth.tenantsTruncated}
               onChange={(event) => setTenantId(event.target.value)}
-              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 outline-none focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 outline-hidden focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
             >
               <option value="">Selecciona un tenant</option>
               {auth.tenants.map((tenant) => (
@@ -656,7 +656,7 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
               id="a1s-status"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
-              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 outline-none focus:ring-4 focus:ring-blue-100"
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 outline-hidden focus:ring-4 focus:ring-blue-100"
             >
               <option value="">Todos los estados</option>
               {STATUS_OPTIONS.map((item) => <option key={item} value={item}>{STATUS_LABELS[item]}</option>)}
@@ -675,14 +675,14 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
             type="button"
             disabled={!tenantId || loadingQueue || auth.tenantsTruncated}
             onClick={loadQueue}
-            className="min-h-11 self-end rounded-xl bg-blue-800 px-5 font-black text-white outline-none hover:bg-blue-900 focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="min-h-11 self-end rounded-xl bg-blue-800 px-5 font-black text-white outline-hidden hover:bg-blue-900 focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             {loadingQueue ? "Leyendo…" : "Cargar recorrido paginado"}
           </button>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" aria-busy={loadingQueue}>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs" aria-busy={loadingQueue}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-black text-slate-950">2. Resultado de la cola</h2>
@@ -722,7 +722,7 @@ function OperatorWorkspace({ auth, session, onSessionClosed, headingRef }) {
                   value={caseFilter}
                   onChange={(event) => { setCaseFilter(event.target.value); setLocalPage(1); }}
                   placeholder="UUID completo (opcional)"
-                  className="min-h-11 w-full rounded-xl border border-slate-300 px-4 font-mono text-sm outline-none focus:ring-4 focus:ring-blue-100"
+                  className="min-h-11 w-full rounded-xl border border-slate-300 px-4 font-mono text-sm outline-hidden focus:ring-4 focus:ring-blue-100"
                   aria-invalid={!caseFilterValid}
                   aria-describedby={caseFilterValid
                     ? "a1s-case-filter-help"
