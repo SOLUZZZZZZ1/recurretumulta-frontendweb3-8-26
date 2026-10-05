@@ -5,6 +5,7 @@ const HASH = /^[a-f0-9]{64}$/;
 export const ACTIONS = Object.freeze({
   freeze_facts: "Cerrar hechos revisados", resolve_family: "Clasificar el expediente",
   lock_family: "Confirmar clasificación", build_preview: "Preparar previa del estudio",
+  reopen_facts: "Abrir nueva revisión", review_check: "Revisar comprobación", add_document: "Incorporar documento",
 });
 export const STAGES = Object.freeze({
   facts_missing: "Hechos pendientes", facts_review: "Revisión de hechos",
@@ -57,6 +58,25 @@ export function verifyStudy(data, caseId) {
     assert(data.stage === stages[data.next_action] && data.facts);
     assert(data.next_action === "freeze_facts" ? !data.facts.frozen : data.facts.frozen);
   }
+  if (data.documents !== undefined) assert(Array.isArray(data.documents) && data.documents.every(doc => UUID.test(doc.id) && HASH.test(doc.sha256)));
+  if (data.available_actions !== undefined) assert(strings(data.available_actions) && data.available_actions.every(action => Object.hasOwn(ACTIONS, action)));
+  if (data.parking_review) {
+    const review = data.parking_review;
+    const ids = ["procedure", "deadline", "location", "rule", "conditions", "evidence", "payment", "defense"];
+    assert(data.stage === "preview_available" && data.preview.status === "draft"
+      && data.family.resolution.family === "estacionamiento" && review.preview_id === data.preview.id
+      && HASH.test(review.source_sha256) && review.approval_enabled === false);
+    assert(Array.isArray(review.checks) && review.checks.length === 8 && new Set(review.checks.map(c => c.id)).size === 8);
+    assert(review.checks.every(c => ids.includes(c.id) && typeof c.title === "string" && typeof c.instruction === "string"
+      && Array.isArray(c.fields) && c.fields.length > 0 && strings(c.missing_fact_keys)
+      && c.can_mark_reviewed === c.fields.every(f => f.value !== null)
+      && c.fields.every(f => typeof f.key === "string" && typeof f.label === "string" && Array.isArray(f.sources)
+        && f.sources.every(source => data.facts.facts.source_document_ids.includes(source.document_id)
+          && Number.isInteger(source.page_index) && source.page_index >= 0))
+      && (!c.review || (c.review.check_id === c.id && ["reviewed", "needs_information"].includes(c.review.result)
+        && typeof c.review.notes === "string" && typeof c.review.actor === "string" && typeof c.review.reviewed_at === "string"))));
+    assert(review.reviewed_count === review.checks.filter(c => c.review?.result === "reviewed").length);
+  }
   return data;
 }
 async function read(response) {
@@ -74,11 +94,17 @@ export async function fetchStudy({ authFetch, caseId, signal }) {
   return verifyStudy(await read(await authFetch(`/api/ops/core/cases/${caseId}/study`,
     { signal, cache: "no-store" })), caseId);
 }
-export function buildStudyAction(study, { confirmed, reviewNotes = "" }) {
+export function buildStudyAction(study, { confirmed, reviewNotes = "", requestedAction, reason = "" }) {
   verifyStudy(study, study.case_id);
-  assert(study.next_action && !study.blockers.length, "No hay un paso disponible en este estado.");
+  const action = requestedAction || study.next_action;
+  assert(action && (action === study.next_action || (action === "reopen_facts" && study.can_reopen_facts === true
+    && study.available_actions?.includes(action))) && !study.blockers.length, "No hay un paso disponible en este estado.");
   assert(confirmed === true, "Confirma personalmente el paso antes de continuar.");
-  const body = { action: study.next_action, expected_state_sha256: study.state_sha256, confirmed: true };
+  const body = { action, expected_state_sha256: study.state_sha256, confirmed: true };
+  if (body.action === "reopen_facts") {
+    assert(typeof reason === "string" && reason.trim().length >= 10 && reason.trim().length <= 2000, "Describe el motivo de la nueva revisión (10–2000 caracteres).");
+    body.reason = reason.trim();
+  }
   if (body.action === "freeze_facts") {
     assert(reviewNotes.trim().length >= 3 && reviewNotes.trim().length <= 2000, "Describe la revisión documental realizada (entre 3 y 2000 caracteres).");
     assert(study.facts.facts.source_document_ids.length);
@@ -91,17 +117,80 @@ export function buildStudyAction(study, { confirmed, reviewNotes = "" }) {
 }
 export async function submitStudyAction({ authFetch, caseId, study, body, signal }) {
   verifyStudy(study, caseId);
-  assert(body.action === study.next_action && body.expected_state_sha256 === study.state_sha256 && body.confirmed === true);
+  assert((body.action === study.next_action || (body.action === "reopen_facts" && study.can_reopen_facts === true))
+    && body.expected_state_sha256 === study.state_sha256 && body.confirmed === true);
   const saved = verifyStudy(await read(await authFetch(`/api/ops/core/cases/${caseId}/study/actions`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal,
   })), caseId);
   assert(saved.completed_action === body.action && saved.previous_state_sha256 === study.state_sha256
     && saved.state_sha256 !== study.state_sha256, "No se pudo comprobar el paso guardado. Recarga el estudio.");
-  assert(saved.facts?.id === study.facts.id);
+  if (body.action === "reopen_facts") assert(saved.facts?.id !== study.facts.id
+    && saved.facts?.supersedes_id === study.facts.id && saved.facts?.frozen === false);
+  else assert(saved.facts?.id === study.facts.id);
   if (body.action === "freeze_facts") assert(saved.facts.frozen === true);
   if (body.action === "resolve_family") assert(saved.family && saved.family.validated_facts_id === study.facts.id);
   if (body.action === "lock_family") assert(saved.family?.id === study.family.id && saved.family.locked === true);
   if (body.action === "build_preview") assert(saved.preview?.status === "draft"
     && saved.preview.validated_facts_id === study.facts.id && saved.preview.family_resolution_id === study.family.id);
+  return saved;
+}
+
+export function buildCheckReviewBody(study, { checkId, result, notes, confirmed }) {
+  verifyStudy(study, study.case_id);
+  assert(study.stage === "preview_available" && !study.blockers.length && study.parking_review,
+    "Esta previa no admite revisión por comprobaciones.");
+  const check = study.parking_review.checks.find(item => item.id === checkId);
+  assert(check && ["reviewed", "needs_information"].includes(result), "Selecciona el resultado de la revisión.");
+  assert(result !== "reviewed" || check.can_mark_reviewed,
+    "Incorpora los datos documentales que faltan antes de confirmar este punto.");
+  assert(confirmed === true, "Confirma personalmente la revisión.");
+  assert(typeof notes === "string" && notes.trim().length >= 10 && notes.trim().length <= 2000,
+    "Describe la evidencia y el resultado de la revisión (10–2000 caracteres).");
+  return { expected_state_sha256: study.state_sha256, check_id: checkId, result, notes: notes.trim(), confirmed: true };
+}
+function verifyMutation(saved, study, action) {
+  verifyStudy(saved, study.case_id);
+  assert(saved.completed_action === action && saved.previous_state_sha256 === study.state_sha256
+    && saved.state_sha256 !== study.state_sha256, "No se pudo comprobar el guardado. Recarga antes de continuar.");
+  return saved;
+}
+export async function submitCheckReview({ authFetch, study, body, signal }) {
+  const saved = verifyMutation(await read(await authFetch("/api/ops/core/cases/" + study.case_id + "/study/check-reviews", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal,
+  })), study, "review_check");
+  const reviewed = saved.parking_review?.checks.find(item => item.id === body.check_id)?.review;
+  assert(saved.facts?.id === study.facts.id && saved.family?.id === study.family.id
+    && saved.preview?.id !== study.preview.id && saved.preview?.supersedes_id === study.preview.id
+    && saved.preview?.status === "draft" && reviewed?.result === body.result && reviewed?.notes === body.notes,
+    "No se pudo comprobar la versión revisada. Recarga el estudio.");
+  return saved;
+}
+export function buildDocumentMetadata(study, { reason, confirmed }) {
+  verifyStudy(study, study.case_id);
+  assert(study.can_add_document === true && !study.blockers.length, "No se puede incorporar documentación en este estado.");
+  assert(confirmed === true, "Confirma que la incorporación abrirá una nueva revisión.");
+  assert(typeof reason === "string" && reason.trim().length >= 10 && reason.trim().length <= 2000,
+    "Describe el motivo de la incorporación (10–2000 caracteres).");
+  return { expected_state_sha256: study.state_sha256, reason: reason.trim(), confirmed: true };
+}
+export async function submitStudyDocument({ authFetch, study, body, file, signal }) {
+  assert(file && file.size > 0 && file.size <= 4 * 1024 * 1024 && /\.pdf$/i.test(file.name)
+    && (!file.type || file.type === "application/pdf"), "Selecciona un PDF de hasta 4 MB.");
+  const bytes = await file.arrayBuffer();
+  assert(!signal?.aborted, "La operación se ha cancelado.");
+  const sha = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+    .map(n => n.toString(16).padStart(2, "0")).join("");
+  assert(!signal?.aborted, "La operación se ha cancelado.");
+  const form = new FormData();
+  form.append("metadata", JSON.stringify(body));
+  form.append("file", file);
+  const saved = verifyMutation(await read(await authFetch("/api/ops/core/cases/" + study.case_id + "/study/documents", {
+    method: "POST", body: form, signal,
+  })), study, "add_document");
+  assert(saved.added_document?.sha256 === sha && UUID.test(saved.added_document.id)
+    && saved.documents?.some(doc => doc.id === saved.added_document.id && doc.sha256 === sha)
+    && saved.facts?.id !== study.facts.id && saved.facts?.supersedes_id === study.facts.id
+    && saved.facts?.frozen === false && saved.facts.facts.source_document_ids.includes(saved.added_document.id),
+    "No se pudo comprobar el documento y la nueva versión. Recarga el estudio.");
   return saved;
 }

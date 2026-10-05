@@ -1,3 +1,4 @@
+import OpsStudyReview from "./OpsStudyReview.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ACTIONS, STAGES, fetchStudy, buildStudyAction, submitStudyAction } from "../lib/opsCoreStudy.js";
 
@@ -55,21 +56,17 @@ function StudyPanel({ authFetch, caseId, sessionId, canSupervise, editingFacts, 
 
   const action = study?.next_action;
   const blocked = loading || saving || uncertain || editingFacts || !canSupervise || !sessionId || !action;
-  async function advance(event) {
-    event.preventDefault();
-    if (blocked || lockRef.current) return;
-    let body;
-    try { body = buildStudyAction(study, { confirmed, reviewNotes }); }
-    catch (err) { setError(err.message); return; }
+  async function perform(operation) {
+    if (loading || saving || uncertain || editingFacts || !canSupervise || !sessionId || lockRef.current) return;
     lockRef.current = true; setSaving(true); setError(""); setMessage("");
     const controller = new AbortController();
     saveRef.current = controller;
     try {
-      const saved = await submitStudyAction({ authFetch, caseId, study, body, signal: controller.signal });
+      const saved = await operation(controller.signal);
       if (controller.signal.aborted) return;
       lastStateRef.current = saved.state_sha256;
       setStudy(saved); setConfirmed(false); setReviewNotes("");
-      setMessage(`${ACTIONS[body.action]}: guardado.`);
+      setMessage(ACTIONS[saved.completed_action] + ": guardado.");
       onAdvanced?.();
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -77,6 +74,14 @@ function StudyPanel({ authFetch, caseId, sessionId, canSupervise, editingFacts, 
         setUncertain(true); setConfirmed(false);
       }
     } finally { lockRef.current = false; if (!controller.signal.aborted) setSaving(false); }
+  }
+  async function advance(event) {
+    event.preventDefault();
+    if (blocked || lockRef.current) return;
+    let body;
+    try { body = buildStudyAction(study, { confirmed, reviewNotes }); }
+    catch (err) { setError(err.message); return; }
+    await perform(signal => submitStudyAction({ authFetch, caseId: caseId, study, body, signal }));
   }
 
   const family = study?.family?.resolution;
@@ -110,6 +115,8 @@ function StudyPanel({ authFetch, caseId, sessionId, canSupervise, editingFacts, 
         <details><summary className="cursor-pointer text-sm font-semibold">Observaciones del especialista</summary><ul className="mt-2 list-disc space-y-2 pl-5 text-sm">{preview.risks.map((item, i) => <li key={i} className="break-words">{item}</li>)}</ul></details>
         <p className="text-sm font-semibold text-slate-700">La aprobación del recurso y su presentación requieren sus revisiones posteriores.</p>
       </div> : null}
+      {canSupervise ? <OpsStudyReview key={study.state_sha256} study={study} authFetch={authFetch} perform={perform}
+        disabled={loading || saving || uncertain || editingFacts || !sessionId || !!study.blockers.length} /> : null}
       {!canSupervise ? <p className="mt-3 text-sm text-slate-600">La continuación requiere una sesión individual de supervisor.</p> : null}
       {editingFacts ? <p className="mt-3 text-sm text-amber-900">Guarda o cancela la edición de hechos antes de continuar el estudio.</p> : null}
       {action && canSupervise ? <form onSubmit={advance} className="mt-4 rounded-xl bg-blue-50 p-4">

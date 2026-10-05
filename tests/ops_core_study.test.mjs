@@ -21,8 +21,9 @@ function frozen(previous) {
   return saved;
 }
 const response = data => ({ ok: true, json: async () => data });
-test("only the four reviewed-facts actions are exposed", () => {
-  assert.deepEqual(Object.keys(ACTIONS), ["freeze_facts", "resolve_family", "lock_family", "build_preview"]);
+test("only the supervised study and documentary revision actions are exposed", () => {
+  assert.deepEqual(Object.keys(ACTIONS), ["freeze_facts", "resolve_family", "lock_family", "build_preview", "reopen_facts", "review_check", "add_document"]);
+  assert.equal(Object.hasOwn(ACTIONS, "approve_preview"), false);
 });
 test("binds a personal attestation to exact facts and documents without changing state", () => {
   const study = state(), before = structuredClone(study);
