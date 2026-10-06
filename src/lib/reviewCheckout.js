@@ -180,6 +180,21 @@ export function parseReviewCheckoutContext(payload, expectedCaseId) {
   });
 }
 
+export async function ensureReviewPaymentPrepared(fetchJson, expectedCaseId, currentStatus) {
+  const caseId = normalizeCaseId(expectedCaseId);
+  if (!caseId) throw new TypeError("El expediente no es válido.");
+  // Reuse the ordinary readiness transition, including its payment/state lock.
+  // Existing checkout claims must not trigger another material mutation.
+  if (currentStatus === "ready_for_review_payment") return;
+  const result = await fetchJson(`/cases/${caseId}/review`, { method: "POST" });
+  if (!hasExactKeys(result, ["ok", "case_id", "status", "readiness", "legal_analysis_executed"]) ||
+      result.ok !== true || result.case_id !== caseId ||
+      result.status !== "ready_for_review_payment" || result.legal_analysis_executed !== false ||
+      result.readiness?.case_id !== caseId || result.readiness?.ready !== true) {
+    throw new Error("El servidor todavía no confirma la preparación del expediente para pagar.");
+  }
+}
+
 export function sameReviewQuote(left, right) {
   return Boolean(
     left &&

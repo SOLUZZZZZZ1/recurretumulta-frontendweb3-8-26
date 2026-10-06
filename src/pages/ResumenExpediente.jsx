@@ -9,6 +9,7 @@ import {
 } from "../lib/authorizationEvidence.js";
 import {
   formatReviewQuote,
+  ensureReviewPaymentPrepared,
   parseReviewCheckoutContext,
   parseReviewCheckoutEnvelope,
   sameReviewQuote,
@@ -181,6 +182,7 @@ export default function Resumen() {
         throw new Error("La autorización firmada todavía no está verificada.");
       }
 
+      await ensureReviewPaymentPrepared(fetchJsonFallback, caseId, current.status);
       const contextPayload = await fetchJsonFallback(
         `/billing/review-context/${encodeURIComponent(caseId)}`
       );

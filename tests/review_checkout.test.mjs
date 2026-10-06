@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   formatReviewQuote,
+  ensureReviewPaymentPrepared,
   parseReviewCheckoutContext,
   parseReviewCheckoutEnvelope,
   sameReviewQuote,
@@ -149,4 +150,31 @@ test("already-paid response is exact and still bound to the shown quote", () => 
     () => parseReviewCheckoutEnvelope({ ...paid, amount_cents: 2500 }, quote),
     /confirmación de pago/
   );
+});
+
+
+test("payment first records ordinary readiness for a newly approved authorization", async () => {
+  const calls = [];
+  await ensureReviewPaymentPrepared(async (...args) => {
+    calls.push(args);
+    return {ok:true, case_id:CASE_ID, status:"ready_for_review_payment",
+      readiness:context().readiness, legal_analysis_executed:false};
+  }, CASE_ID, "documents_pending");
+  assert.deepEqual(calls, [[`/cases/${CASE_ID}/review`, {method:"POST"}]]);
+});
+
+test("retrying a prepared checkout does not mutate case material", async () => {
+  await ensureReviewPaymentPrepared(() => assert.fail("must not repeat review"), CASE_ID, "ready_for_review_payment");
+});
+
+test("failed or unconfirmed readiness never advances to checkout", async () => {
+  const valid = {ok:true, case_id:CASE_ID, status:"ready_for_review_payment",
+    readiness:context().readiness, legal_analysis_executed:false};
+  for (const patch of [{ok:false}, {case_id:"22222222-2222-4222-8222-222222222222"},
+    {status:"documents_pending"}, {legal_analysis_executed:true}, {extra:true},
+    {readiness:{...valid.readiness,ready:false}}, {readiness:{...valid.readiness,case_id:"other"}}]) {
+    await assert.rejects(ensureReviewPaymentPrepared(async () => ({...valid,...patch}), CASE_ID, "authorized"), /preparación/);
+  }
+  await assert.rejects(ensureReviewPaymentPrepared(async () => {throw Error("checkout locked")}, CASE_ID, "authorized"), /checkout locked/);
+  await assert.rejects(ensureReviewPaymentPrepared(() => assert.fail("invalid case"), "bad", "authorized"), /válido/);
 });
