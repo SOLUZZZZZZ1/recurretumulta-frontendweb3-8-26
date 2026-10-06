@@ -36,7 +36,7 @@ export default function OpsRehearsalAnalysis({ caseId }) {
       {busy ? "Leyendo la notificación…" : error ? "Comprobar o recuperar lectura" : "Analizar notificación ficticia"}
     </button> : <div role="status">
       <p>{result.reused ? "Lectura guardada recuperada." : "Lectura guardada."} Revisa el resultado en OPS.</p>
-      <Link className="sr-btn-primary mt-3" to={`/ops/review/${encodeURIComponent(caseId)}`}>Revisar lectura y hechos en OPS</Link>
+      <Link className="sr-btn-primary mt-3 inline-flex" to={`/ops/review/${encodeURIComponent(caseId)}`}>Revisar lectura y hechos en OPS</Link>
     </div>}
     {busy ? <p role="status" className="mt-3">La lectura puede tardar unos minutos. Conserva esta pestaña abierta.</p> : null}
     {error ? <p role="alert" className="mt-3 text-red-800">{error} Si se perdió la conexión, el siguiente intento recuperará la lectura cuando haya terminado.</p> : null}
