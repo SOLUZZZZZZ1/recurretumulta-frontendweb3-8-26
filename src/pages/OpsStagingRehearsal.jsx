@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import IniciarExpedienteRTM from "./IniciarExpedienteRTM.jsx";
 import MultasDocumentos from "./MultasDocumentos.jsx";
+import OpsSummaryAccess from "../components/OpsSummaryAccess.jsx";
 import { REHEARSAL_BASE, rehearsalJson, rehearsalRequest, parseRehearsalProgress } from "../lib/stagingRehearsal.js";
 
 function savePdf(blob, filename) {
@@ -114,7 +115,7 @@ export default function OpsStagingRehearsal() {
         ? "La autorización está verificada. Puedes continuar al resumen para comprobar el pago de prueba."
         : "La autorización vigente está pendiente de revisión personal. Abre su revisión en OPS antes de continuar al pago de prueba."}</p>
       <Link className="mr-5 underline" to={`/ops/authorization/${prepared.progress.caseId}`}>Revisar autorización en OPS</Link>
-      <Link className="underline" to={`/resumen?case=${prepared.progress.caseId}`}>Ver resumen y estado del pago</Link>
+      <OpsSummaryAccess key={prepared.progress.caseId} caseId={prepared.progress.caseId} className="underline mt-3" />
     </main> : null}
   </>;
 }

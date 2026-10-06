@@ -11,6 +11,7 @@ import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import { buildPackageStatus } from "../lib/opsPackageStatus.js";
 import OpsAuthorizationReview from "../components/OpsAuthorizationReview.jsx";
+import OpsSummaryAccess from "../components/OpsSummaryAccess.jsx";
 import OpsFactsReview from "../components/OpsFactsReview.jsx";
 import OpsCoreStudy from "../components/OpsCoreStudy.jsx";
 import OpsPostFilingDeadlines from "../components/OpsPostFilingDeadlines.jsx";
@@ -804,9 +805,7 @@ export default function OpsCaseDetailPro({ authorizationOnly = false }) {
         {caseProjectionReady && !loading && packageStatus.hasAutorizacion ? (
           <div role="status" className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4">
             <p className="font-bold text-green-900">Autorización verificada.</p>
-            <Link to={`/resumen?case=${encodeURIComponent(caseId)}`} className="sr-btn-primary mt-3">
-              Ver resumen y estado del pago
-            </Link>
+            <OpsSummaryAccess key={caseId} caseId={caseId} className="sr-btn-primary mt-3" />
           </div>
         ) : null}
       </main>

@@ -69,7 +69,7 @@ function isAuthorized(data) {
 }
 
 function statusLabel(data) {
-  if (!data) return "Expediente recibido";
+  if (!data) return "Estado no disponible";
   if (isPaid(data.payment_status)) return "Revisión inicial pagada";
   if (isAuthorized(data)) return "Representación firmada verificada";
   if (isAuthorizationPendingReview(data)) return "Autorización pendiente de revisión";
@@ -79,7 +79,7 @@ function statusLabel(data) {
 
 function messageFor(data, loading) {
   if (loading && !data) return "Revisando la información del expediente…";
-  if (!data) return "Hemos recibido la información. Estamos actualizando el expediente.";
+  if (!data) return "No se ha podido consultar el expediente. Accede desde su enlace privado de continuación y vuelve a intentarlo.";
   if (isPaid(data.payment_status)) {
     return "La revisión inicial está confirmada. El expediente pasa ahora a valoración por RTM.";
   }
@@ -142,8 +142,9 @@ export default function Resumen() {
       }
     } catch (e) {
       if (controller.signal.aborted) return;
-      // No mostramos “Error API” al cliente como estado principal.
-      setTechnicalError(e?.message || "");
+      setData(null);
+      setReviewContext(null);
+      setTechnicalError(e?.message || "No se pudo consultar el estado.");
     } finally {
       if (statusRequest.current === controller) {
         statusRequest.current = null;
@@ -245,7 +246,7 @@ export default function Resumen() {
     reviewQuote && reviewContext?.ready && reviewContext?.signedAuthorityVerified
   );
   const showPayButton = authorized && !paid && authoritativeReady;
-  const showAuthNeeded = !authorized && !authorizationPending && !paid;
+  const showAuthNeeded = Boolean(data) && !loading && !authorized && !authorizationPending && !paid;
 
   if (data && isVehicleRemovalCase(data)) {
     return (
@@ -269,8 +270,8 @@ export default function Resumen() {
             <tbody>
               <Row label="Expediente interno" value={caseId} />
               <Row label="Estado" value={statusLabel(data)} />
-              <Row label="Autorización firmada" value={authorized ? "Verificada" : authorizationPending ? "Pendiente de revisión humana" : loading ? "Revisando…" : "Pendiente"} />
-              <Row label="Pago" value={paid ? "paid" : data?.payment_status || (loading ? "Revisando…" : "Pendiente")} />
+              <Row label="Autorización firmada" value={!data ? (loading ? "Revisando…" : "No disponible") : authorized ? "Verificada" : authorizationPending ? "Pendiente de revisión humana" : "Pendiente"} />
+              <Row label="Pago" value={!data ? (loading ? "Revisando…" : "No disponible") : paid ? "paid" : data.payment_status || "Pendiente"} />
             </tbody>
           </table>
 
@@ -401,7 +402,7 @@ export default function Resumen() {
           </div>
         ) : null}
 
-        {!authorized &&
+        {data && !loading && !authorized &&
         !authorizationPending &&
         !showPayButton &&
         !showAuthNeeded &&
