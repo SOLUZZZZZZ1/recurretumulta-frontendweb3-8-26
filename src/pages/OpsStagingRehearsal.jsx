@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import IniciarExpedienteRTM from "./IniciarExpedienteRTM.jsx";
 import MultasDocumentos from "./MultasDocumentos.jsx";
-import { REHEARSAL_BASE, REHEARSAL_VERSION, rehearsalJson, rehearsalRequest } from "../lib/stagingRehearsal.js";
+import { REHEARSAL_BASE, rehearsalJson, rehearsalRequest, parseRehearsalProgress } from "../lib/stagingRehearsal.js";
 
 function savePdf(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -20,7 +20,8 @@ export default function OpsStagingRehearsal() {
   const [prepared, setPrepared] = useState(null);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(null);
-  const [complete, setComplete] = useState(false);
+  const [phase, setPhase] = useState("preparing");
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (!canSupervise) return undefined;
@@ -28,17 +29,38 @@ export default function OpsStagingRehearsal() {
     async function load() {
       const options = { signal: controller.signal };
       const data = await rehearsalJson(await authFetch(REHEARSAL_BASE + "/profile", options));
-      if (data.version !== REHEARSAL_VERSION || data.synthetic_only !== true) throw new Error("No se ha confirmado el perfil del ensayo.");
+      const progress = parseRehearsalProgress(data);
       const files = await Promise.all(["identity_front", "identity_back"].map(async (kind) => {
         const r = await authFetch(REHEARSAL_BASE + "/fixtures/" + kind, options);
         if (!r.ok || !r.headers.get("content-type")?.includes("application/pdf")) throw new Error("No se pudo preparar la identidad ficticia.");
         return new File([await r.blob()], data.fixtures[kind].filename, { type: "application/pdf" });
       }));
-      if (!controller.signal.aborted) setPrepared({ ...data, files });
+      if (!controller.signal.aborted) {
+        setPrepared({ ...data, files, progress });
+        setPhase(progress.step);
+      }
     }
     void load().catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
   }, [authFetch, canSupervise]);
+
+  async function advance(saved) {
+    if (checking) return;
+    setDraft(saved);
+    setPhase("checking");
+    setChecking(true);
+    setError("");
+    try {
+      const data = await rehearsalJson(await authFetch(REHEARSAL_BASE + "/profile"));
+      const progress = parseRehearsalProgress(data, saved.caseId);
+      setPrepared(current => ({ ...current, ...data, files: current.files, progress }));
+      setPhase(progress.mainDocumentReceived ? progress.step : "documents");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setChecking(false);
+    }
+  }
 
   const rehearsal = useMemo(() => {
     if (!prepared) return null;
@@ -48,16 +70,17 @@ export default function OpsStagingRehearsal() {
     };
     return {
       profile: prepared.profile, identityFront: prepared.files[0], identityBack: prepared.files[1],
+      renewal: phase === "renewal",
       fetchJson: async (path, options) => rehearsalJson(await request(path, options)),
       openFile: async (path) => {
         const r = await request(path);
         if (!r.ok) { await rehearsalJson(r); return; }
         if (!r.headers.get("content-type")?.includes("application/pdf")) throw new Error("No se recibió un PDF.");
-        savePdf(await r.blob(), path.endsWith("candidate-fixture") ? "AUTORIZACION_FICTICIA_CANDIDATO.pdf" : "AUTORIZACION_FICTICIA_EMITIDA.pdf");
+        savePdf(await r.blob(), path.endsWith("candidate-fixture") ? (phase === "renewal" ? "AUTORIZACION_FICTICIA_RENOVADA.pdf" : "AUTORIZACION_FICTICIA_CANDIDATO.pdf") : "AUTORIZACION_FICTICIA_EMITIDA.pdf");
       },
-      onContinue: setDraft,
+      onContinue: advance,
     };
-  }, [authFetch, prepared]);
+  }, [authFetch, prepared, phase, checking]);
 
   async function downloadRadar() {
     setError("");
@@ -76,16 +99,22 @@ export default function OpsStagingRehearsal() {
       <p className="mt-2">Documento de prueba fechado el 05/10/2026. Es una petición de identificación del conductor; todavía no consta importe ni fecha de recepción.</p>
       <p>Conserva los datos preparados y utiliza únicamente los PDF descargados desde este ensayo. La autorización y su firma son ficticias y no acreditan representación real. Las casillas requieren tu confirmación.</p>
       {prepared ? <button type="button" onClick={downloadRadar} className="mt-3 rounded-lg border border-amber-700 px-4 py-2">Descargar notificación ficticia para el paso de documentación</button> : <p role="status">{error ? "No se ha podido abrir el ensayo." : "Preparando el ensayo…"}</p>}
-      {prepared?.existing_case_id ? <p className="mt-3">Ya existe un expediente para este ensayo. Al continuar se recupera la misma referencia. <Link className="underline" to={`/ops/case/${prepared.existing_case_id}`}>Abrir en OPS</Link></p> : null}
+      {prepared?.existing_case_id ? <p className="mt-3">Continuamos con el mismo expediente: {prepared.existing_case_id}. <Link className="underline" to={`/ops/case/${prepared.existing_case_id}`}>Abrir en OPS</Link></p> : null}
       {error ? <p role="alert" className="mt-3 font-bold">{error}</p> : null}
     </aside>
-    {rehearsal && !draft ? <IniciarExpedienteRTM rehearsal={rehearsal} /> : null}
-    {rehearsal && draft && !complete ? <MultasDocumentos rehearsal={{ ...rehearsal, caseId: draft.caseId, onComplete: () => setComplete(true) }} /> : null}
-    {complete ? <main className="mx-auto max-w-3xl p-8">
+    {rehearsal && ["intake", "renewal"].includes(phase) ? <IniciarExpedienteRTM key={phase} rehearsal={rehearsal} /> : null}
+    {rehearsal && phase === "documents" ? <MultasDocumentos rehearsal={{ ...rehearsal, caseId: draft.caseId, onComplete: () => advance(draft) }} /> : null}
+    {phase === "checking" ? <main className="mx-auto max-w-3xl p-8">
+      <p role="status">{checking ? "Comprobando el siguiente paso del expediente…" : "La documentación está guardada. Falta comprobar el siguiente paso."}</p>
+      {!checking ? <button type="button" className="sr-btn-primary mt-4" onClick={() => advance(draft)}>Comprobar estado del ensayo</button> : null}
+    </main> : null}
+    {phase === "review" ? <main className="mx-auto max-w-3xl p-8">
       <h2 className="text-2xl font-bold">Documentación del ensayo recibida</h2>
-      <p className="my-4">La autorización está pendiente de revisión personal. El pago de prueba requiere que el expediente cumpla las comprobaciones habituales.</p>
-      <Link className="mr-5 underline" to={`/ops/case/${draft.caseId}`}>Abrir expediente en OPS</Link>
-      <Link className="underline" to={`/resumen?case=${draft.caseId}`}>Ver resumen y estado del pago</Link>
+      <p className="my-4">{prepared.progress.authorizationStatus === "verified"
+        ? "La autorización está verificada. Puedes continuar al resumen para comprobar el pago de prueba."
+        : "La autorización vigente está pendiente de revisión personal. Abre su revisión en OPS antes de continuar al pago de prueba."}</p>
+      <Link className="mr-5 underline" to={`/ops/review/${prepared.progress.caseId}`}>Revisar autorización en OPS</Link>
+      <Link className="underline" to={`/resumen?case=${prepared.progress.caseId}`}>Ver resumen y estado del pago</Link>
     </main> : null}
   </>;
 }

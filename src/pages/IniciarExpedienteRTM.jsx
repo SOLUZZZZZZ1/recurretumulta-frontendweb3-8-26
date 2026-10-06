@@ -387,6 +387,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
       }
       setMessage(completed.authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND
         ? "✅ Expediente sintético creado. PDF de prueba preparado; se ha solicitado su descarga. No tiene validez ni acredita representación."
+        : rehearsal?.renewal ? "✅ Autorización del mismo expediente actualizada. Descarga y sube el nuevo candidato con firma ficticia."
         : rehearsal ? "✅ Expediente de ensayo creado. Descarga el candidato con firma ficticia y súbelo en el paso siguiente."
         : "✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
     } catch (error) {
@@ -639,16 +640,18 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
       <main style={{ minHeight: "calc(100vh - 120px)", padding: "42px 16px 68px", background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 56%,#0f766e 100%)" }}>
         <section style={{ maxWidth: 1040, margin: "0 auto", padding: "30px 22px", borderRadius: 26, background: "rgba(255,255,255,.98)", boxShadow: "0 24px 70px rgba(15,23,42,.34)" }}>
           <header style={{ marginBottom: 26 }}>
-            <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>Inicia tu expediente</h1>
+            <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>{rehearsal?.renewal ? "Renovar autorización del ensayo" : "Inicia tu expediente"}</h1>
             <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
               {isVehicleRemoval
                 ? "Cuéntanos lo necesario para abrir el expediente. Después comprobarás el permiso de circulación y revisarás el consentimiento y la cotización específicos antes del pago."
+                : rehearsal?.renewal ? "La notificación ya está recibida. Confirma las casillas para emitir una autorización actualizada, descarga el nuevo candidato ficticio y súbelo. Conservamos este mismo expediente y sus documentos."
                 : rehearsal ? "Conserva los datos ficticios preparados. Después descarga y sube el candidato de autorización de prueba y continúa con la notificación."
                 : "Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación."}
             </p>
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
               {isVehicleRemoval
                 ? "Un único expediente RTM · Datos → Verificación del vehículo → Consentimiento específico → Cotización → Pago"
+                : rehearsal?.renewal ? "Documentación recibida → Autorización actualizada → Revisión personal → Pago de prueba"
                 : "Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración"}
             </div>
             {selectedFamily ? (
@@ -748,10 +751,10 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
               <Check disabled={loading} checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
               <button type="submit" disabled={loading || authorizationFlow === "unavailable" || (localRuntimeEnabled && !localProfileReady)} style={primaryButton}>
                 {loading
-                  ? "Creando expediente…"
+                  ? (rehearsal?.renewal ? "Renovando autorización…" : "Creando expediente…")
                   : isVehicleRemoval
                     ? "Crear expediente y continuar"
-                    : isLocalGeneric ? "Crear expediente de prueba y descargar documento" : "Crear expediente y descargar autorización"}
+                    : rehearsal?.renewal ? "Renovar autorización de prueba" : isLocalGeneric ? "Crear expediente de prueba y descargar documento" : "Crear expediente y descargar autorización"}
               </button>
             </>}
           </form>
@@ -768,7 +771,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
               <UploadBox label={isLocalGeneric || rehearsal ? "PDF candidato de prueba · sin firma real" : "Autorización firmada"} file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
             </div>
             <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : isLocalGeneric || rehearsal ? "Subir candidato de prueba" : "Subir autorización firmada"}</button>
-            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación (autorización pendiente de revisión)</button>}
+            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>{rehearsal?.renewal ? "Continuar a la revisión de autorización" : "Continuar y subir documentación (autorización pendiente de revisión)"}</button>}
             </>}
             {isLocalGeneric ? <button type="button" className="sr-btn-primary" onClick={() => navigate(`/ops/case/${encodeURIComponent(draftCase.caseId)}`)} style={{ marginTop: 16 }}>Ver expediente en OPS</button> : null}
           </Section>}

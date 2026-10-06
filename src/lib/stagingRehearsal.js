@@ -29,3 +29,21 @@ export async function rehearsalJson(response) {
   if (!data || data.ok !== true) throw new Error("El servidor no confirmó el paso del ensayo.");
   return data;
 }
+
+export function parseRehearsalProgress(data, expectedCaseId = null) {
+  const raw = data?.progress;
+  const caseId = normalizeCaseId(raw?.case_id) || null;
+  const status = raw?.authorization_evidence_status;
+  if (data?.version !== REHEARSAL_VERSION || data?.synthetic_only !== true ||
+      !raw || !["intake", "renewal", "review"].includes(raw.step) ||
+      typeof raw.main_document_received !== "boolean" ||
+      !["missing", "not_submitted", "pending_review", "verified", "rejected"].includes(status) ||
+      (raw.case_id !== null && !caseId) ||
+      (expectedCaseId && (!normalizeCaseId(expectedCaseId) || caseId !== normalizeCaseId(expectedCaseId))) ||
+      data.existing_case_id !== raw.case_id ||
+      (raw.step === "intake" ? raw.main_document_received : (!caseId || !raw.main_document_received)) ||
+      (raw.step === "review" && !["pending_review", "verified"].includes(status))) {
+    throw new TypeError("No se ha podido verificar el siguiente paso del ensayo.");
+  }
+  return { caseId, step: raw.step, mainDocumentReceived: raw.main_document_received, authorizationStatus: status };
+}
