@@ -674,7 +674,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
 
           <form onSubmit={createDraftAndDownload}>
             <Section title="1. Tipo de expediente">
-              <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase) || loading}>
+              <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading}>
                 {availableCaseTypes.map((value) => (
                   <option key={value} value={value}>{config.caseTypes[value]}</option>
                 ))}
@@ -683,14 +683,14 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
 
             <Section title="2. Datos personales">
               <div style={gridStyle}>
-                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(draftCase) || loading} />
-                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(draftCase) || loading} />
-                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(draftCase) || loading} />
-                <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(draftCase) || loading} />
+                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
               </div>
               <div style={{ marginTop: 16 }}>
                 <span style={labelStyle}>Preferencia de contacto</span>
-                <select value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(draftCase) || loading}>
+                <select value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading}>
                   <option value="email">Email</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option>
                 </select>
               </div>
@@ -698,26 +698,26 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
 
             <Section title="3. Domicilio a efectos de notificaciones">
               <div style={gridStyle}>
-                <Field label="Calle" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" disabled={Boolean(draftCase) || loading} />
-                <Field label="Número" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" disabled={Boolean(draftCase) || loading} />
-                <Field label="Piso" value={form.floor} onChange={(v) => update("floor", v)} placeholder="Opcional" disabled={Boolean(draftCase) || loading} />
-                <Field label="Puerta" value={form.door} onChange={(v) => update("door", v)} placeholder="Opcional" disabled={Boolean(draftCase) || loading} />
-                <Field label="Código postal" value={form.postal_code} onChange={(v) => update("postal_code", v)} placeholder="Código postal" disabled={Boolean(draftCase) || loading} />
-                <Field label="Población" value={form.city} onChange={(v) => update("city", v)} placeholder="Población" disabled={Boolean(draftCase) || loading} />
-                <Field label="Provincia" value={form.province} onChange={(v) => update("province", v)} placeholder="Provincia" disabled={Boolean(draftCase) || loading} />
+                <Field label="Calle" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Número" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Piso" value={form.floor} onChange={(v) => update("floor", v)} placeholder="Opcional" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Puerta" value={form.door} onChange={(v) => update("door", v)} placeholder="Opcional" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Código postal" value={form.postal_code} onChange={(v) => update("postal_code", v)} placeholder="Código postal" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Población" value={form.city} onChange={(v) => update("city", v)} placeholder="Población" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Provincia" value={form.province} onChange={(v) => update("province", v)} placeholder="Provincia" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
               </div>
             </Section>
 
             <Section title="4. Documento de identidad">
-              <p style={{ marginTop: 0, color: "#475569" }}>Imagen o PDF, máximo 8 MB por archivo.{localProfileReady ? " Adjunta únicamente los documentos ficticios de la prueba." : ""}</p>
+              <p style={{ marginTop: 0, color: "#475569" }}>{rehearsal ? "Los dos PDF ficticios ya están preparados. Continúa con estos archivos." : "Imagen o PDF, máximo 8 MB por archivo."}{localProfileReady ? " Adjunta únicamente los documentos ficticios de la prueba." : ""}</p>
               <div style={gridStyle}>
-                <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} disabled={Boolean(draftCase) || loading} />
-                <UploadBox label="Parte posterior" file={dniBack} inputRef={dniBackRef} onChange={setDniBack} disabled={Boolean(draftCase) || loading} />
+                <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <UploadBox label="Parte posterior" file={dniBack} inputRef={dniBackRef} onChange={setDniBack} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
               </div>
             </Section>
 
             <Section title="5. Cuéntanos brevemente qué ha ocurrido">
-              <textarea rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(draftCase) || loading} />
+              <textarea rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
             </Section>
 
             {!draftCase && <>
