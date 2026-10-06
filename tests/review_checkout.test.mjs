@@ -110,6 +110,7 @@ test("checkout must echo every authoritative price discriminator", () => {
   const checkout = {
     ok: true,
     url: "https://checkout.stripe.com/c/pay/cs_test_123",
+    reused: false,
     billing_code: quote.billingCode,
     payment_stage: quote.paymentStage,
     service_code: quote.serviceCode,
@@ -118,11 +119,15 @@ test("checkout must echo every authoritative price discriminator", () => {
     authority_version: quote.version,
   };
   assert.equal(parseReviewCheckoutEnvelope(checkout, quote).alreadyPaid, false);
+  assert.equal(parseReviewCheckoutEnvelope({...checkout, reused:true}, quote).url, checkout.url);
   for (const patch of [
     { amount_cents: quote.amountCents + 1 },
     { currency: "USD" },
     { billing_code: "ADMIN_REVIEW" },
     { authority_version: "legacy" },
+    { reused: "true" },
+    { reused: null },
+    { reused: undefined },
     { extra: true },
   ]) {
     assert.throws(

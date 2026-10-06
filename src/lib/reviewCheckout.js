@@ -37,6 +37,7 @@ const CHECKOUT_KEYS = Object.freeze([
   "currency",
   "ok",
   "payment_stage",
+  "reused",
   "service_code",
   "url",
 ]);
@@ -242,6 +243,7 @@ export function parseReviewCheckoutEnvelope(payload, expectedQuote) {
   if (
     !hasExactKeys(payload, CHECKOUT_KEYS) ||
     payload.ok !== true ||
+    typeof payload.reused !== "boolean" ||
     payload.billing_code !== expectedQuote.billingCode ||
     payload.payment_stage !== expectedQuote.paymentStage ||
     payload.service_code !== expectedQuote.serviceCode ||
