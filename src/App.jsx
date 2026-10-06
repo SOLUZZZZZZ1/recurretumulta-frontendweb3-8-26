@@ -32,6 +32,7 @@ import Asnef from "./pages/Asnef.jsx";
 import BancosHome from "./pages/BancosHome.jsx";
 import EnergiaHome from "./pages/EnergiaHome.jsx";
 import TelecomunicacionesHome from "./pages/TelecomunicacionesHome.jsx";
+import OpsStagingRehearsal from "./pages/OpsStagingRehearsal.jsx";
 import SegurosHome from "./pages/SegurosHome.jsx";
 import ViviendaHome from "./pages/ViviendaHome.jsx";
 import IniciarExpedienteRTM from "./pages/IniciarExpedienteRTM.jsx";
@@ -179,6 +180,7 @@ export default function App() {
 
         <Route element={<OpsWorkspaceRoute />}>
           <Route path="/ops" element={<OpsDashboard />} />
+          <Route path="/ops/ensayo/radar" element={<OpsStagingRehearsal />} />
           <Route path="/ops/followups" element={<OpsFollowups />} />
           <Route path="/ops/manual" element={<Suspense fallback={<p role="status" className="p-6">Abriendo manual del operador…</p>}><OpsSupportManual key="operador" kind="operador" /></Suspense>} />
           <Route path="/ops/manual-presentador" element={<Suspense fallback={<p role="status" className="p-6">Abriendo manual del presentador…</p>}><OpsSupportManual key="presentador" kind="presentador" /></Suspense>} />

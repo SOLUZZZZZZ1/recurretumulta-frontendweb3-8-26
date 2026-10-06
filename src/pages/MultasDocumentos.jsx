@@ -62,12 +62,13 @@ function formatBytes(bytes = 0) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function MultasDocumentos() {
+export default function MultasDocumentos({ rehearsal = null }) {
+  const documentJson = rehearsal?.fetchJson || fetchJsonFallback;
   const location = useLocation();
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
-  const caseId = useMemo(() => getCaseId(location.search), [location.search]);
+  const caseId = useMemo(() => rehearsal?.caseId || getCaseId(location.search), [location.search, rehearsal?.caseId]);
 
   const [files, setFiles] = useState([]);
   const [message, setMessage] = useState("");
@@ -119,16 +120,15 @@ export default function MultasDocumentos() {
       const formData = new FormData();
       files.forEach((item) => formData.append("files", item.file));
 
-      await fetchJsonFallback(`/cases/${caseId}/append-documents`, {
+      await documentJson(`/cases/${caseId}/append-documents`, {
         method: "POST",
         body: formData,
       });
 
       setMessage("✅ Documentación recibida correctamente.");
 
-      setTimeout(() => {
-        navigate(`/resumen?case=${encodeURIComponent(caseId)}`);
-      }, 700);
+      if (rehearsal) rehearsal.onComplete();
+      else navigate(`/resumen?case=${encodeURIComponent(caseId)}`);
     } catch (error) {
       setMessage(error?.message || "No se pudo subir la documentación.");
     } finally {

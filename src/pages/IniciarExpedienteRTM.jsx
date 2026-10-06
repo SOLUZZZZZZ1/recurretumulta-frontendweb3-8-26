@@ -137,17 +137,19 @@ function formatBytes(bytes = 0) {
   return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function IniciarExpedienteRTM() {
+export default function IniciarExpedienteRTM({ rehearsal = null }) {
+  const intakeJson = rehearsal?.fetchJson || fetchJsonFallback;
+  const intakeFile = rehearsal?.openFile || openBackendFile;
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams] = useSearchParams();
 
   const requestedDepartment =
-    params.department ||
+    (rehearsal ? "traffic" : params.department) ||
     searchParams.get("department") ||
     "";
-  const requestedType = params.caseType || searchParams.get("case_type") || "";
-  const requestedFamilyId = searchParams.get("family") || "";
+  const requestedType = rehearsal ? "fine" : params.caseType || searchParams.get("case_type") || "";
+  const requestedFamilyId = rehearsal ? "trafico" : searchParams.get("family") || "";
   const ambiguousLegacyService = searchParams.get("service") || "";
   const department = requestedDepartment;
   const config = requestedDepartment ? SERVICE_CONFIG[requestedDepartment] : null;
@@ -180,7 +182,7 @@ export default function IniciarExpedienteRTM() {
     !invalidSelection && config
       ? requestedType || config.defaultCaseType
       : "";
-  const availableCaseTypes = config
+  const availableCaseTypes = rehearsal ? ["fine"] : config
     ? selectedFamily?.intake?.caseTypes || Object.keys(config.caseTypes)
     : [];
 
@@ -199,13 +201,14 @@ export default function IniciarExpedienteRTM() {
     preferred_contact: "email",
     case_type: initialType,
     customer_comment: "",
+    ...(rehearsal?.profile || {}),
     representation_confirmed: false,
     prejudicial_counsel_requested: false,
     privacy_accepted: false,
   });
 
-  const [dniFront, setDniFront] = useState(null);
-  const [dniBack, setDniBack] = useState(null);
+  const [dniFront, setDniFront] = useState(rehearsal?.identityFront || null);
+  const [dniBack, setDniBack] = useState(rehearsal?.identityBack || null);
   const [signedAuthorization, setSignedAuthorization] = useState(null);
   const [draftCase, setDraftCase] = useState(null);
   const draftCaseRef = useRef(null);
@@ -338,7 +341,7 @@ export default function IniciarExpedienteRTM() {
           fd.append("dni_front", dniFront);
           fd.append("dni_back", dniBack);
 
-          const data = await fetchJsonFallback("/cases/intake-draft", { method: "POST", body: fd });
+          const data = await intakeJson("/cases/intake-draft", { method: "POST", body: fd });
           const caseId = normalizeCaseId(data?.case_id || data?.id);
           if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
           let hasAccess = false;
@@ -360,14 +363,14 @@ export default function IniciarExpedienteRTM() {
             ? "El servidor no confirmó correctamente el alta. Conservamos la referencia para evitar duplicados."
             : !hasAccess
               ? "El backend no devolvió la capacidad segura del expediente. Conservamos la referencia para evitar duplicados."
-              : localProfileReady && data.test_mode !== true
+              : (localProfileReady || rehearsal) && data.test_mode !== true
                 ? "El servidor no confirmó que el expediente sea sintético. No se ha solicitado ninguna autorización."
                 : "";
           return { caseId, nextPath, pdfPath: routes.pdf, authorizationFlow, blockedMessage };
         },
         issueAuthorization: async (saved) => {
           const routes = authorizationRoutes(saved.caseId, saved.authorizationFlow);
-          const authority = await fetchJsonFallback(routes.issue, {
+          const authority = await intakeJson(routes.issue, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(routes.issueBody),
@@ -376,7 +379,7 @@ export default function IniciarExpedienteRTM() {
             ? parseLocalAuthorizationIssue(authority, saved.caseId)
             : parseAuthorizationIssueEnvelope(authority, saved.caseId);
         },
-        openAuthorization: (saved) => openBackendFile(saved.pdfPath, saved.caseId),
+        openAuthorization: (saved) => intakeFile(saved.pdfPath, saved.caseId),
       });
       if (completed.authorizationFlow === "vehicle_removal") {
         navigate(`${completed.nextPath}?case=${encodeURIComponent(completed.caseId)}`);
@@ -384,6 +387,7 @@ export default function IniciarExpedienteRTM() {
       }
       setMessage(completed.authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND
         ? "✅ Expediente sintético creado. PDF de prueba preparado; se ha solicitado su descarga. No tiene validez ni acredita representación."
+        : rehearsal ? "✅ Expediente de ensayo creado. Descarga el candidato con firma ficticia y súbelo en el paso siguiente."
         : "✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
     } catch (error) {
       setMessage(error?.message || "No se pudo crear el expediente.");
@@ -409,7 +413,7 @@ export default function IniciarExpedienteRTM() {
       if (localCandidate) appendLocalAuthorizationBinding(fd, draftCase.authorizationBinding, draftCase.caseId);
       else appendAuthorizationDocumentBinding(fd, draftCase.authorizationBinding);
       const routes = authorizationRoutes(draftCase.caseId, draftCase.authorizationFlow);
-      const result = await fetchJsonFallback(routes.candidate, { method: "POST", body: fd });
+      const result = await intakeJson(routes.candidate, { method: "POST", body: fd });
       if (localCandidate) parseLocalAuthorizationCandidate(result, draftCase.caseId);
       else parseAuthorizationCandidateEnvelope(result, draftCase.caseId);
       setAuthorizationUploaded(true);
@@ -424,6 +428,7 @@ export default function IniciarExpedienteRTM() {
   }
 
   function continueToDocuments() {
+    if (rehearsal) { rehearsal.onContinue(draftCase); return; }
     const separator = draftCase.nextPath.includes("?") ? "&" : "?";
     navigate(`${draftCase.nextPath}${separator}case=${encodeURIComponent(draftCase.caseId)}`);
   }
@@ -638,6 +643,7 @@ export default function IniciarExpedienteRTM() {
             <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
               {isVehicleRemoval
                 ? "Cuéntanos lo necesario para abrir el expediente. Después comprobarás el permiso de circulación y revisarás el consentimiento y la cotización específicos antes del pago."
+                : rehearsal ? "Conserva los datos ficticios preparados. Después descarga y sube el candidato de autorización de prueba y continúa con la notificación."
                 : "Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación."}
             </p>
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
@@ -728,9 +734,9 @@ export default function IniciarExpedienteRTM() {
                 </p>
               ) : (
                 <>
-                  <Check disabled={loading} checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización.</Check>
+                  <Check disabled={loading} checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>{rehearsal ? "Confirmo que este ensayo utiliza únicamente datos ficticios y solicito el documento de prueba." : "Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización."}</Check>
                   <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f" }}>
-                    <Check disabled={loading} checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
+                    <Check disabled={loading || Boolean(rehearsal)} checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
                       Quiero valorar una autorización separada y opcional para que un abogado pueda realizar reclamaciones prejudiciales por escrito en este expediente.
                     </Check>
                     <p style={{ margin: "6px 0 0", lineHeight: 1.55 }}>
@@ -757,10 +763,11 @@ export default function IniciarExpedienteRTM() {
               <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading || Boolean(draftCase.blockedMessage)}>{loading ? "Emitiendo documento…" : "Reintentar autorización"}</button>
             </> : <>
             <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading}>{loading ? "Descargando…" : isLocalGeneric ? "⬇ Descargar PDF de prueba RTM" : "⬇ Descargar autorización RTM"}</button>
+            {rehearsal ? <button type="button" className="sr-btn-primary" style={{ marginTop: 16 }} onClick={() => intakeFile(`/cases/${draftCase.caseId}/candidate-fixture`).catch(error => setMessage(error.message))}>Descargar candidato con firma ficticia para subirlo en el ensayo</button> : null}
             <div style={{ marginTop: 18 }}>
-              <UploadBox label={isLocalGeneric ? "PDF candidato de prueba · sin firma real" : "Autorización firmada"} file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
+              <UploadBox label={isLocalGeneric || rehearsal ? "PDF candidato de prueba · sin firma real" : "Autorización firmada"} file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,application/pdf" />
             </div>
-            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : isLocalGeneric ? "Subir candidato de prueba" : "Subir autorización firmada"}</button>
+            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : isLocalGeneric || rehearsal ? "Subir candidato de prueba" : "Subir autorización firmada"}</button>
             {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación (autorización pendiente de revisión)</button>}
             </>}
             {isLocalGeneric ? <button type="button" className="sr-btn-primary" onClick={() => navigate(`/ops/case/${encodeURIComponent(draftCase.caseId)}`)} style={{ marginTop: 16 }}>Ver expediente en OPS</button> : null}
