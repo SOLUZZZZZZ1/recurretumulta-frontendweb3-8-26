@@ -113,7 +113,7 @@ export default function OpsStagingRehearsal() {
       <p className="my-4">{prepared.progress.authorizationStatus === "verified"
         ? "La autorización está verificada. Puedes continuar al resumen para comprobar el pago de prueba."
         : "La autorización vigente está pendiente de revisión personal. Abre su revisión en OPS antes de continuar al pago de prueba."}</p>
-      <Link className="mr-5 underline" to={`/ops/review/${prepared.progress.caseId}`}>Revisar autorización en OPS</Link>
+      <Link className="mr-5 underline" to={`/ops/authorization/${prepared.progress.caseId}`}>Revisar autorización en OPS</Link>
       <Link className="underline" to={`/resumen?case=${prepared.progress.caseId}`}>Ver resumen y estado del pago</Link>
     </main> : null}
   </>;

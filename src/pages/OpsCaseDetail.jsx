@@ -14,6 +14,7 @@ import LocalIntakeRecovery from "../ops-auth/LocalIntakeRecovery.jsx";
 import {
   hasVehiclePreparationConsent,
   isLegalRepresentationVerified,
+  isAuthorizationPendingReview,
   isVehicleRemovalCase,
 } from "../lib/authorizationEvidence.js";
 
@@ -1432,6 +1433,21 @@ export default function OpsCaseDetail() {
               {stageLabel(nextStep.stage)}
             </div>
           </div>
+
+          {canManageLegacy && !vehicleRemoval && isAuthorizationPendingReview(caseData) ? (
+            <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+              <p className="font-bold text-indigo-950">Autorización pendiente de revisión</p>
+              <p className="mt-2 text-sm text-indigo-900">
+                Revisa el candidato recibido antes de continuar al pago del estudio.
+              </p>
+              <Link
+                to={`/ops/authorization/${encodeURIComponent(caseId)}`}
+                className="sr-btn-primary mt-3"
+              >
+                Revisar autorización
+              </Link>
+            </div>
+          ) : null}
 
           {paymentKnown && !paid ? (
             <div

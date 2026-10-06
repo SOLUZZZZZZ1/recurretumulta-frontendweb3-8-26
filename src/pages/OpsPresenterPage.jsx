@@ -21,7 +21,7 @@ export default function OpsPresenterPage() {
 
 function StagingOpsPresenterPage() {
   const { caseId } = useParams();
-  const { session, authFetch, invalidateSession, logout } = useOpsAuth();
+  const { session, authFetch, invalidateSession, logout, canSupervise } = useOpsAuth();
   const [activeCaseId, setActiveCaseId] = useState(caseId || "");
 
   useEffect(() => {
@@ -61,6 +61,14 @@ function StagingOpsPresenterPage() {
             ← Volver al expediente
           </Link>
           <div className="flex flex-wrap items-center gap-3">
+            {canSupervise && EXACT_UUID_PATTERN.test(activeCaseId) ? (
+              <Link
+                to={`/ops/authorization/${encodeURIComponent(activeCaseId)}`}
+                className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-bold text-white"
+              >
+                Revisar autorización
+              </Link>
+            ) : null}
             <Link to={`/ops/manual-presentador?caseId=${encodeURIComponent(activeCaseId || "")}`} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700">Manual del presentador</Link>
             <Link
               to="/ops/presenter/signer"

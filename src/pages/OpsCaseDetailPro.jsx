@@ -471,7 +471,7 @@ function pickLatestAiEvent(events) {
   return [...(events || [])].find((event) => event?.type === "ai_expediente_result") || null;
 }
 
-export default function OpsCaseDetailPro() {
+export default function OpsCaseDetailPro({ authorizationOnly = false }) {
   const { authFetch, canSupervise, session } = useOpsAuth();
   const canManageLegacy = canSupervise;
   const { caseId } = useParams();
@@ -772,6 +772,46 @@ export default function OpsCaseDetailPro() {
   const latestThreeDocs = documents.slice(0, 3);
   const caseControlsDisabled =
     !canManageLegacy || !caseProjectionReady || loading || busyManual;
+
+  if (authorizationOnly) {
+    return (
+      <main className="sr-container" style={{ paddingTop: 18, paddingBottom: 40 }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link to={`/ops/case/${encodeURIComponent(caseId)}`} className="sr-btn-secondary">
+            Volver al expediente
+          </Link>
+          <button type="button" className="sr-btn-secondary" onClick={() => loadCase()} disabled={loading}>
+            {loading ? "Actualizando…" : "Actualizar revisión"}
+          </button>
+        </div>
+        <h1 className="mt-5 text-2xl font-black text-slate-950">Revisar autorización</h1>
+        <p className="mt-2 break-all text-sm text-slate-600">Expediente: {caseId}</p>
+        <p className="mt-3 text-slate-700">
+          Abre el PDF exacto, revisa sus páginas y completa las comprobaciones antes de registrar tu decisión.
+        </p>
+        {error ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-red-800">{error}</p> : null}
+        {canManageLegacy ? (
+          <OpsAuthorizationReview
+            authFetch={authFetch}
+            caseId={caseId}
+            documents={documents}
+            events={events}
+            loading={loading || !caseProjectionReady}
+            onReviewed={() => loadCase({ silent: true })}
+            sessionId={session?.sessionId || ""}
+          />
+        ) : <p role="status" className="mt-4">La decisión requiere una cuenta individual de supervisor.</p>}
+        {caseProjectionReady && !loading && packageStatus.hasAutorizacion ? (
+          <div role="status" className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4">
+            <p className="font-bold text-green-900">Autorización verificada.</p>
+            <Link to={`/resumen?case=${encodeURIComponent(caseId)}`} className="sr-btn-primary mt-3">
+              Ver resumen y estado del pago
+            </Link>
+          </div>
+        ) : null}
+      </main>
+    );
+  }
 
   return (
     <div className="sr-container" style={{ paddingTop: 18, paddingBottom: 40 }}>

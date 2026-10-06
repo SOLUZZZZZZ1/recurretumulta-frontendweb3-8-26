@@ -195,6 +195,7 @@ export default function App() {
               </Suspense>
             }
           />
+          <Route path="/ops/authorization/:caseId" element={<OpsCaseDetailPro authorizationOnly />} />
           <Route path="/ops/review/:caseId" element={<OpsCaseDetailPro />} />
           <Route path="/ops/case/:caseId/review" element={<OpsCaseDetailPro />} />
           <Route path="/ops/pro/:caseId" element={<OpsCaseDetailPro />} />
