@@ -140,3 +140,51 @@ export async function submitFactReview({ authFetch, caseId, record, body, signal
   }), "La respuesta no acredita el dato guardado y su procedencia. Recarga los hechos antes de continuar.");
   return saved;
 }
+
+export function factsPreparationBlockReason(workspace, canSupervise, sessionId, authorizationVerified = false) {
+  if (!sessionId || !canSupervise) return "La preparación requiere una sesión individual de supervisión.";
+  if (!workspace) return "Carga el estado del expediente antes de preparar los hechos.";
+  if (workspace.authority?.validated_facts?.latest_active) return "Ya existe un borrador de hechos. Revisa esa versión.";
+  const meta = workspace.case;
+  if (meta?.department !== "traffic" || meta?.case_type !== "fine") return "Este paso está disponible para expedientes de multa.";
+  if (meta?.payment_status !== "paid") return "La preparación requiere el pago del estudio confirmado.";
+  if (meta?.authorized !== true || authorizationVerified !== true) return "Primero revisa y aprueba la autorización firmada.";
+  if (["submitted", "closed", "archived", "resolved", "estimado", "desestimado", "presentado_manual_ayuntamiento", "presentado_auto_dgt", "presentado_auto_registro", "submitting", "reanalysis_in_progress", "document_extraction_in_progress"].includes(meta?.status)) return "El estado del expediente no admite preparar hechos.";
+  if (workspace.reanalysis?.available !== true) return "Todavía no hay una lectura documental comprobada para preparar los hechos.";
+  const step = workspace.next_step;
+  if (step?.stage !== "validated_facts_pending" || !step.actions?.some(action =>
+    action.code === "create_validated_facts_draft" && action.method === "POST" &&
+    action.endpoint === `/ops/core/cases/${workspace.case_id}/reanalysis/facts-draft`)) {
+    return "El expediente necesita otro paso previo. Recarga el estudio para comprobarlo.";
+  }
+  return "";
+}
+
+export async function prepareReanalysisFacts({ authFetch, workspace, caseId, canSupervise, sessionId, authorizationVerified, signal }) {
+  assert(validId(caseId) && workspace?.case_id === caseId, "El estado no corresponde a este expediente.");
+  const blocked = factsPreparationBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
+  assert(!blocked, blocked);
+  // The server selects its verified extraction. No client-provided facts, review
+  // attestation, supersession, or generation instruction crosses this boundary.
+  const data = await readResponse(await authFetch(`/api/ops/core/cases/${caseId}/reanalysis/facts-draft`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal,
+  }));
+  assert(data.ok === true && data.case_id === caseId && data.persisted === true &&
+    typeof data.adapter_version === "string" && data.adapter_version === workspace.reanalysis.adapter_version,
+    "No se pudo comprobar la preparación. Recarga los hechos antes de repetir.");
+  const saved = verifyFacts(data.facts, caseId);
+  const originals = new Set((workspace.documents || []).filter(doc => doc.kind === "original").map(doc => doc.id));
+  assert(saved.frozen === false && saved.facts.frozen === false && !saved.invalidated_at &&
+    saved.facts.source_document_ids.length > 0 &&
+    saved.facts.source_document_ids.every(id => validId(id) && originals.has(id)),
+    "El borrador no conserva el estado y los documentos esperados. Recarga los hechos.");
+  assert(Object.values(saved.facts.facts).every(fact => fact && Array.isArray(fact.sources) &&
+    fact.sources.every(source => saved.facts.source_document_ids.includes(source.document_id)) &&
+    (fact.status !== "validated" || (fact.sources.length > 0 &&
+      fact.sources.every(source => source.source_type === "deterministic_document")))),
+    "La lectura necesita revisión humana. No se pudo comprobar el borrador recibido.");
+  assert(data.authority_requirements?.model_derived_fields === "unresolved_until_operator_document_review" &&
+    data.authority_requirements?.freeze_requires_document_review_attestation === true,
+    "No se pudo comprobar que los hechos sigan pendientes de revisión.");
+  return saved;
+}

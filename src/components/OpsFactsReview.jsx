@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FACT_FIELDS, factLabel, factValue, fetchFactsWorkspace, reviewBlockReason,
   originalSources, buildFactReviewBody, submitFactReview, missingFactGroups,
+  factsPreparationBlockReason, prepareReanalysisFacts, FactsReviewError,
 } from "../lib/opsFactsReview.js";
 
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
@@ -28,6 +29,9 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   const saveRef = useRef(null);
   const lockRef = useRef(false);
   const editorRef = useRef(null);
+  const recoveryRef = useRef(false);
+  const reviewedRef = useRef(onReviewed);
+  useEffect(() => { reviewedRef.current = onReviewed; }, [onReviewed]);
 
   const reload = useCallback(async () => {
     if (lockRef.current) return;
@@ -37,7 +41,11 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     setLoading(true); setError(""); setWorkspace(null); setField(""); setAdditionalField(""); setForm(EMPTY);
     try {
       const data = await fetchFactsWorkspace({ authFetch, caseId, signal: controller.signal });
-      if (!controller.signal.aborted) { setWorkspace(data); setStale(false); }
+      if (!controller.signal.aborted) {
+        setWorkspace(data); setStale(false);
+        if (recoveryRef.current && data.authority?.validated_facts?.latest_active) reviewedRef.current?.();
+        recoveryRef.current = false;
+      }
     } catch (err) {
       if (!controller.signal.aborted) setError(err.message || "No se pudieron cargar los hechos.");
     } finally {
@@ -61,12 +69,39 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
 
   const record = workspace?.authority?.validated_facts?.latest_active;
   const blocked = reviewBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
+  const preparationBlocked = factsPreparationBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
   const documents = originalSources(workspace);
   const disabled = loading || saving || externalBusy || stale || !!blocked || !documents.length;
   const entries = Object.entries(record?.facts?.facts || {});
   const pending = entries.filter(([, fact]) => fact.status !== "validated").length;
   const missingGroups = missingFactGroups(record);
   const adding = !!field && !Object.hasOwn(record?.facts?.facts || {}, field);
+
+
+  async function prepare() {
+    if (loading || saving || externalBusy || stale || preparationBlocked || lockRef.current) return;
+    lockRef.current = true; setSaving(true); setError(""); setMessage("");
+    const controller = new AbortController();
+    saveRef.current = controller;
+    try {
+      const saved = await prepareReanalysisFacts({
+        authFetch, workspace, caseId, canSupervise, sessionId, authorizationVerified, signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setWorkspace(current => ({ ...current, authority: { ...current.authority,
+        validated_facts: { ...current.authority?.validated_facts, latest_active: saved } } }));
+      setMessage("Hechos preparados. Contrasta los datos con el original antes de confirmarlos y continuar el estudio.");
+      onReviewed?.();
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setError(err instanceof FactsReviewError ? err.message : "No se pudo comprobar la preparación. Pulsa Recargar hechos antes de volver a intentarlo.");
+        recoveryRef.current = true; setStale(true);
+      }
+    } finally {
+      lockRef.current = false;
+      if (!controller.signal.aborted) setSaving(false);
+    }
+  }
 
   function edit(name) {
     if (disabled) return;
@@ -98,7 +133,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
       if (!controller.signal.aborted) {
         setError(err.message || "No se pudo comprobar el guardado. Recarga los hechos.");
         // También para una respuesta perdida: comprobar antes de repetir la escritura.
-        setStale(true); setField(""); setForm(EMPTY);
+        recoveryRef.current = true; setStale(true); setField(""); setForm(EMPTY);
       }
     } finally {
       lockRef.current = false;
@@ -116,6 +151,17 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     {message ? <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p> : null}
     {loading ? <p role="status" className="mt-4 text-sm text-slate-600">Cargando hechos…</p> : null}
     {!loading && blocked ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{blocked}</p> : null}
+
+    {!loading && workspace && !record ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+      <h3 className="font-semibold text-slate-900">Preparar los hechos de la lectura</h3>
+      <p className="mt-2 text-sm text-slate-700">Utiliza la lectura ya guardada para crear el borrador de hechos. Después podrás contrastar y corregir cada dato con el original. Este paso no vuelve a ejecutar la IA ni genera el recurso.</p>
+      {preparationBlocked ? <p className="mt-2 text-sm text-amber-900">{preparationBlocked}</p> : null}
+      <button type="button" className={`${BUTTON} mt-3`} onClick={prepare}
+        disabled={saving || externalBusy || stale || !!preparationBlocked}>
+        {saving ? "Preparando hechos…" : "Preparar hechos para revisar"}
+      </button>
+    </div> : null}
+
     {record ? <>
       <div className="my-4 flex flex-wrap gap-2 text-xs font-semibold">
         <span className="rounded-full bg-slate-100 px-3 py-1.5">Versión {record.sequence} · {record.frozen ? "Cerrada" : "Borrador"}</span>

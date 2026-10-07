@@ -1,3 +1,4 @@
+import { latestCompletedAnalysisEvent } from "../lib/opsAnalysisStatus.js";
 import React, {
   useCallback,
   useEffect,
@@ -758,7 +759,7 @@ export default function OpsCaseDetailPro({ authorizationOnly = false }) {
     if (!addressEdit) setAddressEdit(next.address || "");
   }, [channelEdit, entityEdit, destinationEdit, addressEdit]);
 
-  const latestAiEvent = useMemo(() => pickLatestAiEvent(events), [events]);
+  const latestAiEvent = useMemo(() => latestCompletedAnalysisEvent(events), [events]);
 
   const confianzaNum = Number(ai.confianza);
   const confianzaPct = Number.isFinite(confianzaNum)
@@ -947,6 +948,14 @@ export default function OpsCaseDetailPro({ authorizationOnly = false }) {
             La presencia de los tres documentos no acredita que el recurso sea
             correcto, esté aprobado ni listo para presentar.
           </p>
+          {!packageStatus.hasRecurso ? <div className="mt-3 text-sm text-slate-700">
+            <p>El recurso todavía no se ha generado. Primero prepara y revisa los hechos; después continúa el estudio del expediente.</p>
+            <div className="mt-2 flex flex-wrap gap-4">
+              <a href="#ops-facts-review" className="font-semibold text-blue-700 underline">Preparar o revisar hechos</a>
+              <a href="#ops-core-study" className="font-semibold text-blue-700 underline">Continuar estudio</a>
+            </div>
+          </div> : null}
+
         </div>
       </div>
 
