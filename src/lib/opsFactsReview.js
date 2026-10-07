@@ -6,6 +6,7 @@ export const FACT_FIELDS = Object.freeze({
   matricula: ["Matrícula", "text"], hecho_denunciado_literal: ["Hecho denunciado", "text"],
   lugar_infraccion: ["Lugar de la infracción", "text"], hora_infraccion: ["Hora", "text"],
   tipo_documento: ["Tipo de documento", "text"], fase_procedimental: ["Fase del procedimiento", "text"],
+  radar_modelo_hint: ["Modelo de radar indicado", "text"],
   norma_hint: ["Norma indicada", "text"], articulo_infringido_num: ["Artículo", "text"],
   apartado_infringido_num: ["Apartado", "text"], fecha_notificacion: ["Fecha de notificación", "date"],
   fecha_documento: ["Fecha del documento", "date"], fecha_infraccion: ["Fecha de la infracción", "date"],
@@ -28,7 +29,7 @@ export const FACT_GROUPS = Object.freeze([
   { label: "Expediente y trámite", fields: ["organismo", "expediente_ref", "matricula", "hecho_denunciado_literal", "tipo_documento", "fase_procedimental"] },
   { label: "Lugar y fechas", fields: ["lugar_infraccion", "fecha_infraccion", "hora_infraccion", "fecha_documento", "fecha_notificacion", "fecha_limite"] },
   { label: "Norma y pruebas de estacionamiento", fields: ["norma_hint", "articulo_infringido_num", "apartado_infringido_num", "ordenanza_aplicable", "senalizacion_estacionamiento", "horario_estacionamiento", "autorizacion_estacionamiento", "tipo_denunciante", "fotografia_vehiculo_presente", "prueba_estacionamiento", "contradiccion_estacionamiento"] },
-  { label: "Importes, pago y otros datos", fields: ["sancion_importe_eur", "importe_reducido_eur", "pago_multa_reducido", "puntos_detraccion", "plazo_pago_dias", "velocidad_medida_kmh", "velocidad_limite_kmh"] },
+  { label: "Importes, pago y otros datos", fields: ["radar_modelo_hint", "sancion_importe_eur", "importe_reducido_eur", "pago_multa_reducido", "puntos_detraccion", "plazo_pago_dias", "velocidad_medida_kmh", "velocidad_limite_kmh"] },
 ]);
 
 export function missingFactGroups(record) {
@@ -92,15 +93,20 @@ export function originalSources(workspace) {
 }
 export function buildFactReviewBody({ record, field, value, documentId, page, evidence, reason, checked, operation = "correct" }) {
   assert(checked === true, "Confirma que has contrastado el dato con el documento original.");
-  assert(["correct", "add"].includes(operation) && Object.hasOwn(FACT_FIELDS, field), "Campo u operación no admitidos.");
+  assert(["correct", "add", "exclude"].includes(operation) && Object.hasOwn(FACT_FIELDS, field), "Campo u operación no admitidos.");
   assert(operation === "add" ? !Object.hasOwn(record.facts.facts, field) : Object.hasOwn(record.facts.facts, field),
     operation === "add" ? "El dato ya existe. Recarga y utiliza Revisar." : "Campo no editable en esta versión.");
   assert(validId(documentId) && record.facts.source_document_ids.includes(documentId), "Selecciona un documento de esta versión.");
   assert(/^\d+$/.test(String(page)) && Number(page) >= 1 && Number(page) <= 10000, "Indica la página del original (desde 1).");
-  assert(typeof value === "string" && value.trim().length > 0, "Introduce el valor contrastado.");
+  const excluding = operation === "exclude";
+  assert(!excluding || ["unresolved", "conflicted"].includes(record.facts.facts[field]?.status),
+    "Solo se pueden descartar lecturas pendientes, no hechos confirmados.");
+  assert(!excluding || value === "", "Al descartar la lectura no debes introducir un valor.");
+  assert(excluding || (typeof value === "string" && value.trim().length > 0), "Introduce el valor contrastado.");
   const kind = FACT_FIELDS[field][1];
-  let typed = value.trim();
-  if (kind === "number" || kind === "integer") {
+  let typed = excluding ? null : value.trim();
+  if (excluding) { /* Absence remains unknown. */ }
+  else if (kind === "number" || kind === "integer") {
     assert(/^\d+(?:[.,]\d+)?$/.test(typed), "Introduce un número no negativo.");
     typed = Number(typed.replace(",", "."));
     assert(Number.isFinite(typed) && typed <= (kind === "integer" ? 100000 : 100000000)
@@ -119,7 +125,7 @@ export function buildFactReviewBody({ record, field, value, documentId, page, ev
   assert(HASH.test(record.payload_sha256), "La versión de origen no es válida.");
   return { expected_payload_sha256: record.payload_sha256, reason: reason.trim(), changes: [{
     field, value: typed, document_id: documentId, page_index: Number(page) - 1, evidence: evidence.trim(),
-    ...(operation === "add" ? { operation: "add" } : {}),
+    ...(operation !== "correct" ? { operation } : {}),
   }] };
 }
 export async function submitFactReview({ authFetch, caseId, record, body, signal }) {
@@ -133,6 +139,8 @@ export async function submitFactReview({ authFetch, caseId, record, body, signal
   assert(saved.id !== record.id && saved.supersedes_id === record.id && saved.frozen === false && !saved.invalidated_at,
     "No se pudo comprobar la nueva versión del borrador. Recarga los hechos.");
   assert(body.changes.every(change => {
+    if (change.operation === "exclude") return !Object.hasOwn(saved.facts.facts, change.field) &&
+      !saved.facts.unresolved?.includes(change.field);
     const fact = saved.facts.facts[change.field];
     return fact?.status === "validated" && fact.value === change.value && !fact.conflicts?.length &&
       fact.sources?.some(source => source.source_type === "operator_document_review" &&

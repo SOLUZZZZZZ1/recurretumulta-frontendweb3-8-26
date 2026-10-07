@@ -106,3 +106,33 @@ test("a new version without the exact added value and documentary source is reje
     await assert.rejects(run({...saved,facts:{...saved.facts,facts:{...saved.facts.facts,pago_multa_reducido:bad}}}));
   }
 });
+
+test("radar model is an editable documentary field included once in the catalog", () => {
+  const result=buildFactReviewBody({...form,field:"radar_modelo_hint",operation:"add",value:"CINEMÓMETRO MULTANOVA"});
+  assert.equal(result.changes[0].value,"CINEMÓMETRO MULTANOVA");
+  assert.equal(FACT_GROUPS.flatMap(g=>g.fields).filter(f=>f==="radar_modelo_hint").length,1);
+});
+test("excluding a pending reading requires explicit human review and sends null, never a substitute fact", () => {
+  const base={...form,operation:"exclude",value:""};
+  const result=buildFactReviewBody(base);
+  assert.equal(result.changes[0].operation,"exclude");
+  assert.equal(result.changes[0].value,null);
+  assert.equal(result.changes[0].document_id,doc);
+  for(const params of [{checked:false},{value:"No consta"},{reason:""},{evidence:""},{documentId:caseId},
+    {record:{...record,facts:{...record.facts,facts:{...record.facts.facts,fecha_notificacion:{status:"validated",value:"2026-09-20"}}}}}]) {
+    assert.throws(()=>buildFactReviewBody({...base,...params}));
+  }
+});
+test("exclusion response must be a new unfrozen version with the reading removed from pending facts", async () => {
+  const body=buildFactReviewBody({...form,operation:"exclude",value:""});
+  const saved={...record,id:"30000000-0000-4000-8000-000000000002",supersedes_id:record.id,sequence:2,
+    facts:{...record.facts,unresolved:["puntos_detraccion"],facts:{puntos_detraccion:record.facts.facts.puntos_detraccion}}};
+  let calls=0;
+  const run=facts=>submitFactReview({caseId,record,body,authFetch:async(url,options)=>{
+    calls++;assert.equal(url,`/api/ops/core/cases/${caseId}/validated-facts/${record.id}/review`);
+    assert.deepEqual(JSON.parse(options.body),body);return response({ok:true,case_id:caseId,facts});}});
+  assert.equal(await run(saved),saved);
+  for(const bad of [record,{...saved,frozen:true},{...saved,facts:{...saved.facts,unresolved:["fecha_notificacion"]}},
+    {...saved,facts:{...saved.facts,facts:{...saved.facts.facts,fecha_notificacion:{status:"validated",value:0}}}}]) await assert.rejects(run(bad));
+  assert.equal(calls,5);
+});

@@ -8,7 +8,7 @@ import {
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
 const BUTTON = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
 const STATUS = { validated: "Confirmado", unresolved: "Pendiente", conflicted: "En conflicto", rejected: "Descartado" };
-const EMPTY = { value: "", documentId: "", page: "", evidence: "", reason: "", checked: false };
+const EMPTY = { value: "", documentId: "", page: "", evidence: "", reason: "", checked: false, exclude: false };
 
 // La clave descarta inmediatamente los datos al cambiar de expediente o sesión.
 export default function OpsFactsReview(props) {
@@ -76,6 +76,8 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   const pending = entries.filter(([, fact]) => fact.status !== "validated").length;
   const missingGroups = missingFactGroups(record);
   const adding = !!field && !Object.hasOwn(record?.facts?.facts || {}, field);
+  const excluding = !!field && !adding && form.exclude;
+  const canExclude = !!field && !adding && ["unresolved", "conflicted"].includes(record?.facts?.facts?.[field]?.status);
 
 
   async function prepare() {
@@ -110,13 +112,13 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     setForm({ ...EMPTY, documentId: documents.length === 1 ? documents[0].id : "" });
   }
   function change(name, value) {
-    setForm(current => ({ ...current, [name]: value, checked: name === "checked" ? value : false }));
+    setForm(current => ({ ...current, ...(name === "exclude" ? { value: "", evidence: "", reason: "" } : {}), [name]: value, checked: name === "checked" ? value : false }));
   }
   async function save(event) {
     event.preventDefault();
     if (disabled || lockRef.current) return;
     let body;
-    try { body = buildFactReviewBody({ record, field, ...form, operation: adding ? "add" : "correct" }); }
+    try { body = buildFactReviewBody({ record, field, ...form, operation: adding ? "add" : excluding ? "exclude" : "correct" }); }
     catch (err) { setError(err.message); return; }
     lockRef.current = true; setSaving(true); setError(""); setMessage("");
     const controller = new AbortController();
@@ -127,7 +129,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
       setWorkspace(current => ({ ...current, authority: { ...current.authority,
         validated_facts: { ...current.authority.validated_facts, latest_active: saved } } }));
       setField(""); setAdditionalField(""); setForm(EMPTY);
-      setMessage(`${adding ? "Dato incorporado" : "Corrección guardada"} en la versión ${saved.sequence}. El borrador sigue pendiente de revisión final.`);
+      setMessage(`${adding ? "Dato incorporado" : excluding ? "Lectura descartada" : "Corrección guardada"} en la versión ${saved.sequence}. El borrador sigue pendiente de revisión final.`);
       onReviewed?.();
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -202,14 +204,15 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     {field ? <form onSubmit={save} className="mt-5 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
       <h3 ref={editorRef} tabIndex={-1} className="font-semibold text-slate-900">{adding ? "Incorporar" : "Revisar"}: {factLabel(field)}</h3>
       <fieldset disabled={disabled} className="mt-3 grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium">Valor contrastado{FACT_FIELDS[field][1] === "boolean" ? <select id="ops-fact-value" className={INPUT} value={form.value} required onChange={e => change("value", e.target.value)}><option value="">Selecciona según el documento</option><option value="true">Sí</option><option value="false">No</option></select> : <input id="ops-fact-value" className={INPUT} type={FACT_FIELDS[field][1] === "date" ? "date" : "text"} inputMode={["number", "integer"].includes(FACT_FIELDS[field][1]) ? "decimal" : undefined} value={form.value} maxLength={4000} required onChange={e => change("value", e.target.value)} />}
+        {canExclude ? <label className="flex items-start gap-2 text-sm md:col-span-2"><input className="mt-1" type="checkbox" checked={form.exclude} onChange={e => change("exclude", e.target.checked)} />Descartar esta lectura porque no consta en el original revisado. Se conservará en la versión anterior.</label> : null}
+        {!excluding ? <label className="text-sm font-medium">Valor contrastado{FACT_FIELDS[field][1] === "boolean" ? <select id="ops-fact-value" className={INPUT} value={form.value} required onChange={e => change("value", e.target.value)}><option value="">Selecciona según el documento</option><option value="true">Sí</option><option value="false">No</option></select> : <input id="ops-fact-value" className={INPUT} type={FACT_FIELDS[field][1] === "date" ? "date" : "text"} inputMode={["number", "integer"].includes(FACT_FIELDS[field][1]) ? "decimal" : undefined} value={form.value} maxLength={4000} required onChange={e => change("value", e.target.value)} />}
           {field === "pago_multa_reducido" ? <span className="mt-1 block text-xs font-normal text-slate-600">Se refiere al pago de la multa a la Administración. El pago del servicio de RTM es independiente.</span> : null}
-        </label>
+        </label> : <p className="text-sm text-slate-700 md:col-span-2">El dato seguirá sin conocerse. Documenta qué has comprobado y por qué descartas esta lectura; no se sustituirá por un cero, una fecha ni un «No».</p>}
         <label className="text-sm font-medium">Documento original<select className={INPUT} value={form.documentId} required onChange={e => change("documentId", e.target.value)}><option value="">Selecciona el original</option>{documents.map((doc, index) => <option key={doc.id} value={doc.id}>Original {index + 1} · {doc.id}</option>)}</select></label>
         <label className="text-sm font-medium">Página del original<input className={INPUT} type="number" min="1" max="10000" step="1" required value={form.page} onChange={e => change("page", e.target.value)} /><span className="mt-1 block text-xs font-normal text-slate-600">La primera página es la 1. Una imagen individual cuenta como una página.</span></label>
-        <label className="text-sm font-medium">Fragmento que respalda el dato<textarea className={INPUT} rows={2} minLength={3} maxLength={2000} required value={form.evidence} onChange={e => change("evidence", e.target.value)} /></label>
-        <label className="text-sm font-medium md:col-span-2">{adding ? "Motivo de la incorporación" : "Motivo de la corrección"}<textarea className={INPUT} rows={2} minLength={3} maxLength={2000} required value={form.reason} onChange={e => change("reason", e.target.value)} /></label>
-        <label className="flex items-start gap-2 text-sm md:col-span-2"><input className="mt-1" type="checkbox" checked={form.checked} required onChange={e => change("checked", e.target.checked)} />He contrastado este dato, su página y el fragmento con el documento original.</label>
+        <label className="text-sm font-medium">{excluding ? "Comprobación del original que justifica el descarte" : "Fragmento que respalda el dato"}<textarea className={INPUT} rows={2} minLength={3} maxLength={2000} required value={form.evidence} onChange={e => change("evidence", e.target.value)} /></label>
+        <label className="text-sm font-medium md:col-span-2">{adding ? "Motivo de la incorporación" : excluding ? "Motivo del descarte" : "Motivo de la corrección"}<textarea className={INPUT} rows={2} minLength={3} maxLength={2000} required value={form.reason} onChange={e => change("reason", e.target.value)} /></label>
+        <label className="flex items-start gap-2 text-sm md:col-span-2"><input className="mt-1" type="checkbox" checked={form.checked} required onChange={e => change("checked", e.target.checked)} />{excluding ? "He revisado el original y confirmo que esta lectura no consta; he indicado la página, la comprobación y el motivo." : "He contrastado este dato, su página y el fragmento con el documento original."}</label>
         <div className="flex flex-wrap gap-2 md:col-span-2"><button type="submit" disabled={!form.checked || disabled} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar nueva versión"}</button><button type="button" className={BUTTON} onClick={() => { setField(""); setForm(EMPTY); }}>Cancelar</button></div>
       </fieldset>
       <p className="mt-3 text-xs text-slate-600">Este paso actualiza los hechos y la guía de preparación. Los borradores preparados con una versión anterior deberán revisarse. El cierre de hechos, la aprobación del recurso y la presentación requieren sus revisiones posteriores.</p>
