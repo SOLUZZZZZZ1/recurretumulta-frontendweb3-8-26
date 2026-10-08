@@ -38,6 +38,55 @@ test("structured candidate prefills exact value, page and excerpt without an att
   assert.deepEqual({ record, projection }, before);
 });
 
+test("the live DD/MM/YYYY document date prepares ISO without changing its original quote or confirming it", () => {
+  const evidence = "Fecha del escrito · FICTICIA\n05/10/2026";
+  const field = { key: "fecha_documento", value: "05/10/2026", status: "candidate", sources: [
+    { ...source, evidence, source_type: "original_pdf_text", extraction_method: "rtm_original_pdf_literal_anchor_v1" },
+  ] };
+  const workingDocument = { ...projection, fields: [field] };
+  const before = structuredClone({ record, workingDocument });
+  const item = byKey(factReviewSuggestions(record, workingDocument), "fecha_documento");
+  assert.equal(item.ready, true);
+  assert.equal(item.value, "05/10/2026");
+  assert.equal(item.form.value, "2026-10-05");
+  assert.equal(item.form.evidence, evidence);
+  assert.equal(item.form.page, "1");
+  assert.equal(item.form.documentId, documentId);
+  assert.equal(item.form.checked, false);
+  const proposals = prepareAvailableFactProposals(record, workingDocument);
+  assert.equal(proposals.length, 1);
+  assert.equal(proposals[0].checked, false);
+  assert.throws(() => buildFactReviewBatchBody({ record, proposals, checked: false }));
+  const change = buildFactReviewBatchBody({ record, proposals, checked: true }).changes[0];
+  assert.equal(change.value, "2026-10-05");
+  assert.equal(change.evidence, evidence);
+  assert.deepEqual({ record, workingDocument }, before);
+});
+
+test("date proposals preserve ISO, validate leap years and reject other or invalid date formats", () => {
+  function documentDate(value) {
+    return { ...projection, fields: [{ key: "fecha_documento", value, status: "candidate", sources: [
+      { ...source, evidence: `Fecha del escrito: ${value}`, source_type: "original_pdf_text" },
+    ] }] };
+  }
+  for (const [value, iso] of [["2026-10-05", "2026-10-05"], ["29/02/2024", "2024-02-29"],
+    ["2024-02-29", "2024-02-29"], ["01/01/0001", "0001-01-01"]]) {
+    const item = byKey(factReviewSuggestions(record, documentDate(value)), "fecha_documento");
+    assert.equal(item.form.value, iso, value);
+    assert.equal(item.ready, true, value);
+    assert.equal(item.form.checked, false, value);
+  }
+  for (const value of ["29/02/2026", "31/04/2026", "00/10/2026", "05/13/2026", "05/10/0000",
+    "2026-02-29", "2026-04-31", "0000-10-05", "5/10/2026", "05/10/26", "05-10-2026",
+    "2026/10/05", "2026-10-05T00:00:00Z", "October 5, 2026", "10/2026", 20261005]) {
+    const document = documentDate(value);
+    const item = byKey(factReviewSuggestions(record, document), "fecha_documento");
+    assert.equal(item.form.value, "", String(value));
+    assert.equal(item.ready, false, String(value));
+    assert.deepEqual(prepareAvailableFactProposals(record, document), [], String(value));
+  }
+});
+
 test("candidate projection must bind to both the case and exact facts version", () => {
   for (const change of [{ case_id: documentId }, { facts_id: documentId },
     { facts_payload_sha256: "c".repeat(64) }, { version: "different" }]) {
