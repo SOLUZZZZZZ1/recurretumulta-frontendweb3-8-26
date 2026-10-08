@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FACT_FIELDS, factLabel, factValue, fetchFactsWorkspace, reviewBlockReason,
   originalSources, buildFactReviewBody, submitFactReview, missingFactGroups,
   prepareFactReviewProposal, buildFactReviewBatchBody,
   factsPreparationBlockReason, prepareReanalysisFacts, FactsReviewError,
 } from "../lib/opsFactsReview.js";
+import { factReviewSuggestions, prepareAvailableFactProposals } from "../lib/opsFactSuggestions.js";
 
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
 const BUTTON = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 disabled:cursor-not-allowed disabled:opacity-50";
@@ -16,7 +17,7 @@ export default function OpsFactsReview(props) {
   return <FactsReviewPanel key={`${props.caseId}:${props.sessionId}:${props.canSupervise}:${props.authorizationVerified === true}`} {...props} />;
 }
 
-function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authorizationVerified = false, onReviewed, onEditingChange, externalBusy = false }) {
+function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authorizationVerified = false, onReviewed, onEditingChange, externalBusy = false, workingDocument = null }) {
   const [workspace, setWorkspace] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,12 +72,18 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   }, [field, proposals.length, saving, onEditingChange]);
 
   const record = workspace?.authority?.validated_facts?.latest_active;
+  const suggestions = useMemo(() => factReviewSuggestions(record, workingDocument), [record, workingDocument]);
+  const byField = new Map(suggestions.map(item => [item.field, item]));
   const blocked = reviewBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
   const preparationBlocked = factsPreparationBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
   const documents = originalSources(workspace);
   const disabled = loading || saving || externalBusy || stale || !!blocked || !documents.length;
-  const entries = Object.entries(record?.facts?.facts || {});
-  const pending = entries.filter(([, fact]) => fact.status !== "validated").length;
+  const entries = [...Object.entries(record?.facts?.facts || {}),
+    ...suggestions.filter(item => !Object.hasOwn(record?.facts?.facts || {}, item.field))
+      .map(item => [item.field, { value: null, status: "unresolved", sources: item.sources }])];
+  const pending = entries.filter(([name, fact]) => fact.status !== "validated" || byField.get(name)?.conflict).length;
+  const available = suggestions.filter(item => item.ready && !item.confirmed && !proposals.some(proposal => proposal.field === item.field));
+  const exceptions = suggestions.filter(item => !item.excluded && (item.conflict || (!item.confirmed && !item.ready)));
   const missingGroups = missingFactGroups(record);
   const adding = !!field && !Object.hasOwn(record?.facts?.facts || {}, field);
   const excluding = !!field && !adding && form.exclude;
@@ -111,17 +118,25 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   function edit(name) {
     if (disabled) return;
     setField(name); setError(""); setMessage(""); setBatchChecked(false);
-    // Solo recuperar valores preparados en este formulario, nunca lecturas de IA.
+    // A structured reading may prefill a proposal; it never checks a human review.
     const prepared = proposals.find(item => item.field === name);
     setForm(prepared ? { ...EMPTY, ...prepared, checked: false } :
-      { ...EMPTY, documentId: documents.length === 1 ? documents[0].id : "" });
+      { ...EMPTY, ...(byField.get(name)?.form || { documentId: documents.length === 1 ? documents[0].id : "" }), checked: false });
   }
   function change(name, value) {
     setForm(current => ({ ...current, ...(name === "exclude" ? { value: "", evidence: "", reason: "" } : {}), [name]: value, checked: name === "checked" ? value : false }));
   }
   function currentProposal() {
     return { ...form, field, checked: false, sourceHash: record.payload_sha256,
+      originalValue: record?.facts?.facts?.[field]?.value ?? null,
       operation: adding ? "add" : excluding ? "exclude" : "correct" };
+  }
+  function stageAvailable() {
+    if (disabled || field || lockRef.current) return;
+    const next = prepareAvailableFactProposals(record, workingDocument, proposals);
+    if (next.length > 50) { setError("La revisión conjunta admite hasta 50 datos."); return; }
+    setProposals(next); setBatchChecked(false); setError("");
+    setMessage("Lecturas disponibles preparadas. Revisa el conjunto; todavía no se ha guardado ni confirmado.");
   }
   function stageCurrent() {
     if (disabled || lockRef.current) return;
@@ -182,7 +197,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   return <section id="ops-facts-review" aria-labelledby="facts-review-title" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 id="facts-review-title" className="text-lg font-semibold text-slate-900">Hechos del expediente</h2>
-        <p className="mt-1 max-w-3xl text-sm text-slate-600">Contrasta cada dato con el original. Puedes corregir los datos existentes o añadir los que falten; cada guardado conserva la versión anterior, el supervisor y el motivo.</p></div>
+        <p className="mt-1 max-w-3xl text-sm text-slate-600">Las lecturas disponibles aparecen con su fuente para que no tengas que volver a transcribirlas. Corrige las discrepancias y completa lo que falte; las propuestas siguen sin confirmar.</p></div>
       <button type="button" className={BUTTON} onClick={reload} disabled={loading || saving || externalBusy || !sessionId || (!stale && (!!field || !!proposals.length))}>Recargar hechos</button>
     </div>
     {error ? <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
@@ -205,14 +220,27 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
         <span className="rounded-full bg-slate-100 px-3 py-1.5">Versión {record.sequence} · {record.frozen ? "Cerrada" : "Borrador"}</span>
         <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-900">{pending} {pending === 1 ? "dato pendiente o por revisar" : "datos pendientes o por revisar"}</span>
       </div>
-      <p className="mb-3 text-xs text-slate-600">El contador incluye los datos ya incorporados. Puede faltar información necesaria para preparar el recurso.</p>
+      <p className="mb-3 text-xs text-slate-600">Los datos confirmados se conservan. Una propuesta precargada todavía necesita revisión; los datos desconocidos siguen pendientes.</p>
+      {suggestions.length ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+        <h3 className="font-semibold text-slate-900">Datos disponibles y diferencias</h3>
+        <p className="mt-1 text-sm text-slate-700">{suggestions.filter(item => item.confirmed && !item.conflict).length} confirmados sin discrepancias · {available.length} propuestas completas por preparar · {exceptions.length} por completar o contrastar.</p>
+        {exceptions.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-900">{exceptions.map(item => <li key={item.field}>
+          <strong>{item.label}:</strong> {item.conflict ? "hay lecturas discrepantes; revisa el dato y sus fuentes." : item.validationMessage || `Falta ${item.missing.join(", ")}.`}
+        </li>)}</ul> : null}
+        {available.length ? <button type="button" className={`${BUTTON} mt-3`} disabled={disabled || !!field} onClick={stageAvailable}>Preparar {available.length} lecturas disponibles</button> : null}
+      </div> : null}
       {!documents.length ? <p className="mb-3 text-sm text-amber-800">No hay documentos originales vinculados disponibles para respaldar una corrección.</p> : null}
       <div className="overflow-x-auto"><table className="w-full text-left text-sm">
         <caption className="sr-only">Datos del borrador y procedencia documental</caption>
         <thead className="bg-slate-50 text-xs text-slate-600"><tr><th scope="col" className="p-3">Dato</th><th scope="col" className="p-3">Valor y procedencia</th><th scope="col" className="p-3">Estado</th><th scope="col" className="p-3">Revisión</th></tr></thead>
         <tbody>{entries.map(([name, fact]) => <tr key={name} className="border-b border-slate-100 align-top">
           <th scope="row" className="p-3 font-medium text-slate-900">{factLabel(name)}</th>
-          <td className="max-w-xl p-3"><div className="whitespace-pre-wrap break-words">{factValue(fact.value)}</div>
+          <td className="max-w-xl p-3"><div className="whitespace-pre-wrap break-words">{factValue(byField.get(name)?.candidate ? byField.get(name).value : fact.value)}</div>
+            {byField.get(name)?.candidate ? <div className="mt-2 text-xs text-amber-900">
+              <p className="font-semibold">Propuesta sin confirmar</p>
+              <p>{byField.get(name).form.page ? `Página ${byField.get(name).form.page}` : "Página pendiente de localizar"}</p>
+              {byField.get(name).form.evidence ? <p className="mt-1 whitespace-pre-wrap break-words">{byField.get(name).form.evidence}</p> : null}
+            </div> : null}
             {(fact.sources?.length || fact.notes?.length || fact.conflicts?.length) ? <details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer">Ver procedencia y observaciones</summary>
               {(fact.sources || []).map((source, index) => <p className="mt-2 whitespace-pre-wrap break-words" key={index}>
                 {source.source_type === "operator_document_review" ? "Revisión humana" : "Lectura documental"} · {source.document_id}
@@ -220,7 +248,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
                 {source.evidence ? ` — ${source.evidence}` : ""}</p>)}
               {[...(fact.conflicts || []), ...(fact.notes || [])].map((note, index) => <p key={index} className="mt-2 whitespace-pre-wrap break-words">{note}</p>)}
             </details> : null}</td>
-          <td className={`p-3 font-medium ${fact.status === "validated" ? "text-emerald-800" : "text-amber-800"}`}>{STATUS[fact.status] || "Por revisar"}</td>
+          <td className={`p-3 font-medium ${fact.status === "validated" && !byField.get(name)?.conflict ? "text-emerald-800" : "text-amber-800"}`}>{byField.get(name)?.conflict ? "Discrepancia por revisar" : STATUS[fact.status] || "Por revisar"}</td>
           <td className="p-3">{Object.hasOwn(FACT_FIELDS, name) ? <button type="button" className={BUTTON} disabled={disabled || !!field} aria-label={`Revisar ${factLabel(name)}`} onClick={() => edit(name)}>Revisar</button> : <span className="text-xs text-slate-500">Revisión especializada</span>}</td>
         </tr>)}</tbody>
       </table></div>
@@ -243,6 +271,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
       <div className="mt-3 space-y-3">{proposals.map(item => <article key={item.field} className="rounded-lg border border-slate-200 bg-white p-3">
         <h4 className="font-semibold">{factLabel(item.field)} · {item.operation === "exclude" ? "Descartar lectura" : item.operation === "add" ? "Añadir dato" : "Corregir dato"}</h4>
         <p className="mt-1 whitespace-pre-wrap break-words text-sm">{item.operation === "exclude" ? "Seguirá sin conocerse; no se asigna otro valor." : factValue(item.previewValue)}</p>
+        {item.originalValue !== null && item.originalValue !== undefined && item.originalValue !== item.previewValue ? <p className="mt-1 text-xs text-amber-900">Valor anterior: {factValue(item.originalValue)}</p> : null}
         <p className="mt-2 text-xs font-medium text-slate-600">Original {documents.findIndex(doc => doc.id === item.documentId) + 1} · página {item.page}</p>
         <p className="mt-1 whitespace-pre-wrap break-words text-sm">{item.evidence}</p>
         <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-600">Motivo: {item.reason}</p>
@@ -260,6 +289,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     </form> : null}
     {field ? <form onSubmit={save} className="mt-5 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
       <h3 ref={editorRef} tabIndex={-1} className="font-semibold text-slate-900">{adding ? "Incorporar" : "Revisar"}: {factLabel(field)}</h3>
+      {byField.get(field)?.candidate ? <p className="mt-2 text-sm text-amber-900">Hemos recuperado la lectura disponible y su procedencia. Compruébala con el original; esta precarga no confirma el dato.</p> : null}
       <fieldset disabled={disabled} className="mt-3 grid gap-4 md:grid-cols-2">
         {canExclude ? <label className="flex items-start gap-2 text-sm md:col-span-2"><input className="mt-1" type="checkbox" checked={form.exclude} onChange={e => change("exclude", e.target.checked)} />Descartar esta lectura porque no consta en el original revisado. Se conservará en la versión anterior.</label> : null}
         {!excluding ? <label className="text-sm font-medium">Valor contrastado{FACT_FIELDS[field][1] === "boolean" ? <select id="ops-fact-value" className={INPUT} value={form.value} required onChange={e => change("value", e.target.value)}><option value="">Selecciona según el documento</option><option value="true">Sí</option><option value="false">No</option></select> : <input id="ops-fact-value" className={INPUT} type={FACT_FIELDS[field][1] === "date" ? "date" : "text"} inputMode={["number", "integer"].includes(FACT_FIELDS[field][1]) ? "decimal" : undefined} value={form.value} maxLength={4000} required onChange={e => change("value", e.target.value)} />}
