@@ -17,6 +17,7 @@ import OpsFactsReview from "../components/OpsFactsReview.jsx";
 import OpsCoreStudy from "../components/OpsCoreStudy.jsx";
 import OpsPostFilingDeadlines from "../components/OpsPostFilingDeadlines.jsx";
 import OpsWorkingDraft from "../components/OpsWorkingDraft.jsx";
+import OpsWorkingDocument from "../components/OpsWorkingDocument.jsx";
 import { currentLocalOpsDevelopmentEnabled } from "../ops-auth/opsLocalDevelopment.js";
 
 const API = "/api";
@@ -493,6 +494,7 @@ export default function OpsCaseDetailPro({ authorizationOnly = false }) {
   const [studyRevision, setStudyRevision] = useState(0);
   const [editingFacts, setEditingFacts] = useState(false);
   const [studyBusy, setStudyBusy] = useState(false);
+  const [workingDocument, setWorkingDocument] = useState(null);
 
   const [channelEdit, setChannelEdit] = useState("");
   const [entityEdit, setEntityEdit] = useState("");
@@ -826,6 +828,9 @@ export default function OpsCaseDetailPro({ authorizationOnly = false }) {
             <button className="min-w-[118px] rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-60" onClick={() => loadCase()} disabled={loading}>
               {loading ? "Recargando..." : "Recargar"}
             </button>
+            <a href="#ops-working-document" className="rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-500">
+              Ver escrito
+            </a>
             <a href="#ops-core-study" className="rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-500">
               Continuar estudio
             </a>
@@ -881,11 +886,19 @@ export default function OpsCaseDetailPro({ authorizationOnly = false }) {
         />
       ) : null}
 
+      <OpsWorkingDocument
+        authFetch={authFetch} caseId={caseId} canSupervise={canSupervise}
+        sessionId={session?.sessionId || ""} revision={`${factsRevision}:${studyRevision}`}
+        authorizationVerified={caseProjectionReady && !loading && packageStatus.hasAutorizacion}
+        externalBusy={editingFacts || studyBusy} onDocument={setWorkingDocument}
+      />
+
       <OpsFactsReview
         key={studyRevision} onEditingChange={setEditingFacts} externalBusy={studyBusy}
         authFetch={authFetch} caseId={caseId} canSupervise={canSupervise}
         sessionId={session?.sessionId || ""}
         authorizationVerified={caseProjectionReady && !loading && packageStatus.hasAutorizacion}
+        workingDocument={workingDocument}
         onReviewed={() => setFactsRevision(value => value + 1)}
       />
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -31,7 +32,30 @@ class OpsPaymentIntegrityContractTest(unittest.TestCase):
             "/ops/core/cases/${encodeURIComponent(requestedCaseId)}/payment-status",
             self.detail,
         )
-        self.assertIn("const [ws, payment, ds, es, fs]", self.detail)
+        load = re.search(
+            r"const\s+\[([^\]]+)\]\s*=\s*await\s+Promise\.allSettled\(\[(.*?)\]\);",
+            self.detail,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(load, "El espacio y el pago deben cargarse independientemente")
+        bindings = [name.strip() for name in load.group(1).split(",")]
+        requests = re.findall(r"apiJson\(authFetch,\s*`([^`]+)`", load.group(2))
+        # Other independent reads (such as authorization) may join this batch.
+        # The payment result must still come from its own endpoint and slot.
+        self.assertEqual(bindings[:5], ["ws", "payment", "ds", "es", "fs"])
+        self.assertEqual(len(bindings), len(requests))
+        self.assertEqual(
+            requests[bindings.index("payment")],
+            "/ops/core/cases/${encodeURIComponent(requestedCaseId)}/payment-status",
+        )
+        self.assertEqual(
+            requests[bindings.index("ws")],
+            "/ops/core/cases/${encodeURIComponent(requestedCaseId)}/workspace",
+        )
+        self.assertIn(
+            'setPaymentRecord(payment.status === "fulfilled" ? payment.value : null);',
+            self.detail,
+        )
         self.assertIn("derivePaymentDisplay(paymentRecord, caseData)", self.detail)
 
     def test_workspace_failure_never_invents_pending_payment(self):

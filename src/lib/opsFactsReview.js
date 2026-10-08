@@ -2,6 +2,8 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HASH = /^[a-f0-9]{64}$/;
 
 export const FACT_FIELDS = Object.freeze({
+  document_subject_name: ["Persona interesada que figura en el documento", "text"],
+  document_subject_id: ["Identificador de esa persona en el documento", "text"],
   organismo: ["Organismo", "text"], expediente_ref: ["Referencia del expediente", "text"],
   matricula: ["Matrícula", "text"], hecho_denunciado_literal: ["Hecho denunciado", "text"],
   lugar_infraccion: ["Lugar de la infracción", "text"], hora_infraccion: ["Hora", "text"],
@@ -26,7 +28,7 @@ export const FACT_FIELDS = Object.freeze({
 });
 
 export const FACT_GROUPS = Object.freeze([
-  { label: "Expediente y trámite", fields: ["organismo", "expediente_ref", "matricula", "hecho_denunciado_literal", "tipo_documento", "fase_procedimental"] },
+  { label: "Expediente y trámite", fields: ["document_subject_name", "document_subject_id", "organismo", "expediente_ref", "matricula", "hecho_denunciado_literal", "tipo_documento", "fase_procedimental"] },
   { label: "Lugar y fechas", fields: ["lugar_infraccion", "fecha_infraccion", "hora_infraccion", "fecha_documento", "fecha_notificacion", "fecha_limite"] },
   { label: "Norma y pruebas de estacionamiento", fields: ["norma_hint", "articulo_infringido_num", "apartado_infringido_num", "ordenanza_aplicable", "senalizacion_estacionamiento", "horario_estacionamiento", "autorizacion_estacionamiento", "tipo_denunciante", "fotografia_vehiculo_presente", "prueba_estacionamiento", "contradiccion_estacionamiento"] },
   { label: "Importes, pago y otros datos", fields: ["radar_modelo_hint", "sancion_importe_eur", "importe_reducido_eur", "pago_multa_reducido", "puntos_detraccion", "plazo_pago_dias", "velocidad_medida_kmh", "velocidad_limite_kmh"] },

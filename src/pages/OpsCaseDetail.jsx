@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { derivePaymentDisplay } from "../lib/opsPayment.js";
+import { withOpsAuthorizationStatus } from "../lib/opsCaseAuthorization.js";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import LocalIntakeRecovery from "../ops-auth/LocalIntakeRecovery.jsx";
@@ -312,7 +313,7 @@ function documentLabel(kind = "") {
   if (key.includes("authorization_signed_rejected")) return "Candidato de autorización · rechazado";
   if (key.includes("authorization_signed_candidate")) return "Candidato de autorización · pendiente de revisión";
   if (key === "authorization_signed_verified") return "Autorización firmada · verificada";
-  if (key.includes("authorization_signed")) return "Documento firmado · validez sin verificar";
+  if (key.includes("authorization_signed")) return "Documento de autorización firmado";
   if (key.includes("authorization")) return "Documento de autorización";
   if (key.includes("original")) return "Documento principal";
   if (key.includes("justificante")) return "Justificante de presentación";
@@ -634,6 +635,7 @@ export default function OpsCaseDetail() {
 
   const [workspaceState, setWorkspace] = useState(null);
   const [paymentRecordState, setPaymentRecord] = useState(null);
+  const [authorizationRecordState, setAuthorizationRecord] = useState(null);
   const [documentsState, setDocuments] = useState([]);
   const [eventsState, setEvents] = useState([]);
   const [followupsState, setFollowups] = useState([]);
@@ -659,6 +661,7 @@ export default function OpsCaseDetail() {
   const caseProjectionReady = Boolean(caseId) && loadedCaseId === caseId;
   const workspace = caseProjectionReady ? workspaceState : null;
   const paymentRecord = caseProjectionReady ? paymentRecordState : null;
+  const authorizationRecord = caseProjectionReady ? authorizationRecordState : null;
   const documents = caseProjectionReady ? documentsState : EMPTY_CASE_LIST;
   const events = caseProjectionReady ? eventsState : EMPTY_CASE_LIST;
   const followups = caseProjectionReady ? followupsState : EMPTY_CASE_LIST;
@@ -676,6 +679,7 @@ export default function OpsCaseDetail() {
     followupMutationLockRef.current = false;
     setWorkspace(null);
     setPaymentRecord(null);
+    setAuthorizationRecord(null);
     setDocuments([]);
     setEvents([]);
     setFollowups([]);
@@ -724,12 +728,13 @@ export default function OpsCaseDetail() {
     setMessage("");
     setDebug("");
 
-    const [ws, payment, ds, es, fs] = await Promise.allSettled([
+    const [ws, payment, ds, es, fs, authorization] = await Promise.allSettled([
       apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/workspace`, { signal: controller.signal }),
       apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/payment-status`, { signal: controller.signal }),
       apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/documents`, { signal: controller.signal }),
       apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/events`, { signal: controller.signal }),
       apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/followups`, { signal: controller.signal }),
+      apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}`, { signal: controller.signal, cache: "no-store" }),
     ]);
 
     if (!isCurrentLoad()) return;
@@ -751,6 +756,7 @@ export default function OpsCaseDetail() {
 
     setWorkspace(nextWorkspace);
     setPaymentRecord(payment.status === "fulfilled" ? payment.value : null);
+    setAuthorizationRecord(authorization.status === "fulfilled" ? authorization.value : null);
     setDocuments(nextDocuments);
     setEvents(nextEvents);
     setFollowups(nextFollowups);
@@ -760,6 +766,7 @@ export default function OpsCaseDetail() {
     const partial = [
       ["Espacio jurídico", ws],
       ["Estado de pago", payment],
+      ["Estado de representación", authorization],
       ["Documentos", ds],
       ["Eventos", es],
       ["Seguimientos", fs],
@@ -786,7 +793,7 @@ export default function OpsCaseDetail() {
     load();
   }, [load]);
 
-  const caseData = workspace?.case || {};
+  const caseData = withOpsAuthorizationStatus(workspace?.case || {}, authorizationRecord, caseId);
   const identity = caseData.identity || {};
   const readiness = workspace?.readiness || {};
   const quote = readiness.quote || {};
@@ -826,6 +833,7 @@ export default function OpsCaseDetail() {
     resourceStatus === "final_ready" && Boolean(latestResource?.approved_at);
   const vehicleRemoval = isVehicleRemovalCase(caseData);
   const representationVerified = isLegalRepresentationVerified(caseData);
+  const representationKnown = caseData.authorization_evidence_status !== null;
   const vehiclePreparationConsent = hasVehiclePreparationConsent(caseData);
 
   const progress = {
@@ -1314,7 +1322,7 @@ export default function OpsCaseDetail() {
             />
             <CheckItem
               ok={vehicleRemoval ? vehiclePreparationConsent : progress.authorization}
-              pending={vehicleRemoval && !vehiclePreparationConsent}
+              pending={vehicleRemoval ? !vehiclePreparationConsent : representationKnown && !representationVerified}
               label={
                 vehicleRemoval
                   ? vehiclePreparationConsent
@@ -1329,7 +1337,9 @@ export default function OpsCaseDetail() {
                     : "El indicador genérico de autorización no acredita representación en una retirada de vehículo."
                   : representationVerified
                     ? "Representación verificada mediante revisión humana de la evidencia ligada."
-                    : "Representación pendiente de verificación."
+                    : representationKnown
+                      ? "Representación sin verificación vigente."
+                      : "Estado de representación no disponible."
               }
             />
             <CheckItem
@@ -1433,6 +1443,17 @@ export default function OpsCaseDetail() {
               {stageLabel(nextStep.stage)}
             </div>
           </div>
+
+          {canManageLegacy && caseProjectionReady && caseData.department === "traffic" && caseData.case_type === "fine" ? (
+            <div style={{ marginTop: 14 }}>
+              <Link
+                to={`/ops/review/${encodeURIComponent(caseId)}#ops-working-document`}
+                className="sr-btn-secondary"
+              >
+                Ver escrito
+              </Link>
+            </div>
+          ) : null}
 
           {canManageLegacy && !vehicleRemoval && isAuthorizationPendingReview(caseData) ? (
             <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
