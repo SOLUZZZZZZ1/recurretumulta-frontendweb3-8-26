@@ -3,9 +3,21 @@ import { FACT_FIELDS, prepareFactReviewProposal } from "./opsFactsReview.js";
 const EMPTY = { value: "", documentId: "", page: "", evidence: "", reason: "", checked: false, exclude: false };
 const CANDIDATE_STATUSES = new Set(["candidate", "declared", "reviewed", "verified"]);
 
+function dateInputValue(value) {
+  if (typeof value !== "string") return "";
+  let iso = value.trim();
+  const documentary = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(iso);
+  if (documentary) iso = `${documentary[3]}-${documentary[2]}-${documentary[1]}`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || iso.startsWith("0000-")) return "";
+  // Validate the calendar explicitly: Date otherwise rolls 31 April into May.
+  const parsed = new Date(`${iso}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === iso ? iso : "";
+}
+
 function inputValue(value, kind) {
   if (value === null || value === undefined) return "";
   if (kind === "boolean") return typeof value === "boolean" ? String(value) : "";
+  if (kind === "date") return dateInputValue(value);
   if (typeof value === "string") return value;
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
 }
