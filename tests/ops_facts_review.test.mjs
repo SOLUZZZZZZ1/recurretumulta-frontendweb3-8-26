@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildFactReviewBody, fetchFactsWorkspace, submitFactReview, originalSources, reviewBlockReason, FACT_FIELDS, FACT_GROUPS, missingFactGroups, factValue } from "../src/lib/opsFactsReview.js";
+import { prepareFactReviewProposal, buildFactReviewBatchBody, buildFactReviewBody, fetchFactsWorkspace, submitFactReview, originalSources, reviewBlockReason, FACT_FIELDS, FACT_GROUPS, missingFactGroups, factValue } from "../src/lib/opsFactsReview.js";
 
 const caseId = "10000000-0000-4000-8000-000000000001";
 const doc = "20000000-0000-4000-8000-000000000001";
@@ -135,4 +135,65 @@ test("exclusion response must be a new unfrozen version with the reading removed
   for(const bad of [record,{...saved,frozen:true},{...saved,facts:{...saved.facts,unresolved:["fecha_notificacion"]}},
     {...saved,facts:{...saved.facts,facts:{...saved.facts.facts,fecha_notificacion:{status:"validated",value:0}}}}]) await assert.rejects(run(bad));
   assert.equal(calls,5);
+});
+
+
+test("preparing a batch makes no human attestation and keeps every exact source", () => {
+  const one={...form,sourceHash:record.payload_sha256,checked:false};
+  const two={...one,field:"puntos_detraccion",value:"0",page:"2",evidence:"Puntos: 0"};
+  assert.equal(prepareFactReviewProposal(one).changes[0].value,"2026-09-20");
+  assert.throws(()=>buildFactReviewBatchBody({record,proposals:[one,two],checked:false}));
+  const body=buildFactReviewBatchBody({record,proposals:[one,two],checked:true});
+  assert.equal(body.changes.length,2);
+  assert.equal(body.changes[1].value,0);
+  assert.equal(body.changes[1].page_index,1);
+  assert.equal(body.changes[1].evidence,"Puntos: 0");
+  assert.equal(body.reason,form.reason);
+  assert.equal(body.expected_payload_sha256,record.payload_sha256);
+  assert.ok(!("checked" in body));
+});
+
+test("batch rejects duplicate fields, stale versions, foreign documents and invalid rows", () => {
+  const one={...form,sourceHash:record.payload_sha256};
+  for(const proposals of [[],[one,one],[{...one,sourceHash:"b".repeat(64)}],
+    [{...one,documentId:caseId}],[one,{...one,field:"puntos_detraccion",value:"NaN"}]]) {
+    assert.throws(()=>buildFactReviewBatchBody({record,proposals,checked:true}));
+  }
+  assert.throws(()=>buildFactReviewBatchBody({record,proposals:[one],checked:"true"}));
+});
+
+test("batch can correct, add and exclude together without inventing a replacement", () => {
+  const one={...form,sourceHash:record.payload_sha256};
+  const body=buildFactReviewBatchBody({record,checked:true,proposals:[one,
+    {...one,field:"puntos_detraccion",operation:"exclude",value:"",reason:"No consta en el original"},
+    {...one,field:"tipo_documento",operation:"add",value:"Requerimiento de identificación"}]});
+  assert.equal(body.changes[1].value,null);
+  assert.equal(body.changes[1].operation,"exclude");
+  assert.equal(body.changes[2].operation,"add");
+  assert.equal(body.reason,"Original contrastado\nNo consta en el original");
+});
+
+test("batch sends one versioned request and rejects a response with only part of the changes", async () => {
+  const one={...form,sourceHash:record.payload_sha256};
+  const body=buildFactReviewBatchBody({record,checked:true,proposals:[one,
+    {...one,field:"puntos_detraccion",value:"0",evidence:"Puntos: 0"}]});
+  const facts=Object.fromEntries(body.changes.map(change=>[change.field,{
+    status:"validated",value:change.value,sources:[{source_type:"operator_document_review",
+      document_id:doc,page_index:change.page_index,evidence:change.evidence}]}]));
+  const saved={...record,id:"30000000-0000-4000-8000-000000000002",supersedes_id:record.id,
+    sequence:2,facts:{...record.facts,facts}};
+  let calls=0;
+  const run=value=>submitFactReview({caseId,record,body,authFetch:async(url,options)=>{
+    calls++;assert.deepEqual(JSON.parse(options.body),body);return response({ok:true,case_id:caseId,facts:value});}});
+  assert.equal(await run(saved),saved);
+  assert.equal(calls,1);
+  const partial=structuredClone(saved);
+  delete partial.facts.facts.puntos_detraccion;
+  await assert.rejects(run(partial));
+});
+
+test("batch never truncates a review reason beyond the server limit", () => {
+  const one={...form,sourceHash:record.payload_sha256,reason:"a".repeat(1500)};
+  assert.throws(()=>buildFactReviewBatchBody({record,checked:true,proposals:[one,
+    {...one,field:"puntos_detraccion",value:"0",reason:"b".repeat(1500)}]}));
 });

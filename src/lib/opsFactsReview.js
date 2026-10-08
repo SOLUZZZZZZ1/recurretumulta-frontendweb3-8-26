@@ -91,8 +91,8 @@ export function originalSources(workspace) {
   const ids = workspace?.authority?.validated_facts?.latest_active?.facts?.source_document_ids || [];
   return (workspace?.documents || []).filter(doc => doc.kind === "original" && validId(doc.id) && ids.includes(doc.id));
 }
-export function buildFactReviewBody({ record, field, value, documentId, page, evidence, reason, checked, operation = "correct" }) {
-  assert(checked === true, "Confirma que has contrastado el dato con el documento original.");
+// Preparar un cambio solo valida su forma. No confirma ni guarda una revisión.
+export function prepareFactReviewProposal({ record, field, value, documentId, page, evidence, reason, operation = "correct" }) {
   assert(["correct", "add", "exclude"].includes(operation) && Object.hasOwn(FACT_FIELDS, field), "Campo u operación no admitidos.");
   assert(operation === "add" ? !Object.hasOwn(record.facts.facts, field) : Object.hasOwn(record.facts.facts, field),
     operation === "add" ? "El dato ya existe. Recarga y utiliza Revisar." : "Campo no editable en esta versión.");
@@ -128,6 +128,26 @@ export function buildFactReviewBody({ record, field, value, documentId, page, ev
     ...(operation !== "correct" ? { operation } : {}),
   }] };
 }
+export function buildFactReviewBody(params) {
+  assert(params.checked === true, "Confirma que has contrastado el dato con el documento original.");
+  return prepareFactReviewProposal(params);
+}
+
+export function buildFactReviewBatchBody({ record, proposals, checked }) {
+  assert(checked === true, "Confirma la revisión documental de todos los datos preparados.");
+  assert(Array.isArray(proposals) && proposals.length >= 1 && proposals.length <= 50,
+    "Prepara entre 1 y 50 datos para la revisión conjunta.");
+  assert(new Set(proposals.map(item => item.field)).size === proposals.length,
+    "No puede revisarse el mismo dato dos veces.");
+  assert(proposals.every(item => item.sourceHash === record.payload_sha256),
+    "La versión ha cambiado. Vuelve a preparar la revisión con los hechos actuales.");
+  const bodies = proposals.map(item => prepareFactReviewProposal({ ...item, record }));
+  const reason = [...new Set(bodies.map(item => item.reason))].join("\n");
+  assert(reason.length <= 2000, "Los motivos conjuntos superan 2000 caracteres. Resume los motivos de la preparación.");
+  return { expected_payload_sha256: record.payload_sha256, reason,
+    changes: bodies.flatMap(item => item.changes) };
+}
+
 export async function submitFactReview({ authFetch, caseId, record, body, signal }) {
   assert(validId(caseId), "Identificador de expediente no válido.");
   verifyFacts(record, caseId);

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FACT_FIELDS, factLabel, factValue, fetchFactsWorkspace, reviewBlockReason,
   originalSources, buildFactReviewBody, submitFactReview, missingFactGroups,
+  prepareFactReviewProposal, buildFactReviewBatchBody,
   factsPreparationBlockReason, prepareReanalysisFacts, FactsReviewError,
 } from "../lib/opsFactsReview.js";
 
@@ -25,6 +26,8 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   const [field, setField] = useState("");
   const [additionalField, setAdditionalField] = useState("");
   const [form, setForm] = useState(EMPTY);
+  const [proposals, setProposals] = useState([]);
+  const [batchChecked, setBatchChecked] = useState(false);
   const loadRef = useRef(null);
   const saveRef = useRef(null);
   const lockRef = useRef(false);
@@ -38,7 +41,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     loadRef.current?.abort();
     const controller = new AbortController();
     loadRef.current = controller;
-    setLoading(true); setError(""); setWorkspace(null); setField(""); setAdditionalField(""); setForm(EMPTY);
+    setLoading(true); setError(""); setWorkspace(null); setField(""); setAdditionalField(""); setForm(EMPTY); setProposals([]); setBatchChecked(false);
     try {
       const data = await fetchFactsWorkspace({ authFetch, caseId, signal: controller.signal });
       if (!controller.signal.aborted) {
@@ -63,9 +66,9 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
   }, [field]);
 
   useEffect(() => {
-    onEditingChange?.(!!field || saving);
+    onEditingChange?.(!!field || !!proposals.length || saving);
     return () => onEditingChange?.(false);
-  }, [field, saving, onEditingChange]);
+  }, [field, proposals.length, saving, onEditingChange]);
 
   const record = workspace?.authority?.validated_facts?.latest_active;
   const blocked = reviewBlockReason(workspace, canSupervise, sessionId, authorizationVerified);
@@ -107,19 +110,52 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
 
   function edit(name) {
     if (disabled) return;
-    setField(name); setError(""); setMessage("");
-    // No copiar una propuesta de IA al valor que debe contrastar la persona.
-    setForm({ ...EMPTY, documentId: documents.length === 1 ? documents[0].id : "" });
+    setField(name); setError(""); setMessage(""); setBatchChecked(false);
+    // Solo recuperar valores preparados en este formulario, nunca lecturas de IA.
+    const prepared = proposals.find(item => item.field === name);
+    setForm(prepared ? { ...EMPTY, ...prepared, checked: false } :
+      { ...EMPTY, documentId: documents.length === 1 ? documents[0].id : "" });
   }
   function change(name, value) {
     setForm(current => ({ ...current, ...(name === "exclude" ? { value: "", evidence: "", reason: "" } : {}), [name]: value, checked: name === "checked" ? value : false }));
   }
+  function currentProposal() {
+    return { ...form, field, checked: false, sourceHash: record.payload_sha256,
+      operation: adding ? "add" : excluding ? "exclude" : "correct" };
+  }
+  function stageCurrent() {
+    if (disabled || lockRef.current) return;
+    try {
+      const proposal = currentProposal();
+      proposal.previewValue = prepareFactReviewProposal({ ...proposal, record }).changes[0].value;
+      const next = proposals.filter(item => item.field !== field);
+      if (next.length >= 50) throw new FactsReviewError("La revisión conjunta admite hasta 50 datos.");
+      setProposals([...next, proposal]); setBatchChecked(false);
+      setField(""); setAdditionalField(""); setForm(EMPTY); setError("");
+      setMessage("Dato preparado para revisión conjunta. Todavía no se ha guardado ni confirmado.");
+    } catch (err) { setError(err.message); }
+  }
+  function removeProposal(name) {
+    if (disabled || field) return;
+    setProposals(current => current.filter(item => item.field !== name)); setBatchChecked(false);
+  }
   async function save(event) {
     event.preventDefault();
-    if (disabled || lockRef.current) return;
+    if (disabled || lockRef.current || proposals.length) return;
     let body;
     try { body = buildFactReviewBody({ record, field, ...form, operation: adding ? "add" : excluding ? "exclude" : "correct" }); }
     catch (err) { setError(err.message); return; }
+    await persist(body, adding ? "Dato incorporado" : excluding ? "Lectura descartada" : "Corrección guardada");
+  }
+  async function saveBatch(event) {
+    event.preventDefault();
+    if (disabled || field || lockRef.current) return;
+    let body;
+    try { body = buildFactReviewBatchBody({ record, proposals, checked: batchChecked }); }
+    catch (err) { setError(err.message); return; }
+    await persist(body, "Revisión conjunta guardada");
+  }
+  async function persist(body, label) {
     lockRef.current = true; setSaving(true); setError(""); setMessage("");
     const controller = new AbortController();
     saveRef.current = controller;
@@ -128,14 +164,14 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
       if (controller.signal.aborted) return;
       setWorkspace(current => ({ ...current, authority: { ...current.authority,
         validated_facts: { ...current.authority.validated_facts, latest_active: saved } } }));
-      setField(""); setAdditionalField(""); setForm(EMPTY);
-      setMessage(`${adding ? "Dato incorporado" : excluding ? "Lectura descartada" : "Corrección guardada"} en la versión ${saved.sequence}. El borrador sigue pendiente de revisión final.`);
+      setField(""); setAdditionalField(""); setForm(EMPTY); setProposals([]); setBatchChecked(false);
+      setMessage(`${label} en la versión ${saved.sequence}. El borrador sigue pendiente de revisión final.`);
       onReviewed?.();
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err.message || "No se pudo comprobar el guardado. Recarga los hechos.");
         // También para una respuesta perdida: comprobar antes de repetir la escritura.
-        recoveryRef.current = true; setStale(true); setField(""); setForm(EMPTY);
+        recoveryRef.current = true; setStale(true); setField(""); setForm(EMPTY); setBatchChecked(false);
       }
     } finally {
       lockRef.current = false;
@@ -147,7 +183,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 id="facts-review-title" className="text-lg font-semibold text-slate-900">Hechos del expediente</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">Contrasta cada dato con el original. Puedes corregir los datos existentes o añadir los que falten; cada guardado conserva la versión anterior, el supervisor y el motivo.</p></div>
-      <button type="button" className={BUTTON} onClick={reload} disabled={loading || saving || externalBusy || !sessionId}>Recargar hechos</button>
+      <button type="button" className={BUTTON} onClick={reload} disabled={loading || saving || externalBusy || !sessionId || (!stale && (!!field || !!proposals.length))}>Recargar hechos</button>
     </div>
     {error ? <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
     {message ? <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p> : null}
@@ -185,7 +221,7 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
               {[...(fact.conflicts || []), ...(fact.notes || [])].map((note, index) => <p key={index} className="mt-2 whitespace-pre-wrap break-words">{note}</p>)}
             </details> : null}</td>
           <td className={`p-3 font-medium ${fact.status === "validated" ? "text-emerald-800" : "text-amber-800"}`}>{STATUS[fact.status] || "Por revisar"}</td>
-          <td className="p-3">{Object.hasOwn(FACT_FIELDS, name) ? <button type="button" className={BUTTON} disabled={disabled} aria-label={`Revisar ${factLabel(name)}`} onClick={() => edit(name)}>Revisar</button> : <span className="text-xs text-slate-500">Revisión especializada</span>}</td>
+          <td className="p-3">{Object.hasOwn(FACT_FIELDS, name) ? <button type="button" className={BUTTON} disabled={disabled || !!field} aria-label={`Revisar ${factLabel(name)}`} onClick={() => edit(name)}>Revisar</button> : <span className="text-xs text-slate-500">Revisión especializada</span>}</td>
         </tr>)}</tbody>
       </table></div>
       {record.facts.conflicts?.length ? <p className="mt-3 text-sm text-amber-900">Conflictos del borrador: {record.facts.conflicts.join(" · ")}</p> : null}
@@ -201,6 +237,27 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
         {field ? <p className="mt-2 text-xs text-slate-600">Guarda o cancela la edición abierta antes de incorporar otro dato.</p> : null}
       </details> : null}
     </> : null}
+    {proposals.length ? <form onSubmit={saveBatch} aria-label="Revisión conjunta de hechos" className="mt-5 rounded-xl border border-blue-300 bg-blue-50/40 p-4">
+      <h3 className="font-semibold text-slate-900">Revisión conjunta · {proposals.length} datos preparados</h3>
+      <p className="mt-2 text-sm text-slate-700">Contrasta cada valor, página y fragmento con el original. Esta preparación solo permanece en esta pestaña; se guardará en una nueva versión cuando confirmes la revisión.</p>
+      <div className="mt-3 space-y-3">{proposals.map(item => <article key={item.field} className="rounded-lg border border-slate-200 bg-white p-3">
+        <h4 className="font-semibold">{factLabel(item.field)} · {item.operation === "exclude" ? "Descartar lectura" : item.operation === "add" ? "Añadir dato" : "Corregir dato"}</h4>
+        <p className="mt-1 whitespace-pre-wrap break-words text-sm">{item.operation === "exclude" ? "Seguirá sin conocerse; no se asigna otro valor." : factValue(item.previewValue)}</p>
+        <p className="mt-2 text-xs font-medium text-slate-600">Original {documents.findIndex(doc => doc.id === item.documentId) + 1} · página {item.page}</p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-sm">{item.evidence}</p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-600">Motivo: {item.reason}</p>
+        <div className="mt-2 flex gap-2">
+          <button type="button" className={BUTTON} disabled={disabled || !!field} onClick={() => edit(item.field)} aria-label={`Editar propuesta ${factLabel(item.field)}`}>Editar</button>
+          <button type="button" className={BUTTON} disabled={disabled || !!field} onClick={() => removeProposal(item.field)} aria-label={`Retirar propuesta ${factLabel(item.field)}`}>Retirar de la preparación</button>
+        </div>
+      </article>)}</div>
+      <fieldset disabled={disabled || !!field} className="mt-4 space-y-3">
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={batchChecked} onChange={event => setBatchChecked(event.target.checked)} />
+          He contrastado todos los datos preparados, sus páginas y fragmentos con los originales y confirmo esta revisión conjunta.</label>
+        <button type="submit" disabled={disabled || !!field || !batchChecked} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar revisión conjunta"}</button>
+      </fieldset>
+      {field ? <p className="mt-2 text-sm text-amber-900">Añade el dato abierto a la preparación o cancela su edición antes de confirmar el conjunto.</p> : null}
+    </form> : null}
     {field ? <form onSubmit={save} className="mt-5 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
       <h3 ref={editorRef} tabIndex={-1} className="font-semibold text-slate-900">{adding ? "Incorporar" : "Revisar"}: {factLabel(field)}</h3>
       <fieldset disabled={disabled} className="mt-3 grid gap-4 md:grid-cols-2">
@@ -213,8 +270,9 @@ function FactsReviewPanel({ authFetch, caseId, sessionId, canSupervise, authoriz
         <label className="text-sm font-medium">{excluding ? "Comprobación del original que justifica el descarte" : "Fragmento que respalda el dato"}<textarea className={INPUT} rows={2} minLength={3} maxLength={2000} required value={form.evidence} onChange={e => change("evidence", e.target.value)} /></label>
         <label className="text-sm font-medium md:col-span-2">{adding ? "Motivo de la incorporación" : excluding ? "Motivo del descarte" : "Motivo de la corrección"}<textarea className={INPUT} rows={2} minLength={3} maxLength={2000} required value={form.reason} onChange={e => change("reason", e.target.value)} /></label>
         <label className="flex items-start gap-2 text-sm md:col-span-2"><input className="mt-1" type="checkbox" checked={form.checked} required onChange={e => change("checked", e.target.checked)} />{excluding ? "He revisado el original y confirmo que esta lectura no consta; he indicado la página, la comprobación y el motivo." : "He contrastado este dato, su página y el fragmento con el documento original."}</label>
-        <div className="flex flex-wrap gap-2 md:col-span-2"><button type="submit" disabled={!form.checked || disabled} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar nueva versión"}</button><button type="button" className={BUTTON} onClick={() => { setField(""); setForm(EMPTY); }}>Cancelar</button></div>
+        <div className="flex flex-wrap gap-2 md:col-span-2"><button type="button" className={BUTTON} onClick={stageCurrent}>Añadir a revisión conjunta</button><button type="submit" disabled={!form.checked || disabled || !!proposals.length} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar nueva versión"}</button><button type="button" className={BUTTON} onClick={() => { setField(""); setForm(EMPTY); }}>Cancelar</button></div>
       </fieldset>
+      {proposals.length ? <p className="mt-2 text-sm text-slate-700">Añade este dato a la revisión conjunta para guardar toda la preparación a la vez.</p> : null}
       <p className="mt-3 text-xs text-slate-600">Este paso actualiza los hechos y la guía de preparación. Los borradores preparados con una versión anterior deberán revisarse. El cierre de hechos, la aprobación del recurso y la presentación requieren sus revisiones posteriores.</p>
     </form> : null}
   </section>;
