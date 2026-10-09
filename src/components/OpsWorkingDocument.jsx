@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import OpsWorkingDocumentVersions from "./OpsWorkingDocumentVersions.jsx";
 import { factValue } from "../lib/opsFactsReview.js";
 import { fetchWorkingDocument, fetchWorkingDocumentPdf } from "../lib/opsWorkingDocument.js";
 
@@ -101,7 +102,7 @@ function DocumentPanel({ authFetch, caseId, sessionId, canSupervise, authorizati
       <article className="mt-4 rounded-xl border border-slate-200 bg-white px-5 py-6 sm:px-8" aria-label={document.title}>
         <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-7 text-slate-900">{document.content}</pre>
       </article>
-      <p className="mt-3 text-xs text-slate-600">Esta vista y su PDF son una propuesta de trabajo. No se ha guardado una versión del recurso ni se ha aprobado su presentación.</p>
+      <p className="mt-3 text-xs text-slate-600">Esta vista y su PDF son una propuesta de trabajo. Las copias conservadas se consultan en «Versiones guardadas». Guardar no aprueba el escrito ni su presentación.</p>
       <details className="mt-4 rounded-xl border border-slate-200 p-4">
         <summary className="cursor-pointer font-semibold text-blue-900">Ver los datos utilizados y su procedencia</summary>
         <div className="mt-3 space-y-3">{document.fields.map(field => <div key={field.key} className="border-t border-slate-100 pt-3 text-sm">
@@ -117,5 +118,7 @@ function DocumentPanel({ authFetch, caseId, sessionId, canSupervise, authorizati
       </details>
       <a href="#ops-facts-review" className="mt-4 inline-block text-sm font-semibold text-blue-800 underline">Corregir diferencias o completar datos</a>
     </> : null}
+    <OpsWorkingDocumentVersions authFetch={authFetch} caseId={caseId} enabled={enabled}
+      document={document} externalBusy={externalBusy || loading || viewing} />
   </section>;
 }
