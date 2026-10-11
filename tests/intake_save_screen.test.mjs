@@ -19,6 +19,18 @@ before(async () => {
     root: fileURLToPath(new URL("../", import.meta.url)),
     server: { middlewareMode: true, hmr: false, watch: null },
     appType: "custom", logLevel: "silent",
+    plugins: [{
+      // Node SSR requires default-import interop for this CommonJS package.
+      // Keep the real Helmet implementation/provider; do not replace the form,
+      // transport, validation, route selection or metadata with mock components.
+      name: "intake-test-helmet-cjs-interop", enforce: "pre",
+      transform(source, id) {
+        if (!id.endsWith("/src/components/Seo.jsx")) return;
+        const before = 'import { Helmet } from "react-helmet-async";';
+        assert.ok(source.includes(before), "review the SSR compatibility adapter if Seo changes");
+        return source.replace(before, 'import helmetPackage from "react-helmet-async";\nconst { Helmet } = helmetPackage;');
+      },
+    }],
   });
   Intake = (await server.ssrLoadModule("/src/pages/IniciarExpedienteRTM.jsx")).default;
   catalog = (await server.ssrLoadModule("/src/data/publicServices.js")).PUBLIC_SERVICE_FAMILIES;
