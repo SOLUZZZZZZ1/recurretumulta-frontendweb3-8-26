@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import IntakeClientSummary from "../components/IntakeClientSummary.jsx";
+import {
+  buildIntakeClientFields,
+  intakeClientDataError,
+  intakeInputAttributes,
+  normalizeIntakeIdentifier,
+} from "../lib/intakeClientData.js";
 import {
   PUBLIC_SERVICE_FAMILIES,
   VEHICLE_REMOVAL_PATH,
@@ -126,7 +133,7 @@ function openBackendFile(path, caseId) {
 }
 
 function normalizeDni(value = "") {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+  return normalizeIntakeIdentifier(value);
 }
 
 function validEmail(value = "") {
@@ -247,11 +254,8 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
   const dniBackRef = useRef(null);
   const authRef = useRef(null);
 
-  const domicilio = useMemo(() => {
-    const line1 = [form.street, form.street_number, form.floor ? `Piso ${form.floor}` : "", form.door ? `Puerta ${form.door}` : ""].filter(Boolean).join(", ");
-    const line2 = [form.postal_code, form.city, form.province ? `(${form.province})` : ""].filter(Boolean).join(" ");
-    return [line1, line2].filter(Boolean).join(" · ");
-  }, [form]);
+  const clientFields = useMemo(() => buildIntakeClientFields(form), [form]);
+  const domicilio = clientFields.domicilio_notif;
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -265,6 +269,8 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
     }
     if (localRuntimeEnabled && !localProfileReady) return "Todavía no se ha confirmado el entorno local de pruebas.";
     if (authorizationFlow === "unavailable") return "La autorización de este servicio todavía no está disponible en este entorno.";
+    const clientError = intakeClientDataError(form);
+    if (clientError) return clientError;
     if (form.full_name.trim().length < 3) return "Indica el nombre y apellidos.";
     if (normalizeDni(form.dni_nie).length < 5) return "Indica el DNI, NIE o pasaporte.";
     if (!validEmail(form.email)) return "Indica un email válido.";
@@ -313,19 +319,8 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
             case_type: form.case_type,
             source_module: "rtm_web",
             public_service_family: selectedFamily?.id || "",
-            full_name: form.full_name.trim(),
-            dni_nie: normalizeDni(form.dni_nie),
-            email: form.email.trim(),
-            telefono: form.telefono.trim(),
+            ...clientFields,
             domicilio_notif: domicilio,
-            street: form.street.trim(),
-            street_number: form.street_number.trim(),
-            floor: form.floor.trim(),
-            door: form.door.trim(),
-            postal_code: form.postal_code.trim(),
-            city: form.city.trim(),
-            province: form.province.trim(),
-            preferred_contact: form.preferred_contact,
             customer_comment: selectedFamily
               ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
               : form.customer_comment.trim(),
@@ -531,8 +526,9 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
                   lineHeight: 1.65,
                 }}
               >
-                Selecciona el área correspondiente. Te llevaremos al expediente
-                disponible o, en Vivienda, a una consulta previa de encaje.
+                Selecciona el área correspondiente. Te llevaremos al formulario
+                de datos o, en Vivienda, a una consulta previa de encaje.
+                La disponibilidad de la autorización se indica en cada formulario.
               </p>
             </header>
 
@@ -614,7 +610,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
                   >
                     {service.entryMode === "consultation"
                       ? "Consulta de encaje"
-                      : "Expediente disponible"}
+                      : "Formulario de datos"}
                   </span>
                 </button>
               ))}
@@ -628,11 +624,11 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
   return (
     <>
       <Seo
-        title={`Iniciar expediente · ${config.label} · RTM`}
+        title={`Iniciar expediente · ${selectedFamily?.title || config.label} · RTM`}
         description={
           isVehicleRemoval
             ? "Crea tu expediente RTM y continúa al flujo específico de retirada del vehículo."
-            : "Crea tu expediente RTM y descarga la autorización."
+            : "Prepara los datos del interesado y de contacto para tu expediente RTM."
         }
         canonical="https://www.recurretumulta.eu/iniciar-expediente"
       />
@@ -646,7 +642,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
                 ? "Cuéntanos lo necesario para abrir el expediente. Después comprobarás el permiso de circulación y revisarás el consentimiento y la cotización específicos antes del pago."
                 : rehearsal?.renewal ? "La notificación ya está recibida. Confirma las casillas para emitir una autorización actualizada, descarga el nuevo candidato ficticio y súbelo. Conservamos este mismo expediente y sus documentos."
                 : rehearsal ? "Conserva los datos ficticios preparados. Después descarga y sube el candidato de autorización de prueba y continúa con la notificación."
-                : "Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación."}
+                : "Indica los datos de la persona por la que se hará la gestión y un contacto. El resumen muestra qué se enviará; la autorización y la documentación se tramitan después según el servicio disponible."}
             </p>
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
               {isVehicleRemoval
@@ -671,35 +667,42 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
           ) : null}
           {authorizationFlow === "unavailable" && (!localRuntimeEnabled || localProfileReady) ? (
             <p role="status" style={{ padding: 16, background: "#fff7ed", color: "#9a3412", borderRadius: 14 }}>
-              La generación de autorización para este servicio todavía no está disponible en este entorno. No se creará un expediente con una autorización de otro servicio.
+              La generación de autorización para este servicio todavía no está disponible en este entorno. No se creará un expediente con una autorización de otro servicio. Los datos que escribas permanecen únicamente en esta pantalla y no se guardan al cerrarla.
             </p>
           ) : null}
 
           <form onSubmit={createDraftAndDownload}>
             <Section title="1. Tipo de expediente">
-              <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading}>
+              <select aria-label="Tipo de expediente" value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading}>
                 {availableCaseTypes.map((value) => (
                   <option key={value} value={value}>{config.caseTypes[value]}</option>
                 ))}
               </select>
+              <p style={{ marginBottom: 0, color: "#475569", lineHeight: 1.6 }}>Esta elección orienta la entrada. Contrastaremos la materia, el problema y la fase con los documentos; no es una clasificación jurídica aprobada.</p>
             </Section>
 
-            <Section title="2. Datos personales">
+            <Section title="2. Persona interesada y contacto">
+              <p style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>Nombre y documento de la persona a cuyo nombre se tramitará el asunto. No se sustituyen por los datos de quien inicia sesión, paga o ayuda a completar el formulario. Tampoco determinan por sí solos quién conducía.</p>
               <div style={gridStyle}>
-                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
-                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
-                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
-                <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo del interesado" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Documento del interesado" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+              </div>
+              <h3 style={{ margin: "20px 0 8px", fontSize: 18 }}>Contacto para esta gestión</h3>
+              <p style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>Puede ser el del interesado o el de la persona que le ayuda. Estos datos de contacto no cambian el nombre ni el documento del interesado.</p>
+              <div style={gridStyle}>
+                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="Email de contacto" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+                <Field label="Teléfono" type="tel" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Teléfono de contacto" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
               </div>
               <div style={{ marginTop: 16 }}>
                 <span style={labelStyle}>Preferencia de contacto</span>
-                <select value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading}>
+                <select aria-label="Preferencia de contacto" value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading}>
                   <option value="email">Email</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option>
                 </select>
               </div>
             </Section>
 
             <Section title="3. Domicilio a efectos de notificaciones">
+              <p style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>Domicilio declarado para la persona interesada en este expediente. No se rellena automáticamente con la dirección de RTM ni con la de quien utiliza el ordenador.</p>
               <div style={gridStyle}>
                 <Field label="Calle" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
                 <Field label="Número" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
@@ -711,7 +714,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
               </div>
             </Section>
 
-            <Section title="4. Documento de identidad">
+            <Section title="4. Documento de identidad del interesado">
               <p style={{ marginTop: 0, color: "#475569" }}>{rehearsal ? "Los dos PDF ficticios ya están preparados. Continúa con estos archivos." : "Imagen o PDF, máximo 8 MB por archivo."}{localProfileReady ? " Adjunta únicamente los documentos ficticios de la prueba." : ""}</p>
               <div style={gridStyle}>
                 <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
@@ -720,8 +723,12 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
             </Section>
 
             <Section title="5. Cuéntanos brevemente qué ha ocurrido">
-              <textarea rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
+              <p id="intake-story-help" style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>Indica la entidad u organismo, qué ha ocurrido, las fechas conocidas y qué solución buscas. No hace falta elegir un argumento jurídico: revisaremos el asunto con su documentación.</p>
+              <textarea aria-label="Qué ha ocurrido" aria-describedby="intake-story-help" rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
             </Section>
+
+            <IntakeClientSummary fields={clientFields} familyTitle={selectedFamily?.title || config.label}
+              caseTypeLabel={config.caseTypes[form.case_type]} hasCase={Boolean(draftCase)} />
 
             {!draftCase && <>
               {isVehicleRemoval ? (
@@ -788,7 +795,7 @@ function Section({ title, children }) {
 }
 
 function Field({ label, value, onChange, placeholder, type = "text", disabled = false }) {
-  return <label style={{ display: "block" }}><span style={labelStyle}>{label}</span><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} disabled={disabled} /></label>;
+  return <label style={{ display: "block" }}><span style={labelStyle}>{label}</span><input {...intakeInputAttributes(label)} type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} disabled={disabled} /></label>;
 }
 
 function UploadBox({ label, file, inputRef, onChange, accept = "image/*,application/pdf", disabled = false }) {
