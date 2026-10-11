@@ -95,21 +95,46 @@ export function parseLocalAuthorizationCandidate(payload, expectedCaseId) {
   return { status: "pending_review", documentId: payload.document_id };
 }
 
-/** Keep the created draft before any authorization work. A failed issue or
- * download retries this same case and never posts a second intake. */
-export async function continueIntakeAuthorization({ draft, createDraft, persistDraft, issueAuthorization, openAuthorization }) {
+/** Retain the server reference independently of authorization. This callback
+ * only updates UI state; it is not proof of persistence by itself. The caller
+ * must check the intake response, capability and required environment before
+ * returning an unblocked draft. Never store personal data in browser storage. */
+export async function saveIntakeDraft({ draft, createDraft, persistDraft }) {
   let current = draft;
   if (!current) {
     current = await createDraft();
-    persistDraft(current);
+    if (!current || typeof current !== "object" || !normalizeCaseId(current.caseId)) {
+      throw new TypeError("El servidor no devolvió una referencia válida del expediente.");
+    }
+    // Preserve a known reference even when the caller detected a bad response,
+    // so a later authorization retry does not create a second known case.
+    await persistDraft(current);
+  }
+  if (!normalizeCaseId(current.caseId)) {
+    throw new TypeError("Referencia de expediente no válida.");
   }
   if (current.blockedMessage) throw new Error(current.blockedMessage);
-  if (current.authorizationFlow === "vehicle_removal") return current;
+  return current;
+}
+
+/** Save and issue are separate actions. Existing rehearsal callers retain their
+ * original sequence; an explicit saveOnly request never issues or opens a PDF.
+ * Reuse a known draft after any issue/download error. This is not server-side
+ * idempotency for an intake whose HTTP response was lost. */
+export async function continueIntakeAuthorization({ draft, createDraft, persistDraft, issueAuthorization, openAuthorization, saveOnly = false }) {
+  if (typeof saveOnly !== "boolean") {
+    throw new TypeError("La acción de guardado debe indicarse expresamente.");
+  }
+  let current = await saveIntakeDraft({ draft, createDraft, persistDraft });
+  if (saveOnly || current.authorizationFlow === "vehicle_removal") return current;
+  if (!["dgt", LOCAL_RTM_AUTHORIZATION_KIND].includes(current.authorizationFlow)) {
+    throw new TypeError("La autorización de este servicio todavía no está disponible en este entorno.");
+  }
   if (!current.authorizationBinding) {
     const issued = await issueAuthorization(current);
     if (!issued?.binding) throw new TypeError("No se ha confirmado el documento de autorización.");
     current = { ...current, authorizationBinding: issued.binding };
-    persistDraft(current);
+    await persistDraft(current);
   }
   await openAuthorization(current);
   return current;
