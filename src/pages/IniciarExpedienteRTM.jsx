@@ -268,7 +268,6 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
       return "El tipo de expediente no corresponde al área elegida.";
     }
     if (localRuntimeEnabled && !localProfileReady) return "Todavía no se ha confirmado el entorno local de pruebas.";
-    if (authorizationFlow === "unavailable") return "La autorización de este servicio todavía no está disponible en este entorno.";
     const clientError = intakeClientDataError(form);
     if (clientError) return clientError;
     if (form.full_name.trim().length < 3) return "Indica el nombre y apellidos.";
@@ -288,7 +287,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
     if (!dniBack) return "Adjunta la parte posterior del documento de identidad.";
     if (dniFront.size > MAX_FILE_BYTES || dniBack.size > MAX_FILE_BYTES) return "Algún documento de identidad supera 8 MB.";
     if (form.customer_comment.trim().length < 15) return "Cuéntanos brevemente qué ha ocurrido.";
-    if (!isVehicleRemoval && !isLocalGeneric && !form.representation_confirmed) {
+    if (rehearsal && !isVehicleRemoval && !isLocalGeneric && !form.representation_confirmed) {
       return "Confirma la generación de la autorización.";
     }
     if (!form.privacy_accepted) return "Acepta la política de privacidad.";
@@ -300,6 +299,12 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
     if (createRequestRef.current) return;
     const error = draftCaseRef.current ? "" : validateDraft();
     if (error) return setMessage(error);
+    // The ordinary form first saves; a separate click prepares authorization.
+    // Keep the existing radar rehearsal and vehicle-removal sequences intact.
+    const saveOnly = !rehearsal && !draftCaseRef.current && !isVehicleRemoval;
+    if (!saveOnly && authorizationFlow === "dgt" && !form.representation_confirmed) {
+      return setMessage("Confirma la solicitud de autorización antes de preparar su documento.");
+    }
 
     createRequestRef.current = true;
     setLoading(true);
@@ -307,6 +312,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
 
     try {
       const completed = await continueIntakeAuthorization({
+        saveOnly,
         draft: draftCaseRef.current,
         persistDraft: (saved) => {
           draftCaseRef.current = saved;
@@ -325,7 +331,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
               ? `Área pública seleccionada: ${selectedFamily.title}\n\n${form.customer_comment.trim()}`
               : form.customer_comment.trim(),
             representation_confirmed: String(
-              isVehicleRemoval || isLocalGeneric ? false : form.representation_confirmed
+              isVehicleRemoval || isLocalGeneric || saveOnly ? false : form.representation_confirmed
             ),
             prejudicial_counsel_requested: String(
               isVehicleRemoval || isLocalGeneric ? false : form.prejudicial_counsel_requested
@@ -353,7 +359,8 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
               pathOnly: true,
             }) || fallbackNextPath;
 
-          const routes = isVehicleRemoval ? {} : authorizationRoutes(caseId, authorizationFlow);
+          const routes = isVehicleRemoval || authorizationFlow === "unavailable"
+            ? {} : authorizationRoutes(caseId, authorizationFlow);
           const blockedMessage = data.ok !== true
             ? "El servidor no confirmó correctamente el alta. Conservamos la referencia para evitar duplicados."
             : !hasAccess
@@ -378,6 +385,10 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
       });
       if (completed.authorizationFlow === "vehicle_removal") {
         navigate(`${completed.nextPath}?case=${encodeURIComponent(completed.caseId)}`);
+        return;
+      }
+      if (saveOnly) {
+        setMessage("✅ Datos del expediente guardados. No se ha emitido una autorización, confirmado representación ni iniciado un pago o una presentación.");
         return;
       }
       setMessage(completed.authorizationFlow === LOCAL_RTM_AUTHORIZATION_KIND
@@ -528,7 +539,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
               >
                 Selecciona el área correspondiente. Te llevaremos al formulario
                 de datos o, en Vivienda, a una consulta previa de encaje.
-                La disponibilidad de la autorización se indica en cada formulario.
+                El guardado y la preparación de autorización son pasos separados.
               </p>
             </header>
 
@@ -642,7 +653,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
                 ? "Cuéntanos lo necesario para abrir el expediente. Después comprobarás el permiso de circulación y revisarás el consentimiento y la cotización específicos antes del pago."
                 : rehearsal?.renewal ? "La notificación ya está recibida. Confirma las casillas para emitir una autorización actualizada, descarga el nuevo candidato ficticio y súbelo. Conservamos este mismo expediente y sus documentos."
                 : rehearsal ? "Conserva los datos ficticios preparados. Después descarga y sube el candidato de autorización de prueba y continúa con la notificación."
-                : "Indica los datos de la persona por la que se hará la gestión y un contacto. El resumen muestra qué se enviará; la autorización y la documentación se tramitan después según el servicio disponible."}
+                : "Indica los datos de la persona por la que se hará la gestión y un contacto. Primero guarda los datos; después se prepara la autorización correspondiente, sin volver a crear el expediente."}
             </p>
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
               {isVehicleRemoval
@@ -667,7 +678,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
           ) : null}
           {authorizationFlow === "unavailable" && (!localRuntimeEnabled || localProfileReady) ? (
             <p role="status" style={{ padding: 16, background: "#fff7ed", color: "#9a3412", borderRadius: 14 }}>
-              La generación de autorización para este servicio todavía no está disponible en este entorno. No se creará un expediente con una autorización de otro servicio. Los datos que escribas permanecen únicamente en esta pantalla y no se guardan al cerrarla.
+              La autorización de este servicio todavía no está disponible. El guardado es independiente y no utilizará una autorización de otro servicio. Solo consideres los datos guardados cuando el servidor lo confirme. Las restricciones del entorno de pruebas siguen vigentes; si rechaza el alta, los datos permanecen únicamente en esta pantalla.
             </p>
           ) : null}
 
@@ -728,7 +739,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
             </Section>
 
             <IntakeClientSummary fields={clientFields} familyTitle={selectedFamily?.title || config.label}
-              caseTypeLabel={config.caseTypes[form.case_type]} hasCase={Boolean(draftCase)} />
+              caseTypeLabel={config.caseTypes[form.case_type]} hasCase={Boolean(draftCase) && !draftCase.blockedMessage} />
 
             {!draftCase && <>
               {isVehicleRemoval ? (
@@ -740,11 +751,12 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
                 </div>
               ) : isLocalGeneric ? (
                 <p style={{ padding: 16, borderRadius: 14, background: "#fffbeb", color: "#78350f" }}>
-                  Se generará un documento genérico RTM marcado como prueba local. Esta operación no concede representación ni solicita una firma real.
+                  Primero se guardarán los datos de prueba. Después podrás solicitar el documento genérico RTM marcado como prueba local. Ninguno de estos pasos concede representación ni solicita una firma real.
                 </p>
               ) : (
                 <>
-                  <Check disabled={loading} checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>{rehearsal ? "Confirmo que este ensayo utiliza únicamente datos ficticios y solicito el documento de prueba." : "Autorizo expresamente a RTM a representarme y gestionar únicamente este expediente conforme al documento de autorización."}</Check>
+                  {rehearsal ? <Check disabled={loading} checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Confirmo que este ensayo utiliza únicamente datos ficticios y solicito el documento de prueba.</Check>
+                    : <p style={{ color: "#475569", lineHeight: 1.6 }}>Guardar los datos no emite ni firma una autorización. La representación se tramitará por separado para este mismo expediente.</p>}
                   <div style={{ margin: "14px 0", padding: 16, border: "1px solid #bfdbfe", borderRadius: 15, background: "#eff6ff", color: "#1e3a5f" }}>
                     <Check disabled={loading || Boolean(rehearsal)} checked={form.prejudicial_counsel_requested} onChange={(v) => update("prejudicial_counsel_requested", v)}>
                       Quiero valorar una autorización separada y opcional para que un abogado pueda realizar reclamaciones prejudiciales por escrito en este expediente.
@@ -756,21 +768,24 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
                 </>
               )}
               <Check disabled={loading} checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
-              <button type="submit" disabled={loading || authorizationFlow === "unavailable" || (localRuntimeEnabled && !localProfileReady)} style={primaryButton}>
+              <button type="submit" disabled={loading || (localRuntimeEnabled && !localProfileReady)} style={primaryButton}>
                 {loading
-                  ? (rehearsal?.renewal ? "Renovando autorización…" : "Creando expediente…")
+                  ? (rehearsal?.renewal ? "Renovando autorización…" : "Guardando datos…")
                   : isVehicleRemoval
                     ? "Crear expediente y continuar"
-                    : rehearsal?.renewal ? "Renovar autorización de prueba" : isLocalGeneric ? "Crear expediente de prueba y descargar documento" : "Crear expediente y descargar autorización"}
+                    : rehearsal?.renewal ? "Renovar autorización de prueba" : rehearsal ? "Crear expediente y descargar autorización" : "Guardar datos del expediente"}
               </button>
             </>}
           </form>
 
-          {draftCase && <Section title="6. Descargar y subir la autorización RTM">
-            <div style={{ padding: 14, marginBottom: 16, borderRadius: 14, background: "#dcfce7", color: "#166534", fontWeight: 900, overflowWrap: "anywhere" }}>Expediente: {draftCase.caseId}</div>
-            {!draftCase.authorizationBinding ? <>
-              <p role="status">El expediente ya tiene referencia. La emisión del documento todavía no se ha completado; el reintento conserva este mismo expediente.</p>
-              <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading || Boolean(draftCase.blockedMessage)}>{loading ? "Emitiendo documento…" : "Reintentar autorización"}</button>
+          {draftCase && <Section title="6. Expediente y autorización">
+            <div style={{ padding: 14, marginBottom: 16, borderRadius: 14, background: draftCase.blockedMessage ? "#fffbeb" : "#dcfce7", color: draftCase.blockedMessage ? "#78350f" : "#166534", fontWeight: 900, overflowWrap: "anywhere" }}>Expediente: {draftCase.caseId}</div>
+            {draftCase.blockedMessage ? <p role="alert">{draftCase.blockedMessage} No se ha habilitado la continuación.</p>
+              : draftCase.authorizationFlow === "unavailable" ? <p role="status">Los datos están guardados con esta referencia. La autorización propia de este servicio sigue pendiente de habilitación; no se emitirá una autorización DGT ni se iniciará un pago o una presentación. No vuelvas a crear el expediente para reintentar ese paso.</p>
+              : !draftCase.authorizationBinding ? <>
+              <p role="status">Los datos del expediente ya están guardados. Preparar la autorización es un paso separado y conserva esta misma referencia.</p>
+              {!rehearsal && draftCase.authorizationFlow === "dgt" ? <Check disabled={loading} checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Solicito preparar la autorización para que RTM gestione únicamente este expediente. La firma y la revisión del documento se realizan después.</Check> : null}
+              <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading || (draftCase.authorizationFlow === "dgt" && !form.representation_confirmed)}>{loading ? "Emitiendo documento…" : "Preparar autorización de este expediente"}</button>
             </> : <>
             <button type="button" className="sr-btn-primary" onClick={createDraftAndDownload} disabled={loading}>{loading ? "Descargando…" : isLocalGeneric ? "⬇ Descargar PDF de prueba RTM" : "⬇ Descargar autorización RTM"}</button>
             {rehearsal ? <button type="button" className="sr-btn-primary" style={{ marginTop: 16 }} onClick={() => intakeFile(`/cases/${draftCase.caseId}/candidate-fixture`).catch(error => setMessage(error.message))}>Descargar candidato con firma ficticia para subirlo en el ensayo</button> : null}
@@ -780,7 +795,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
             <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : isLocalGeneric || rehearsal ? "Subir candidato de prueba" : "Subir autorización firmada"}</button>
             {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>{rehearsal?.renewal ? "Continuar a la revisión de autorización" : "Continuar y subir documentación (autorización pendiente de revisión)"}</button>}
             </>}
-            {isLocalGeneric ? <button type="button" className="sr-btn-primary" onClick={() => navigate(`/ops/case/${encodeURIComponent(draftCase.caseId)}`)} style={{ marginTop: 16 }}>Ver expediente en OPS</button> : null}
+            {isLocalGeneric && !draftCase.blockedMessage ? <button type="button" className="sr-btn-primary" onClick={() => navigate(`/ops/case/${encodeURIComponent(draftCase.caseId)}`)} style={{ marginTop: 16 }}>Ver expediente en OPS</button> : null}
           </Section>}
 
           {message && <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850 }}>{message}</div>}
