@@ -88,7 +88,9 @@ test("vehicle removal bypasses generic DGT issuance and resumes only in its spec
     openAuthorization: () => assert.fail("vehicle removal must continue to its specific flow"),
   }), saved);
   assert.match(intake, /continueIntakeAuthorization\(\{/);
-  assert.match(intake, /isVehicleRemoval \|\| isLocalGeneric \? false : form\.representation_confirmed/);
+  // Independent saving adds another reason to keep representation false;
+  // vehicle removal and local generic authorization remain excluded explicitly.
+  assert.match(intake, /representation_confirmed: String\(\s*isVehicleRemoval \|\| isLocalGeneric \|\| saveOnly \? false : form\.representation_confirmed\s*\)/);
   assert.match(intake, /Esta alta no genera ni solicita una autorización DGT genérica/);
   assert.match(
     intake,
