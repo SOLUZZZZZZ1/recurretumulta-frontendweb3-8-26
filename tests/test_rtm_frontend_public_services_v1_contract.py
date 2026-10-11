@@ -200,7 +200,11 @@ class PublicServicesSurfaceTests(unittest.TestCase):
     def test_selector_renders_same_nine_families(self):
         self.assertIn("const services = PUBLIC_SERVICE_FAMILIES", self.intake)
         self.assertIn("navigate(service.startPath)", self.intake)
-        self.assertIn("Expediente disponible", self.intake)
+        # A form route is not a promise that its authorization is operational.
+        self.assertIn("Formulario de datos", self.intake)
+        self.assertIn("Consulta de encaje", self.intake)
+        self.assertNotIn('"Expediente disponible"', self.intake)
+        self.assertIn('authorizationFlow === "unavailable"', self.intake)
 
     def test_unknown_department_never_falls_back_to_traffic(self):
         forbidden = (
