@@ -6,6 +6,7 @@ import { StaticRouter, Routes, Route } from "react-router-dom";
 import * as helmetAsync from "react-helmet-async";
 import { createServer } from "vite";
 import { fileURLToPath } from "node:url";
+import { saveIntakeDraft } from "../src/lib/intakeAuthorizationFlow.js";
 
 // Render the actual screen and routing, not a replacement fixture component.
 // SSR proves controls/copy/compilation only. It does NOT prove browser clicks,
@@ -13,6 +14,7 @@ import { fileURLToPath } from "node:url";
 const HelmetProvider = helmetAsync.HelmetProvider || helmetAsync.default?.HelmetProvider;
 let server;
 let Intake;
+let ClientSummary;
 let catalog;
 before(async () => {
   server = await createServer({
@@ -33,6 +35,7 @@ before(async () => {
     }],
   });
   Intake = (await server.ssrLoadModule("/src/pages/IniciarExpedienteRTM.jsx")).default;
+  ClientSummary = (await server.ssrLoadModule("/src/components/IntakeClientSummary.jsx")).default;
   catalog = (await server.ssrLoadModule("/src/data/publicServices.js")).PUBLIC_SERVICE_FAMILIES;
 });
 after(async () => { await server?.close(); });
@@ -49,6 +52,17 @@ function render(location, rehearsal = null) {
   ));
 }
 
+const CONTACT_NOTICE = "La persona de contacto puede ser distinta de la persona interesada. Utilizaremos estos datos para las comunicaciones relacionadas con el expediente.";
+
+function assertContactNotice(html) {
+  // One paragraph in the contact group, independent of traffic-specific copy.
+  const paragraph = html.match(/<h3[^>]*>Contacto para esta gestión<\/h3><dl[\s\S]*?<\/dl><p[^>]*>([^<]*)<\/p>/);
+  assert.ok(paragraph, "the notice stays directly below the contact details");
+  assert.equal(paragraph[1], CONTACT_NOTICE);
+  assert.equal(html.split(CONTACT_NOTICE).length - 1, 1);
+  assert.doesNotMatch(html, /El contacto puede ser distinto del interesado|No determina quién conducía ni quién figura en la documentación/);
+}
+
 for (const family of ["trafico", "viajes", "morosidad", "administracion", "bancos", "energia", "telecomunicaciones", "seguros"]) {
   test(`actual ${family} form renders save-first without requiring representation`, () => {
     const service = catalog.find(item => item.id === family);
@@ -58,6 +72,7 @@ for (const family of ["trafico", "viajes", "morosidad", "administracion", "banco
     assert.match(html, /Guardar datos del expediente/);
     assert.match(html, /Resumen de los datos del formulario/);
     assert.match(html, /Contacto para esta gestión/);
+    assertContactNotice(html);
     assert.match(html, /Todavía no se han enviado/);
     const submit = html.match(/<button\b[^>]*type="submit"[^>]*>/)?.[0];
     assert.ok(submit, "there must be a submit control");
@@ -71,6 +86,29 @@ for (const family of ["trafico", "viajes", "morosidad", "administracion", "banco
       assert.match(html, /La autorización de este servicio todavía no está disponible/);
       assert.doesNotMatch(html, /Crear expediente y descargar autorización/);
     }
+  });
+  test(`${family} summary retains the neutral notice after a simulated save`, async () => {
+    const service = catalog.find(item => item.id === family);
+    let saved = null;
+    await saveIntakeDraft({
+      createDraft: async () => ({ caseId: "11111111-1111-4111-8111-111111111111", blockedMessage: "" }),
+      persistDraft: draft => { saved = draft; },
+    });
+    // This checks the summary's saved state, not HTTP or real persistence.
+    const html = renderToString(React.createElement(ClientSummary, {
+      fields: {
+        full_name: "PERSONA INTERESADA FICTICIA", dni_nie: "RTMTEST001",
+        domicilio_notif: "Calle Ficticia 1", email: "contacto@example.com",
+        telefono: "600000000", preferred_contact: "email",
+      },
+      familyTitle: service.title, caseTypeLabel: "Tipo de prueba",
+      hasCase: Boolean(saved) && !saved.blockedMessage,
+    }));
+    assertContactNotice(html);
+    assert.match(html, /Datos utilizados en la solicitud de alta/);
+    assert.doesNotMatch(html, /Todavía no se han enviado/);
+    assert.match(html, /PERSONA INTERESADA FICTICIA/);
+    assert.match(html, /contacto@example.com/);
   });
 }
 

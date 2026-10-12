@@ -32,7 +32,7 @@ export default function IntakeClientSummary({ fields, familyTitle, caseTypeLabel
           <dt>Teléfono</dt><dd style={valueStyle}>{missing(fields.telefono)}</dd>
           <dt>Canal preferido</dt><dd style={valueStyle}>{({ email: 'Email', phone: 'Teléfono', whatsapp: 'WhatsApp' })[fields.preferred_contact] || 'Pendiente de seleccionar'}</dd>
         </dl>
-        <p style={{ marginBottom: 0, fontSize: 14 }}>El contacto puede ser distinto del interesado. No determina quién conducía ni quién figura en la documentación.</p>
+        <p style={{ marginBottom: 0, fontSize: 14 }}>La persona de contacto puede ser distinta de la persona interesada. Utilizaremos estos datos para las comunicaciones relacionadas con el expediente.</p>
       </div>
     </div>
     <p style={{ marginBottom: 8 }}><strong>Área elegida:</strong> {familyTitle} · {caseTypeLabel}</p>
