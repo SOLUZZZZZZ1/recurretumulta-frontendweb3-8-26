@@ -693,7 +693,7 @@ export default function IniciarExpedienteRTM({ rehearsal = null }) {
             </Section>
 
             <Section title="2. Persona interesada y contacto">
-              <p style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>Nombre y documento de la persona a cuyo nombre se tramitará el asunto. No se sustituyen por los datos de quien inicia sesión, paga o ayuda a completar el formulario. Tampoco determinan por sí solos quién conducía.</p>
+              <p style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>Nombre y documento de la persona a cuyo nombre se tramitará el asunto. No se sustituyen por los datos de quien inicia sesión, paga o ayuda a completar el formulario.</p>
               <div style={gridStyle}>
                 <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo del interesado" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
                 <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Documento del interesado" disabled={Boolean(rehearsal) || Boolean(draftCase) || loading} />
