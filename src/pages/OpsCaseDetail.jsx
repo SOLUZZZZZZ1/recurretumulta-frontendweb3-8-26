@@ -10,6 +10,8 @@ import { Link, useParams } from "react-router-dom";
 import { derivePaymentDisplay } from "../lib/opsPayment.js";
 import { withOpsAuthorizationStatus } from "../lib/opsCaseAuthorization.js";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
+import { validateOpsWorkspace } from "../lib/opsSavedCaseData.js";
+import OpsSavedCaseData from "../components/OpsSavedCaseData.jsx";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import LocalIntakeRecovery from "../ops-auth/LocalIntakeRecovery.jsx";
 import {
@@ -297,13 +299,6 @@ const stageLabel = (value) =>
 
 const caseTypeLabel = (value) =>
   CASE_TYPE_LABELS[normalize(value)] || value || "Sin clasificar";
-
-function maskIdentity(value) {
-  const text = String(value || "").trim();
-  if (!text) return "—";
-  if (text.length <= 4) return "••••";
-  return `${text.slice(0, 2)}${"•".repeat(Math.max(2, text.length - 4))}${text.slice(-2)}`;
-}
 
 function documentLabel(kind = "") {
   const key = normalize(kind);
@@ -630,7 +625,8 @@ function TimelineItem({ event }) {
 
 export default function OpsCaseDetail() {
   const { caseId } = useParams();
-  const { authFetch, canSupervise } = useOpsAuth();
+  const { authFetch, canSupervise, session } = useOpsAuth();
+  const sessionId = session?.sessionId || "";
   const canManageLegacy = canSupervise;
 
   const [workspaceState, setWorkspace] = useState(null);
@@ -640,6 +636,7 @@ export default function OpsCaseDetail() {
   const [eventsState, setEvents] = useState([]);
   const [followupsState, setFollowups] = useState([]);
   const [loadedCaseId, setLoadedCaseId] = useState("");
+  const [loadedSessionId, setLoadedSessionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [debug, setDebug] = useState("");
@@ -652,13 +649,14 @@ export default function OpsCaseDetail() {
 
   const followupMutationLockRef = useRef(false);
   const activeCaseIdRef = useRef(caseId || "");
+  const activeSessionIdRef = useRef(sessionId);
   const loadedCaseIdRef = useRef("");
   const loadAbortRef = useRef(null);
   const loadGenerationRef = useRef(0);
   const mutationAbortRef = useRef(null);
   const mutationGenerationRef = useRef(0);
 
-  const caseProjectionReady = Boolean(caseId) && loadedCaseId === caseId;
+  const caseProjectionReady = Boolean(caseId && sessionId) && loadedCaseId === caseId && loadedSessionId === sessionId;
   const workspace = caseProjectionReady ? workspaceState : null;
   const paymentRecord = caseProjectionReady ? paymentRecordState : null;
   const authorizationRecord = caseProjectionReady ? authorizationRecordState : null;
@@ -668,8 +666,10 @@ export default function OpsCaseDetail() {
 
   useLayoutEffect(() => {
     activeCaseIdRef.current = caseId || "";
+    activeSessionIdRef.current = sessionId;
     loadedCaseIdRef.current = "";
     setLoadedCaseId("");
+    setLoadedSessionId("");
     loadAbortRef.current?.abort();
     loadAbortRef.current = null;
     loadGenerationRef.current += 1;
@@ -694,6 +694,7 @@ export default function OpsCaseDetail() {
 
     return () => {
       activeCaseIdRef.current = "";
+      activeSessionIdRef.current = "";
       loadedCaseIdRef.current = "";
       loadAbortRef.current?.abort();
       mutationAbortRef.current?.abort();
@@ -701,11 +702,12 @@ export default function OpsCaseDetail() {
       mutationGenerationRef.current += 1;
       followupMutationLockRef.current = false;
     };
-  }, [caseId]);
+  }, [caseId, sessionId]);
 
   const load = useCallback(async () => {
     const requestedCaseId = caseId || "";
-    if (!requestedCaseId) {
+    const requestedSessionId = sessionId;
+    if (!requestedCaseId || !requestedSessionId) {
       setLoading(false);
       return;
     }
@@ -716,7 +718,7 @@ export default function OpsCaseDetail() {
     const requestGeneration = loadGenerationRef.current + 1;
     loadGenerationRef.current = requestGeneration;
     const isCurrentLoad = () =>
-      isCurrentOpsCaseRequest({
+      activeSessionIdRef.current === requestedSessionId && isCurrentOpsCaseRequest({
         requestedCaseId,
         activeCaseId: activeCaseIdRef.current,
         requestGeneration,
@@ -725,11 +727,17 @@ export default function OpsCaseDetail() {
       });
 
     setLoading(true);
+    // Clear the old projection before a refresh, including one that fails.
+    loadedCaseIdRef.current = "";
+    setLoadedCaseId("");
+    setLoadedSessionId("");
+    setWorkspace(null);
     setMessage("");
     setDebug("");
 
     const [ws, payment, ds, es, fs, authorization] = await Promise.allSettled([
-      apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/workspace`, { signal: controller.signal }),
+      apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/workspace`, { signal: controller.signal, cache: "no-store" })
+        .then(data => validateOpsWorkspace(data, requestedCaseId)),
       apiJson(authFetch, `/ops/core/cases/${encodeURIComponent(requestedCaseId)}/payment-status`, { signal: controller.signal }),
       apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/documents`, { signal: controller.signal }),
       apiJson(authFetch, `/ops/cases/${encodeURIComponent(requestedCaseId)}/events`, { signal: controller.signal }),
@@ -762,6 +770,7 @@ export default function OpsCaseDetail() {
     setFollowups(nextFollowups);
     loadedCaseIdRef.current = requestedCaseId;
     setLoadedCaseId(requestedCaseId);
+    setLoadedSessionId(requestedSessionId);
 
     const partial = [
       ["Espacio jurídico", ws],
@@ -787,14 +796,13 @@ export default function OpsCaseDetail() {
       loadAbortRef.current = null;
       setLoading(false);
     }
-  }, [authFetch, caseId]);
+  }, [authFetch, caseId, sessionId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const caseData = withOpsAuthorizationStatus(workspace?.case || {}, authorizationRecord, caseId);
-  const identity = caseData.identity || {};
   const readiness = workspace?.readiness || {};
   const quote = readiness.quote || {};
   const nextStep = workspace?.next_step || {};
@@ -1624,15 +1632,9 @@ export default function OpsCaseDetail() {
         }}
       >
         <Panel>
-          <h2 className="sr-h3" style={{ marginTop: 0 }}>
-            Datos del expediente
-          </h2>
+          <OpsSavedCaseData workspace={workspace} caseId={caseId} />
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {[
-              ["Interesado", identity.full_name || "—"],
-              ["Documento", maskIdentity(identity.dni_nie)],
-              ["Email", identity.email || "—"],
-              ["Teléfono", identity.phone || "—"],
               ["Organismo / contraparte", caseData.organismo || "Pendiente"],
               ["Referencia externa", caseData.expediente_ref || "Pendiente"],
               ["Estado", statusLabel(caseData.status)],
