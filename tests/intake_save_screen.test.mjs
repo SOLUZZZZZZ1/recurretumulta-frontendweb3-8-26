@@ -63,6 +63,17 @@ function assertContactNotice(html) {
   assert.doesNotMatch(html, /El contacto puede ser distinto del interesado|No determina quién conducía ni quién figura en la documentación/);
 }
 
+const INTERESTED_NOTICE = "Nombre y documento de la persona a cuyo nombre se tramitará el asunto. No se sustituyen por los datos de quien inicia sesión, paga o ayuda a completar el formulario.";
+
+function assertInterestedNotice(html) {
+  // Inspect the real full form: the summary alone missed this residual notice.
+  const paragraph = html.match(/>2\. Persona interesada y contacto<\/h[1-6]>\s*<p[^>]*>([^<]*)<\/p>/);
+  assert.ok(paragraph, "one paragraph immediately below the interested/contact heading");
+  assert.equal(paragraph[1], INTERESTED_NOTICE);
+  assert.equal(html.split(INTERESTED_NOTICE).length - 1, 1);
+  assert.doesNotMatch(html, /Tampoco determinan por sí solos quién conducía\./);
+}
+
 for (const family of ["trafico", "viajes", "morosidad", "administracion", "bancos", "energia", "telecomunicaciones", "seguros"]) {
   test(`actual ${family} form renders save-first without requiring representation`, () => {
     const service = catalog.find(item => item.id === family);
@@ -73,6 +84,7 @@ for (const family of ["trafico", "viajes", "morosidad", "administracion", "banco
     assert.match(html, /Resumen de los datos del formulario/);
     assert.match(html, /Contacto para esta gestión/);
     assertContactNotice(html);
+    assertInterestedNotice(html);
     assert.match(html, /Todavía no se han enviado/);
     const submit = html.match(/<button\b[^>]*type="submit"[^>]*>/)?.[0];
     assert.ok(submit, "there must be a submit control");
