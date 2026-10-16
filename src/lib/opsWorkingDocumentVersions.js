@@ -11,12 +11,14 @@ const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.dige
 export const versionsRoute = caseId => `${workingDocumentRoute(caseId)}/versions`;
 
 export function verifyVersionEntry(entry, caseId) {
-  assert(UUID.test(caseId) && entry && UUID.test(entry.id) && entry.case_id === caseId && entry.format === VERSION);
+  assert(UUID.test(caseId) && entry && UUID.test(entry.id) && entry.case_id === caseId
+    && [VERSION, 'rtm_working_document_versions_v2'].includes(entry.format));
   assert(Number.isInteger(entry.sequence) && entry.sequence > 0 && entry.sequence <= 200
     && entry.status === 'working_draft' && entry.synthetic_only === true && entry.final_resource_generated === false);
   assert(entry.previous_id === null || UUID.test(entry.previous_id));
   assert(entry.previous_material_sha256 === null || HASH.test(entry.previous_material_sha256));
-  assert(['source_sha256', 'snapshot_sha256', 'content_sha256', 'authority_sha256'].every(key => HASH.test(entry[key])));
+  assert(['source_sha256', 'snapshot_sha256', 'content_sha256',
+    entry.format === VERSION ? 'authority_sha256' : 'context_sha256'].every(key => HASH.test(entry[key])));
   assert(typeof entry.title === 'string' && typeof entry.created_at === 'string'
     && Number.isFinite(Date.parse(entry.created_at)));
   assert(entry.pdf && UUID.test(entry.pdf.document_id) && HASH.test(entry.pdf.sha256)

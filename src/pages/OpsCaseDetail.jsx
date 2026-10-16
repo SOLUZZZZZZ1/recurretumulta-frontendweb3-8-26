@@ -12,6 +12,7 @@ import { withOpsAuthorizationStatus } from "../lib/opsCaseAuthorization.js";
 import { isCurrentOpsCaseRequest } from "../lib/opsCaseRequestGuard.js";
 import { validateOpsWorkspace } from "../lib/opsSavedCaseData.js";
 import OpsSavedCaseData from "../components/OpsSavedCaseData.jsx";
+import OpsCaseWorkingDocument from "../components/OpsCaseWorkingDocument.jsx";
 import { useOpsAuth } from "../ops-auth/OpsAuthContext.jsx";
 import LocalIntakeRecovery from "../ops-auth/LocalIntakeRecovery.jsx";
 import {
@@ -625,7 +626,7 @@ function TimelineItem({ event }) {
 
 export default function OpsCaseDetail() {
   const { caseId } = useParams();
-  const { authFetch, canSupervise, session } = useOpsAuth();
+  const { authFetch, canSupervise, session, status: authStatus } = useOpsAuth();
   const sessionId = session?.sessionId || "";
   const canManageLegacy = canSupervise;
 
@@ -1491,7 +1492,8 @@ export default function OpsCaseDetail() {
               }}
             >
               No consta el pago del estudio. OPS no debe ejecutar extracción
-              jurídica, resolver familia, crear Previa ni generar documentos.
+              jurídica, resolver familia, crear Previa ni generar documentos finales.
+              El borrador de trabajo no activa esos pasos.
             </div>
           ) : null}
 
@@ -1633,6 +1635,8 @@ export default function OpsCaseDetail() {
       >
         <Panel>
           <OpsSavedCaseData workspace={workspace} caseId={caseId} />
+          <OpsCaseWorkingDocument authFetch={authFetch} caseId={caseId} sessionId={sessionId}
+            enabled={caseProjectionReady && canSupervise && authStatus?.authProfile === "local_development"} />
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {[
               ["Organismo / contraparte", caseData.organismo || "Pendiente"],
