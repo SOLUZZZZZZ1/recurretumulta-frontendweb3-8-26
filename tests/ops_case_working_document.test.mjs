@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { parse } from '@babel/parser';
 import { verifyCaseDocument, verifyCaseVersions, contentHash, readCaseVersion, saveCaseVersion,
-  selectCaseVersion, CASE_DOCUMENT, CASE_VERSIONS } from '../src/lib/opsCaseWorkingDocument.js';
+  selectCaseVersion, describeCaseSave, matchesCaseSave, verifyCaseSaveRead, CASE_DOCUMENT, CASE_VERSIONS } from '../src/lib/opsCaseWorkingDocument.js';
 
 const caseId = randomUUID(), id = randomUUID(), docId = randomUUID(), selection = randomUUID();
 const hash = 'a'.repeat(64), content = 'PRUEBA SINTÉTICA\r\nContenido exacto.  \r\n';
@@ -103,4 +103,46 @@ test('OPS mounts on local individual case context, destroys state across session
   assert.ok(component.includes('request.current?.abort()'));
   assert.ok(page.includes('caseProjectionReady && canSupervise && authStatus?.authProfile === "local_development"'));
   for (const forbidden of ['window.open', 'createObjectURL', 'dangerouslySetInnerHTML', 'localStorage', 'sessionStorage']) assert.ok(!component.includes(forbidden));
+});
+
+test('save distinguishes rejection, local validation and unknown transport/server/invalid success outcomes', async () => {
+  for (const [status, outcome] of [[409, 'rejected'], [422, 'rejected'], [401, 'rejected'], [500, 'unknown'], [503, 'unknown'], [200, 'unknown']]) {
+    let calls = 0;
+    await assert.rejects(saveCaseVersion({ caseId, body: {}, authFetch: async () => { calls++; return Response.json({}, { status }); } }),
+      err => err.writeOutcome === outcome);
+    assert.equal(calls, 1);
+  }
+  await assert.rejects(saveCaseVersion({ caseId, body: {}, authFetch: async () => { throw new TypeError('Failed to fetch'); } }),
+    err => err.writeOutcome === 'unknown');
+  await assert.rejects(saveCaseVersion({ caseId, body: {}, authFetch: async () => Response.json({ ...versions,
+    history: [], saved_id: null, latest_id: null, selected_id: null, selection_revision: null }) }),
+    err => err.writeOutcome === 'unknown');
+  await assert.rejects(saveCaseVersion({ caseId, body: {}, file: new File(['x'], 'bad.html'), authFetch: () => assert.fail('not sent') }),
+    err => err.writeOutcome === 'not_sent');
+});
+
+test('reconciliation binds exact text, source, parent, origin, reason and document references', async () => {
+  const body = { content, expected_source_sha256: hash, expected_latest_id: null, based_on_id: null,
+    change_reason: entry.change_reason, used_document_ids: [docId] };
+  const operation = await describeCaseSave(body);
+  body.content = 'later edit';
+  assert.equal(matchesCaseSave(entry, operation), true);
+  assert.equal(verifyCaseSaveRead(reply, operation), reply);
+  for (const bad of [{ previous_id: id }, { based_on_id: id }, { source_sha256: 'b'.repeat(64) },
+    { change_reason: 'another operation' }, { content_sha256: 'b'.repeat(64) }, { provenance: 'external_correction' }]) {
+    assert.equal(matchesCaseSave({ ...entry, ...bad }, operation), false);
+  }
+  assert.throws(() => verifyCaseSaveRead({ ...reply, snapshot: { ...snapshot, content: content.trim() } }, operation));
+  assert.throws(() => verifyCaseSaveRead({ ...reply, snapshot: { ...snapshot, used_document_ids: [] } }, operation));
+});
+
+test('correction reconciliation binds the original file bytes and not the editor text', async () => {
+  const file = new File([`RTM-CASE: ${caseId}\nRTM-VERSION: ${id}\n\nCORRECCIÓN\n`], 'revision.txt');
+  const operation = await describeCaseSave({ expected_latest_id: id, based_on_id: id, expected_source_sha256: hash,
+    content: 'old editor text', change_reason: 'Corrección externa', used_document_ids: [docId] }, file);
+  const corrected = { ...entry, previous_id: id, based_on_id: id, change_reason: 'Corrección externa', provenance: 'external_correction',
+    correction: { sha256: await contentHash(await file.text()), size_bytes: file.size } };
+  assert.equal(matchesCaseSave(corrected, operation), true);
+  assert.equal(matchesCaseSave({ ...corrected, correction: { ...corrected.correction, sha256: hash } }, operation), false);
+  assert.equal(matchesCaseSave({ ...corrected, correction: { ...corrected.correction, size_bytes: file.size + 1 } }, operation), false);
 });

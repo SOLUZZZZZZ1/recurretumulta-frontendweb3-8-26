@@ -47,8 +47,11 @@ try {
       if(path.endsWith('/correction')) {
         const raw=req.postDataBuffer().toString('utf8');
         assert.ok(raw.includes('RTM-CASE: '+id));
+        const metadata=JSON.parse(raw.match(/name="metadata"\r\n\r\n([^\r]+)/)[1]);
+        const fileText=raw.slice(raw.indexOf('RTM-CASE: ')).split('\r\n--')[0];
         const entry={...state.history[0],id:randomUUID(),sequence:2,previous_id:state.latest_id,previous_material_sha256:hash,based_on_id:state.latest_id,
-          content_sha256:sha('CORRECCIÓN FICTICIA\n'),provenance:'external_correction',correction:{document_id:randomUUID(),filename:'revision.txt',sha256:hash,size_bytes:200,mime:'text/plain'}};
+          change_reason:metadata.change_reason,content_sha256:sha('CORRECCIÓN FICTICIA\n'),provenance:'external_correction',
+          correction:{document_id:randomUUID(),filename:'revision.txt',sha256:sha(fileText),size_bytes:Buffer.byteLength(fileText),mime:'text/plain'}};
         snapshots.set(entry.id,{...source(id),content:'CORRECCIÓN FICTICIA\n'});
         state.history.unshift(entry);state.latest_id=entry.id;state.selected_id=entry.id;state.selection_revision=randomUUID();
         return reply(route,{...state,saved_id:entry.id});
@@ -95,6 +98,9 @@ try {
   assert.equal(states.get(A).history.length,2);assert.equal(await page.locator('[data-draft-save]').isDisabled(),true);
   results.push('Conflict retains editable text, blocks blind resave and makes no automatic retry');
   conflict=false;await page.getByRole('button',{name:'Actualizar historial de borradores',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('[data-draft-ack]').disabled);
+  assert.equal(await page.locator('[data-draft-ack]').isChecked(),false);
+  await page.locator('[data-draft-ack]').check();
   await page.waitForFunction(()=>!document.querySelector('[data-draft-save]').disabled);
   delayed='hold';await page.getByRole('button',{name:'Consultar versión 2',exact:true}).click();
   await page.waitForTimeout(100);await page.evaluate(id=>window.draftHarness.setCase(id),B);await editor.waitFor();

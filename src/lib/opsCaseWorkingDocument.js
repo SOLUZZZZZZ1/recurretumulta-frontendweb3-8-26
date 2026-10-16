@@ -115,16 +115,56 @@ export async function readCaseVersion({ authFetch, caseId, entry, signal }) {
   return result;
 }
 export async function saveCaseVersion({ authFetch, caseId, body, file, signal }) {
-  let payload, headers = {};
-  if (file) {
-    assert(file.size > 0 && file.size <= MAX_TEXT_BYTES && /\.txt$/i.test(file.name), 'Usa un archivo .txt UTF-8 de hasta 64 KiB.');
-    const { content, ...metadata } = body;
-    payload = new FormData(); payload.append('metadata', JSON.stringify(metadata)); payload.append('file', file);
-  } else { payload = JSON.stringify(body); headers = { 'Content-Type': 'application/json' }; }
-  const response = await checked(await authFetch(`${versionsRoute(caseId)}${file ? '/correction' : ''}`,
-    { method: 'POST', cache: 'no-store', signal, headers, body: payload }));
-  const result = verifyCaseVersions(await response.json(), caseId);
-  assert(result.saved_id === result.latest_id && result.selected_id === result.saved_id);
+  let sent = false;
+  try {
+    let payload, headers = {};
+    if (file) {
+      assert(file.size > 0 && file.size <= MAX_TEXT_BYTES && /\.txt$/i.test(file.name), 'Usa un archivo .txt UTF-8 de hasta 64 KiB.');
+      const { content, ...metadata } = body;
+      payload = new FormData(); payload.append('metadata', JSON.stringify(metadata)); payload.append('file', file);
+    } else { payload = JSON.stringify(body); headers = { 'Content-Type': 'application/json' }; }
+    sent = true;
+    const response = await checked(await authFetch(`${versionsRoute(caseId)}${file ? '/correction' : ''}`,
+      { method: 'POST', cache: 'no-store', signal, headers, body: payload }));
+    const result = verifyCaseVersions(await response.json(), caseId);
+    assert(UUID.test(result.saved_id) && result.history[0]?.id === result.saved_id
+      && result.saved_id === result.latest_id && result.selected_id === result.saved_id);
+    return result;
+  } catch (error) {
+    // A transport/5xx/invalid success response cannot tell us whether the write committed.
+    error.writeOutcome = !sent ? 'not_sent'
+      : [401, 403, 404, 409, 413, 415, 422].includes(error.status) ? 'rejected' : 'unknown';
+    throw error;
+  }
+}
+
+// Kept only in the mounted case/session, never persisted or used for automatic retries.
+export async function describeCaseSave(body, file) {
+  if (file) assert(file.size > 0 && file.size <= MAX_TEXT_BYTES && /\.txt$/i.test(file.name),
+    'Usa un archivo .txt UTF-8 de hasta 64 KiB.');
+  const bytes = file ? await file.arrayBuffer() : null;
+  return { body: structuredClone(body), content_sha256: file ? null : await contentHash(body.content),
+    correction_sha256: bytes ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+      b => b.toString(16).padStart(2, '0')).join('') : null, correction_size_bytes: file?.size ?? null };
+}
+
+export function matchesCaseSave(entry, operation) {
+  const { body } = operation;
+  return entry.previous_id === body.expected_latest_id && entry.based_on_id === body.based_on_id
+    && entry.source_sha256 === body.expected_source_sha256 && entry.change_reason === body.change_reason
+    && (operation.correction_sha256
+      ? entry.provenance === 'external_correction' && entry.correction?.sha256 === operation.correction_sha256
+        && entry.correction.size_bytes === operation.correction_size_bytes
+      : entry.provenance === 'operator_edit' && entry.content_sha256 === operation.content_sha256);
+}
+
+export function verifyCaseSaveRead(result, operation) {
+  assert(matchesCaseSave(result.entry, operation)
+    && result.snapshot.source_sha256 === operation.body.expected_source_sha256
+    && (operation.correction_sha256 || result.snapshot.content === operation.body.content)
+    && JSON.stringify([...result.snapshot.used_document_ids].sort())
+      === JSON.stringify([...operation.body.used_document_ids].sort()),
+  'La versión leída no coincide con la operación pendiente. El guardado sigue bloqueado; conserva el texto y consulta el historial.');
   return result;
 }
 export async function selectCaseVersion({ authFetch, caseId, entry, versions, signal }) {
