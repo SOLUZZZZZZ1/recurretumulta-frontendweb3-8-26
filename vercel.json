@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "rtm-ai-security-hardening-2026-09-03": false
+    }
+  },
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "headers": [
     {
