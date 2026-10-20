@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import OpsWorkspaceRead from "../components/OpsWorkspaceRead.jsx";
+import { READ_VERSION, readWorkspace, workspaceError } from "../lib/workspaceRead.js";
 
 const API = "/api";
 
@@ -217,7 +219,9 @@ async function readJson(response) {
       data?.message ||
       data?.raw ||
       `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const error = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -657,7 +661,27 @@ function TimelineItem({ event }) {
 
 export default function OpsCaseDetail() {
   const { caseId } = useParams();
-  const token = localStorage.getItem("ops_token") || "";
+  const [token, setToken] = useState(() => localStorage.getItem("ops_token") || "");
+  useEffect(() => {
+    const sync = () => setToken(localStorage.getItem("ops_token") || "");
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+    const timer = window.setInterval(sync, 500);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("focus", sync);
+      window.clearInterval(timer);
+    };
+  }, []);
+  const denied = useCallback(() => {
+    if ((localStorage.getItem("ops_token") || "") === token) localStorage.removeItem("ops_token");
+    setToken(localStorage.getItem("ops_token") || "");
+  }, [token]);
+  return <OpsCaseDetailSession key={caseId + ":" + token} caseId={caseId} token={token} onDenied={denied} />;
+}
+
+function OpsCaseDetailSession({ caseId, token, onDenied }) {
+  const activeRequest = useRef(null);
 
   const [workspace, setWorkspace] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -685,6 +709,16 @@ export default function OpsCaseDetail() {
   );
 
   const load = useCallback(async () => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const current = () => !controller.signal.aborted && activeRequest.current === controller
+      && (localStorage.getItem("ops_token") || "") === token;
+    setWorkspace(null);
+    setDocuments([]);
+    setEvents([]);
+    setFollowups([]);
+    setSelectedDocIds([]);
     if (!token || !caseId) {
       setLoading(false);
       return;
@@ -694,17 +728,22 @@ export default function OpsCaseDetail() {
     setMessage("");
     setDebug("");
 
-    const [ws, ds, es, fs] = await Promise.allSettled([
-      apiJson(`/ops/core/cases/${caseId}/workspace`, { headers }),
-      apiJson(`/ops/cases/${caseId}/documents`, { headers }),
-      apiJson(`/ops/cases/${caseId}/events`, { headers }),
-      apiJson(`/ops/cases/${caseId}/followups`, { headers }),
-    ]);
-
     try {
-      if (ws.status !== "fulfilled") throw ws.reason;
-
-      const nextWorkspace = ws.value;
+      const nextWorkspace = await readWorkspace(caseId, token, controller.signal);
+      if (!current()) return;
+      if (nextWorkspace.workspace_version === READ_VERSION) {
+        setWorkspace(nextWorkspace);
+        return;
+      }
+      // Legacy full workspace: ancillary reads only AFTER case and authorization.
+      const [ds, es, fs] = await Promise.allSettled([
+        apiJson(`/ops/cases/${caseId}/documents`, { headers, signal: controller.signal }),
+        apiJson(`/ops/cases/${caseId}/events`, { headers, signal: controller.signal }),
+        apiJson(`/ops/cases/${caseId}/followups`, { headers, signal: controller.signal }),
+      ]);
+      if (!current()) return;
+      const denied = [ds, es, fs].find(r => r.status === "rejected" && [401, 403].includes(r.reason?.status));
+      if (denied) throw denied.reason;
       const nextDocuments =
         ds.status === "fulfilled"
           ? ds.value?.documents || ds.value?.items || []
@@ -737,19 +776,22 @@ export default function OpsCaseDetail() {
         .map((result) => result.reason?.message || "Error parcial");
       if (partial.length) setDebug(partial.join(" | "));
     } catch (error) {
+      if (!current()) return;
       setWorkspace(null);
       setDocuments([]);
       setEvents([]);
       setFollowups([]);
-      setMessage("❌ No se pudo cargar el espacio jurídico del expediente.");
-      setDebug(error?.message || "");
+      setMessage(workspaceError(error));
+      setDebug("");
+      if ([401, 403].includes(error?.status)) onDenied();
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [caseId, headers, token]);
+  }, [caseId, headers, token, onDenied]);
 
   useEffect(() => {
     load();
+    return () => activeRequest.current?.abort();
   }, [load]);
 
   const caseData = workspace?.case || {};
@@ -971,6 +1013,19 @@ export default function OpsCaseDetail() {
         <Panel>Cargando espacio jurídico del expediente…</Panel>
       </main>
     );
+  }
+
+  if (!workspace) {
+    return <main className="sr-container py-10">
+      <Panel><h1 className="sr-h2">Detalle no disponible</h1>
+        <p role="alert">{message || "No se ha completado la lectura."}</p>
+        <Link to="/ops" className="sr-btn-secondary">Volver a OPS</Link>{" "}
+        <button onClick={load} className="sr-btn-secondary">Volver a consultar</button>
+      </Panel>
+    </main>;
+  }
+  if (workspace.workspace_version === READ_VERSION) {
+    return <OpsWorkspaceRead workspace={workspace} onRefresh={load} />;
   }
 
   return (
