@@ -242,12 +242,15 @@ export default function Navbar() {
 
       <header className="rtm-navbar">
         <div className="rtm-navbar-inner">
-          <Link to="/" className="rtm-navbar-brand" aria-label="Ir al inicio">
-            <img
-              src={logo}
-              alt="RecurreTuMulta"
-              className="rtm-navbar-logo"
-            />
+          <Link
+            to="/"
+            className="rtm-navbar-brand"
+            aria-label="RTM — Resuelve tus movidas. Ir al inicio"
+          >
+            <span className="rtm-navbar-logo-frame" aria-hidden="true">
+              <img src={logo} alt="" className="rtm-navbar-logo" />
+            </span>
+            <span className="rtm-navbar-tagline">Resuelve tus movidas</span>
           </Link>
 
           <button
