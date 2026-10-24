@@ -1,6 +1,6 @@
 // src/App.jsx — RecurreTuMulta
 import React from "react";
-import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import ResumenExpediente from "./pages/ResumenExpediente.jsx";
 import Autorizar from "./pages/Autorizar.jsx";
 
@@ -47,12 +47,6 @@ import Privacidad from "./pages/Privacidad.jsx";
 import Cookies from "./pages/Cookies.jsx";
 
 export default function App() {
-  const location = useLocation();
-
-  const hideChrome =
-    location.pathname === "/__reservas-restaurante" ||
-    location.pathname === "/__admin-restaurantes";
-
   return (
     <div
       className="min-h-screen text-zinc-900"
@@ -64,7 +58,7 @@ export default function App() {
         backgroundPosition: "center center",
       }}
     >
-      {!hideChrome && <Navbar />}
+      <Navbar />
 
       <Routes>
         <Route path="/" element={<InicioRTM />} />
@@ -121,7 +115,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {!hideChrome && <Footer />}
+      <Footer />
     </div>
   );
 }

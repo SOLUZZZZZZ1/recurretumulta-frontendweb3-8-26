@@ -634,7 +634,7 @@ textarea {
   margin-top: 4px;
   color: #a7f57a;
   font-size: 14px;
-  font-weight: 780;
+  font-weight: 500;
 }
 
 @media (max-width: 980px) {
@@ -685,8 +685,8 @@ textarea {
   border-left: 1px solid rgba(255,255,255,.42);
   color: #a7f57a;
   font-size: 17px;
-  font-style: italic;
-  font-weight: 850;
+  font-style: normal;
+  font-weight: 500;
   line-height: 1.08;
   letter-spacing: -.02em;
   white-space: nowrap;
@@ -728,7 +728,7 @@ textarea {
   }
 
   .rtm-navbar-tagline {
-    max-width: 105px;
+    max-width: 140px;
     padding-left: 9px;
     font-size: 13px;
     white-space: normal;
@@ -749,8 +749,57 @@ textarea {
   }
 
   .rtm-navbar-tagline {
-    max-width: 72px;
+    max-width: 124px;
     padding-left: 6px;
     font-size: 11px;
   }
+}
+
+/* Shared RTM wordmark: original logo and green, self-hosted typography. */
+@font-face {
+  font-family: "RTM Fredoka";
+  src: url("/fonts/fredoka/Fredoka.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.rtm-tagline-lead {
+  display: block;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: .025em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.rtm-tagline-verb {
+  font-size: 1.6em;
+  font-weight: 700;
+}
+
+.rtm-tagline-word {
+  display: block;
+  font-family: "RTM Fredoka", Arial, sans-serif;
+  font-size: 25px;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: -.025em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.rtm-footer-brand-tagline .rtm-tagline-word {
+  font-size: 21px;
+}
+
+@media (max-width: 640px) {
+  .rtm-navbar-tagline .rtm-tagline-lead { font-size: 11px; }
+  .rtm-navbar-tagline .rtm-tagline-word { font-size: 21px; }
+}
+
+@media (max-width: 380px) {
+  .rtm-navbar-tagline .rtm-tagline-word { font-size: 19px; }
 }
