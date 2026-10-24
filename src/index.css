@@ -780,6 +780,10 @@ textarea {
   font-weight: 700;
 }
 
+.rtm-tagline-connector {
+  font-size: 1.2em;
+}
+
 .rtm-tagline-word {
   display: block;
   font-family: "RTM Fredoka", Arial, sans-serif;
