@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
+import RtmBrand from "./RtmBrand.jsx";
 
 export default function Footer() {
   const { search, hash } = useLocation();
@@ -22,7 +23,7 @@ export default function Footer() {
       }}
     >
       <div
-        className="sr-container"
+        className="sr-container rtm-footer-grid"
         style={{
           display: "grid",
           gap: 20,
@@ -31,9 +32,7 @@ export default function Footer() {
       >
         {/* RECURRE TU MULTA */}
         <div>
-          <h4 style={{ marginBottom: 8, fontSize: 16, fontWeight: 800 }}>
-            RecurreTuMulta
-          </h4>
+          <RtmBrand placement="footer" />
           <ul style={{ listStyle: "none", padding: 0, lineHeight: 1.9 }}>
             <li>
               <Link to="/" style={{ color: "#e5e7eb" }}>

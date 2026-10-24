@@ -615,6 +615,40 @@ textarea {
 
 /* RTM brand: visual fragment from reviewed staging; production logo and navigation retained. */
 
+.rtm-footer-brand {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.05;
+}
+
+.rtm-footer-brand-name {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.rtm-footer-brand-tagline {
+  margin-top: 4px;
+  color: #a7f57a;
+  font-size: 14px;
+  font-weight: 780;
+}
+
+@media (max-width: 980px) {
+  .rtm-footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .rtm-footer-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 .rtm-navbar-brand {
   height: 76px;
   min-width: 0;

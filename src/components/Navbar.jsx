@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import logo from "/rtm-logo-transparente-recortado.png";
+import RtmBrand, { RTM_BRAND_LABEL } from "./RtmBrand.jsx";
 
 const MAIN_LINKS = [
   { to: "/", label: "Inicio" },
@@ -245,12 +245,9 @@ export default function Navbar() {
           <Link
             to="/"
             className="rtm-navbar-brand"
-            aria-label="RTM — Resuelve tus movidas. Ir al inicio"
+            aria-label={RTM_BRAND_LABEL}
           >
-            <span className="rtm-navbar-logo-frame" aria-hidden="true">
-              <img src={logo} alt="" className="rtm-navbar-logo" />
-            </span>
-            <span className="rtm-navbar-tagline">Resuelve tus movidas</span>
+            <RtmBrand />
           </Link>
 
           <button
