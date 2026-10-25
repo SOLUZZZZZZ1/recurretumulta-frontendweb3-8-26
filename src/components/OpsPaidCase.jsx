@@ -79,7 +79,7 @@ function Case({caseId}){
           <details><summary>Detalle del registro</summary><p>El nombre original no se conservó en este esquema.</p><code>{d.id}</code></details></li>)}</ul></>}
       {document&&<OpsDocumentViewer key={`${caseId}:${document.id}`} caseId={caseId} document={document} authFetch={auth.authFetch} onReviewed={markReviewed} onClose={()=>setDocument(null)}/>}</div>
     <div hidden={tab!=='Estudio'}><details><summary>Extracciones anteriores pendientes de revisión</summary>{work.extractions.length?<>{work.extractions.map(e=><pre key={e.id}>{JSON.stringify(e.values,null,2)}</pre>)}<p>No se han convertido automáticamente en hechos validados.</p></>:<p>Esta lectura no devuelve extracciones. Los originales pueden revisarse en Documentos.</p>}</details>
-      <OpsPaidStudy caseId={caseId} authFetch={auth.authFetch} study={work.study} documents={docs.items||[]} reviewed={reviewed} canWrite={paid&&work.capabilities.study_write} onRefresh={setWork}/></div>
+      <OpsPaidStudy caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} documents={docs.items||[]} reviewed={reviewed} canWrite={paid&&work.capabilities.study_write} onRefresh={setWork}/></div>
     <div hidden={tab!=='Presupuesto y pagos'}><h2>Presupuesto y pagos</h2><p>{paid?'El pago del estudio consta en RTM. No se ofrece repetirlo.':'Estado registrado: '+fieldText(fields.payment_status)}</p>
       <p>La propuesta de gestión, su aceptación versionada y el saldo requieren la siguiente fase de integración. Esta pantalla no crea cobros ni modifica importes o estados.</p></div>
     {tab==='Comunicaciones'&&<OpsCommunications caseId={caseId} authFetch={auth.authFetch} canWrite={work.capabilities.study_write}/>}
