@@ -1,0 +1,568 @@
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Outlet } from "react-router-dom";
+import {deviceClosure} from './opsDeviceClosure.js';
+import { changeTemporaryOperatorPassword } from "../rtm-presenter/rtmOperatorOnboardingApi.js";
+import {
+  buildOpsAuthenticatedRequest,
+  OpsAuthError,
+  loginOpsOperator,
+  logoutOpsOperator,
+  readOpsAuthStatus,
+} from "./opsAuthApi.js";
+import {
+  canAccessOpsWorkspace,
+  canSuperviseOpsWorkspace,
+} from "./opsAuthorization.js";
+import {
+  bindOpsSessionLifecycle,
+  scheduleOpsSessionExpiry,
+} from "./opsSessionLifecycle.js";
+
+const OpsAuthContext = createContext(null);
+
+function clearSensitiveInput(setters) {
+  setters.forEach((setter) => setter(""));
+}
+
+function LoginCard({ auth }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    const submittedPassword = password;
+    setPassword("");
+    await auth.login(email, submittedPassword);
+  }
+
+  return (
+    <section className="mx-auto w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">
+        RTM OPS · acceso individual
+      </p>
+      <h1 className="mt-2 text-3xl font-black text-slate-950">Identifica al operador</h1>
+      <p className="mt-3 text-sm leading-6 text-slate-600">
+        Usa tu cuenta personal de RTM. La sesión permanece únicamente en la memoria de esta
+        pestaña y queda vinculada al operador y a este dispositivo.
+      </p>
+      {auth.status && !auth.status.individualLoginEnabled ? (
+        <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+          La autenticación individual de OPS está cerrada en este despliegue.
+        </p>
+      ) : null}
+      {auth.notice ? (
+        <p role="status" className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">
+          {auth.notice}
+        </p>
+      ) : null}
+      {auth.closure.phase!=='ready'&&<div role="status" className="mt-4 rounded-xl bg-amber-50 p-4" data-testid="ops-closure" data-phase={auth.closure.phase}>
+        {auth.closure.phase==='closing'?'Cierre en curso. Los datos se han retirado; espera su confirmación antes de entrar.':
+          auth.closure.phase==='unavailable'?'Este navegador no permite coordinar de forma segura las sesiones de OPS. El acceso permanece bloqueado.':
+          'Hay un cierre pendiente de confirmar en este navegador. No se ha dado por completado ni se permite otra entrada.'}
+        {auth.closure.phase!=='unavailable'&&<button type="button" disabled={auth.closure.active} onClick={auth.recoverClosure}>Comprobar cierre pendiente</button>}
+      </div>}
+      <form onSubmit={submit} className="mt-5 grid gap-4">
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Email de operador
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="username"
+            required
+            className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal"
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Contraseña
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+            maxLength={256}
+            className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={auth.busy || auth.closure.phase!=='ready' || auth.status?.individualLoginEnabled !== true}
+          className="min-h-11 rounded-xl bg-slate-950 px-5 font-black text-white disabled:bg-slate-400"
+        >
+          {auth.busy ? "Validando…" : auth.status ? "Entrar en OPS" : "Comprobando acceso…"}
+        </button>
+      </form>
+      {auth.error ? (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800">
+          {auth.error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function InitialPasswordCard({ auth }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    const current = currentPassword;
+    const next = newPassword;
+    const repeated = confirmation;
+    clearSensitiveInput([setCurrentPassword, setNewPassword, setConfirmation]);
+    await auth.completeInitialPasswordChange(current, next, repeated);
+  }
+
+  return (
+    <section className="mx-auto w-full max-w-xl rounded-3xl border border-blue-200 bg-white p-6 shadow-xl">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">
+        RTM OPS · primera entrada
+      </p>
+      <h1 className="mt-2 text-3xl font-black text-slate-950">Cambia la contraseña temporal</h1>
+      <p className="mt-3 text-sm leading-6 text-slate-600">
+        La cuenta <strong>{auth.onboardingOperator?.email || "de operador"}</strong> está
+        activa, pero no puede abrir expedientes hasta elegir una contraseña propia.
+      </p>
+      <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">
+        RTM no guardará estas contraseñas en el navegador. Después del cambio tendrás que
+        identificarte de nuevo con la contraseña nueva.
+      </p>
+      <form onSubmit={submit} className="mt-5 grid gap-4">
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Contraseña temporal
+          <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" maxLength={256} required className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal" />
+        </label>
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Nueva contraseña
+          <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" minLength={12} maxLength={256} required className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal" />
+        </label>
+        <label className="grid gap-2 text-sm font-bold text-slate-800">
+          Repite la nueva contraseña
+          <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" minLength={12} maxLength={256} required className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal" />
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <button type="submit" disabled={auth.busy} className="min-h-11 flex-1 rounded-xl bg-blue-800 px-5 font-black text-white disabled:bg-slate-400">
+            {auth.busy ? "Cambiando…" : "Guardar contraseña nueva"}
+          </button>
+          <button type="button" onClick={auth.logout} disabled={auth.busy} className="min-h-11 rounded-xl border border-slate-300 px-5 font-bold text-slate-700 disabled:text-slate-400">
+            Cancelar
+          </button>
+        </div>
+      </form>
+      {auth.error ? (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800">
+          {auth.error}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+export function OpsAuthProvider({ children }) {
+  const bearerRef = useRef("");
+  const activeSessionIdRef = useRef("");
+  const sessionEpochRef = useRef(null);
+  const coordinatorRef = useRef(null);
+  const productionRef = useRef(false);
+  const mountedRef = useRef(true);
+  const requestAbortRef = useRef(null);
+  const requestLockRef = useRef(false);
+  const activeFetchControllersRef = useRef(new Set());
+  const sensitiveRootRef = useRef(null);
+  const [status, setStatus] = useState(null);
+  const [session, setSession] = useState(null);
+  const [onboardingOperator, setOnboardingOperator] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [viewVisible, setViewVisible] = useState(true);
+  const [viewEpoch, setViewEpoch] = useState(0);
+  const [statusEpoch, setStatusEpoch] = useState(0);
+  const [closure,setClosure]=useState({phase:'ready',active:false});
+
+  const abortSensitiveRequests = useCallback(() => {
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
+    requestLockRef.current = false;
+    for (const controller of activeFetchControllersRef.current) controller.abort();
+    activeFetchControllersRef.current.clear();
+  }, []);
+
+  const clearSession = useCallback((message = "") => {
+    bearerRef.current = "";
+    activeSessionIdRef.current = "";
+    sessionEpochRef.current = null;
+    setSession(null);
+    setOnboardingOperator(null);
+    setNotice("");
+    setError(message);
+    setBusy(false);
+    setViewEpoch((current) => current + 1);
+  }, []);
+
+  const invalidateSession = useCallback(
+    (expectedSessionId = "") => {
+      if (expectedSessionId && activeSessionIdRef.current !== expectedSessionId) return;
+      sensitiveRootRef.current?.setAttribute("hidden", "");
+      abortSensitiveRequests();
+      clearSession("La sesión individual ha caducado. Vuelve a identificarte.");
+    },
+    [abortSensitiveRequests, clearSession]
+  );
+
+  const invalidateForPageExit = useCallback(() => {
+    sensitiveRootRef.current?.setAttribute("hidden", "");
+    setViewVisible(false);
+    const token = bearerRef.current;
+    abortSensitiveRequests();
+    clearSession("La vista protegida se cerró. Vuelve a identificarte.");
+    if (token) {
+      if(productionRef.current){
+        try{void coordinatorRef.current.begin().catch(()=>{});}catch{}
+      } else void logoutOpsOperator({ bearerToken: token, keepalive: true }).catch(() => {});
+    }
+  }, [abortSensitiveRequests, clearSession]);
+
+  const restoreAfterPageShow = useCallback(() => {
+    abortSensitiveRequests();
+    clearSession("La página se restauró de forma segura. Vuelve a identificarte.");
+    setStatus(null);
+    setStatusEpoch((current) => current + 1);
+    setViewVisible(true);
+  }, [abortSensitiveRequests, clearSession]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    activeFetchControllersRef.current.add(controller);
+    void readOpsAuthStatus({ signal: controller.signal, allowLocalDevelopment: true })
+      .then((nextStatus) => {
+        if (!controller.signal.aborted) {
+          productionRef.current=nextStatus.authProfile==='production_casework';
+          if(productionRef.current)coordinatorRef.current=deviceClosure();
+          setStatus(nextStatus);
+        }
+      })
+      .catch((statusError) => {
+        if (!controller.signal.aborted) setError(statusError.message);
+      })
+      .finally(() => activeFetchControllersRef.current.delete(controller));
+    return () => {
+      controller.abort();
+      activeFetchControllersRef.current.delete(controller);
+    };
+  }, [statusEpoch]);
+
+  useEffect(()=>{
+    if(status?.authProfile!=='production_casework')return;
+    const coordinator=coordinatorRef.current;
+    return coordinator.subscribe(state=>{
+      if(!mountedRef.current)return;
+      setClosure(state);
+      if((bearerRef.current&&!coordinator.permits(sessionEpochRef.current))||
+        (requestAbortRef.current&&state.phase!=='ready')){
+        sensitiveRootRef.current?.setAttribute('hidden','');
+        abortSensitiveRequests();clearSession('La sesión se ha retirado por un cierre en este navegador.');
+      }
+    });
+  },[status?.authProfile,abortSensitiveRequests,clearSession]);
+
+  useEffect(
+    () =>
+      bindOpsSessionLifecycle(window, {
+        invalidate: invalidateForPageExit,
+        restore: restoreAfterPageShow,
+      }),
+    [invalidateForPageExit, restoreAfterPageShow]
+  );
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const expectedSessionId = session.sessionId;
+    return scheduleOpsSessionExpiry(session.expiresAt, () => {
+      invalidateSession(expectedSessionId);
+    });
+  }, [invalidateSession, session]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortSensitiveRequests();
+      const token = bearerRef.current;
+      bearerRef.current = "";
+      activeSessionIdRef.current = "";
+      if (token) {
+        if(productionRef.current){
+          try{void coordinatorRef.current.begin().catch(()=>{});}catch{}
+        } else void logoutOpsOperator({ bearerToken: token, keepalive: true }).catch(() => {});
+      }
+    };
+  }, [abortSensitiveRequests]);
+
+  const login = useCallback(
+    async (email, password) => {
+      if (status?.individualLoginEnabled !== true) {
+        setError("La autenticación individual de OPS no está habilitada.");
+        return;
+      }
+      if (requestLockRef.current) return;
+      requestLockRef.current = true;
+      const controller = new AbortController();
+      requestAbortRef.current = controller;
+      setBusy(true);
+      setError("");
+      setNotice("");
+      try {
+        const attempt=()=>loginOpsOperator({email,password,signal:controller.signal});
+        const result=productionRef.current
+          ? await coordinatorRef.current.runLogin(attempt,{signal:controller.signal})
+          : {value:await attempt(),epoch:null};
+        const authenticated=result.value;
+        if (controller.signal.aborted || !mountedRef.current) {
+          await logoutOpsOperator({ bearerToken: authenticated.bearerToken }).catch(() => {});
+          return;
+        }
+        bearerRef.current = authenticated.bearerToken;
+        activeSessionIdRef.current = authenticated.sessionId;
+        sessionEpochRef.current = result.epoch;
+        if (!canAccessOpsWorkspace(authenticated.operator)) {
+          await logoutOpsOperator({ bearerToken: authenticated.bearerToken }).catch(() => {});
+          clearSession("Esta cuenta no tiene permiso para acceder a OPS.");
+          return;
+        }
+        if (authenticated.operator.mustChangePassword) {
+          if (status?.authProfile === "production_casework") {
+            await logoutOpsOperator({ bearerToken: authenticated.bearerToken }).catch(() => {});
+            clearSession("Esta cuenta necesita completar su activación individual antes de trabajar. No se ha abierto el expediente.");
+            return;
+          }
+          setSession(null);
+          setOnboardingOperator({ email: authenticated.operator.email });
+          return;
+        }
+        setOnboardingOperator(null);
+        setSession({
+          sessionId: authenticated.sessionId,
+          expiresAt: authenticated.expiresAt,
+          operator: authenticated.operator,
+        });
+      } catch (loginError) {
+        bearerRef.current = "";
+        activeSessionIdRef.current = "";
+        if (!controller.signal.aborted && mountedRef.current) {
+          clearSession(loginError.message || "No se pudo iniciar sesión.");
+        }
+      } finally {
+        if (requestAbortRef.current === controller) {
+          requestAbortRef.current = null;
+          requestLockRef.current = false;
+        }
+        if (mountedRef.current) setBusy(false);
+      }
+    },
+    [clearSession, status]
+  );
+
+  const completeInitialPasswordChange = useCallback(
+    async (currentPassword, newPassword, confirmation) => {
+      if (requestLockRef.current) return;
+      if (newPassword !== confirmation) {
+        setError("Las dos copias de la contraseña nueva no coinciden.");
+        return;
+      }
+      const token = bearerRef.current;
+      const expectedSessionId = activeSessionIdRef.current;
+      if (!token || !expectedSessionId) {
+        invalidateSession(expectedSessionId);
+        return;
+      }
+      requestLockRef.current = true;
+      const controller = new AbortController();
+      requestAbortRef.current = controller;
+      setBusy(true);
+      setError("");
+      setNotice("");
+      try {
+        await changeTemporaryOperatorPassword({
+          bearerToken: token,
+          currentPassword,
+          newPassword,
+          signal: controller.signal,
+        });
+        if (
+          controller.signal.aborted ||
+          !mountedRef.current ||
+          activeSessionIdRef.current !== expectedSessionId
+        ) {
+          return;
+        }
+        bearerRef.current = "";
+        activeSessionIdRef.current = "";
+        setOnboardingOperator(null);
+        setSession(null);
+        setNotice("Contraseña actualizada. Identifícate de nuevo con la contraseña nueva.");
+      } catch (changeError) {
+        if (!controller.signal.aborted && mountedRef.current) {
+          if (changeError?.status === 401) clearSession();
+          setError(changeError?.message || "No se pudo cambiar la contraseña temporal.");
+        }
+      } finally {
+        if (requestAbortRef.current === controller) {
+          requestAbortRef.current = null;
+          requestLockRef.current = false;
+        }
+        if (mountedRef.current) setBusy(false);
+      }
+    },
+    [clearSession, invalidateSession]
+  );
+
+  const logout = useCallback(async () => {
+    const token = bearerRef.current;
+    abortSensitiveRequests();
+    clearSession();
+    if (!token) return;
+    if(productionRef.current){
+      try{await coordinatorRef.current.begin();}
+      catch(closeError){if(mountedRef.current)setError(closeError.message);}
+    }else await logoutOpsOperator({ bearerToken: token }).catch(() => {});
+  }, [abortSensitiveRequests, clearSession]);
+
+  const recoverClosure=useCallback(async()=>{
+    if(!productionRef.current)return;
+    setError('');
+    try{await coordinatorRef.current.reconcile();}
+    catch(closeError){if(mountedRef.current)setError(closeError.message);}
+  },[]);
+
+  const authFetch = useCallback(
+    async (url, options = {}) => {
+      const token = bearerRef.current;
+      const expectedSessionId = activeSessionIdRef.current;
+      if (!token || !expectedSessionId || (productionRef.current&&!coordinatorRef.current.permits(sessionEpochRef.current))) {
+        invalidateSession(expectedSessionId);
+        throw new OpsAuthError("ops_auth.session_required", "La sesión individual ha caducado.", 401);
+      }
+      const controller = new AbortController();
+      const callerSignal = options?.signal || null;
+      const abortFromCaller = () => controller.abort(callerSignal?.reason);
+      if (callerSignal?.aborted) {
+        abortFromCaller();
+      } else {
+        callerSignal?.addEventListener?.("abort", abortFromCaller, { once: true });
+      }
+      activeFetchControllersRef.current.add(controller);
+      try {
+        const request = buildOpsAuthenticatedRequest({
+          url,
+          bearerToken: token,
+          options: { ...options, signal: controller.signal },
+        });
+        const response = await fetch(request.url, request.options);
+        if (response.status === 401 || response.status === 403) invalidateSession(expectedSessionId);
+        if (controller.signal.aborted || activeSessionIdRef.current !== expectedSessionId ||
+            (productionRef.current&&!coordinatorRef.current.permits(sessionEpochRef.current))) {
+          throw new OpsAuthError("ops_auth.context_changed", "El contexto protegido ha cambiado.", 401);
+        }
+        return response;
+      } finally {
+        activeFetchControllersRef.current.delete(controller);
+        callerSignal?.removeEventListener?.("abort", abortFromCaller);
+      }
+    },
+    [invalidateSession]
+  );
+
+  const value = useMemo(
+    () => ({
+      status,
+      session,
+      onboardingOperator,
+      busy,
+      error,
+      notice,
+      closure,
+      recoverClosure,
+      login,
+      logout,
+      completeInitialPasswordChange,
+      authFetch,
+      invalidateSession,
+      canSupervise: canSuperviseOpsWorkspace(session?.operator),
+    }),
+    [
+      status,
+      session,
+      onboardingOperator,
+      busy,
+      error,
+      notice,
+      closure,
+      recoverClosure,
+      login,
+      logout,
+      completeInitialPasswordChange,
+      authFetch,
+      invalidateSession,
+    ]
+  );
+
+  return (
+    <OpsAuthContext.Provider value={value}>
+      <div key={viewEpoch} ref={sensitiveRootRef} hidden={!viewVisible}>
+        {status?.authProfile === "local_development" ? (
+          <p role="status" className="bg-amber-50 px-4 py-3 text-center text-sm font-bold text-amber-950">
+            Entorno local de pruebas · cuentas y expedientes de este PC
+          </p>
+        ) : null}
+        {children}
+      </div>
+    </OpsAuthContext.Provider>
+  );
+}
+
+export function useOpsAuth() {
+  const context = useContext(OpsAuthContext);
+  if (!context) throw new Error("useOpsAuth debe usarse dentro de OpsAuthProvider.");
+  return context;
+}
+
+export function OpsAuthBoundary({ children }) {
+  const auth = useOpsAuth();
+  if (auth.onboardingOperator) {
+    return (
+      <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
+        <InitialPasswordCard auth={auth} />
+      </main>
+    );
+  }
+  if (!auth.session) {
+    return (
+      <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-950">
+        <LoginCard auth={auth} />
+      </main>
+    );
+  }
+  return children;
+}
+
+export function OpsWorkspaceRoute() {
+  return (
+    <OpsAuthProvider>
+      <OpsAuthBoundary>
+        <Outlet />
+      </OpsAuthBoundary>
+    </OpsAuthProvider>
+  );
+}

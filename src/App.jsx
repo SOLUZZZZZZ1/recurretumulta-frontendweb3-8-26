@@ -39,6 +39,7 @@ import PagoCancel from "./pages/PagoCancel.jsx";
 // Operador
 import OpsDashboard from "./pages/OpsDashboard.jsx";
 import OpsCaseDetail from "./pages/OpsCaseDetail.jsx";
+import OpsPaidCaseEntry from "./components/OpsPaidCase.jsx";
 import OpsCaseDetailPro from "./pages/OpsCaseDetailPro.jsx";
 
 // Legal
@@ -99,8 +100,8 @@ export default function App() {
         <Route path="/pago-ok" element={<PagoOk />} />
         <Route path="/pago-cancel" element={<PagoCancel />} />
 
-        <Route path="/ops" element={<OpsDashboard />} />
-        <Route path="/ops/case/:caseId" element={<OpsCaseDetail />} />
+        <Route path="/ops" element={<OpsPaidCaseEntry fallback={<OpsDashboard />} />} />
+        <Route path="/ops/case/:caseId" element={<OpsPaidCaseEntry fallback={<OpsCaseDetail />} />} />
         <Route path="/ops/review/:caseId" element={<OpsCaseDetailPro />} />
         <Route path="/ops/case/:caseId/review" element={<OpsCaseDetailPro />} />
         <Route path="/ops/pro/:caseId" element={<OpsCaseDetailPro />} />
