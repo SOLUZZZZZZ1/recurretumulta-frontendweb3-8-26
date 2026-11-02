@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {jsonRequest,root} from '../lib/paidCasework.js';
 import OpsDocumentViewer from './OpsDocumentViewer.jsx';
+import OpsMailTextViewer from './OpsMailTextViewer.jsx';
 const LABEL={prepared:'Preparado · no enviado',queued:'Pendiente de envío',sending:'Envío en curso',provider_accepted:'Aceptado por el proveedor · entrega no confirmada',delivered:'Entrega confirmada por evidencia',bounced:'Rebotado',failed:'Envío fallido',unknown:'Resultado desconocido · reconciliación necesaria',received:'Recibido',pending_assignment:'Pendiente de asignar'};
 export default function OpsCommunications({caseId,authFetch,canWrite}){
   const [data,setData]=useState(null),[query,setQuery]=useState(''),[error,setError]=useState(''),[epoch,setEpoch]=useState(0);
@@ -59,7 +60,9 @@ export default function OpsCommunications({caseId,authFetch,canWrite}){
         {phase==='prepared'&&prepared.state==='prepared'&&<><label><input type="checkbox" checked={approve} onChange={e=>setApprove(e.target.checked)}/> Apruebo el envío de este contenido exacto a {prepared.message.recipients.join(', ')}.</label><button disabled={!approve} onClick={()=>void queue()}>Poner este mensaje en la cola de envío</button></>}
         {phase==='queued'&&<button onClick={()=>{setDraft({recipient:'',subject:'',body:'',reply_id:null});setPending(null);setPrepared(null);setPhase('editing');}}>Preparar otra comunicación</button>}</article>}
     </>}
-    {attachment&&<OpsDocumentViewer key={`${attachment.item.id}:${attachment.part.part}`} caseId={caseId}
+    {attachment&&attachment.part.mime==='text/plain'?<OpsMailTextViewer key={`${attachment.item.id}:${attachment.part.part}`} caseId={caseId}
+      documentId={`${attachment.item.id}:${attachment.part.part}`} viewBase={`${root(caseId)}/communications/${attachment.item.id}/attachments/${attachment.part.part}`}
+      authFetch={authFetch} onClose={()=>setAttachment(null)}/>:attachment&&<OpsDocumentViewer key={`${attachment.item.id}:${attachment.part.part}`} caseId={caseId}
       document={{id:`${attachment.item.id}:${attachment.part.part}`}} viewBase={`${root(caseId)}/communications/${attachment.item.id}/attachments/${attachment.part.part}`}
       authFetch={authFetch} onClose={()=>setAttachment(null)}/>}
   </section>;

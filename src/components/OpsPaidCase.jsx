@@ -5,6 +5,8 @@ import {CASEWORK_CONTRACT,fieldText,jsonRequest,root,verifyAssessment,documentLa
 import OpsDocumentViewer from './OpsDocumentViewer.jsx';
 import OpsPaidStudy from './OpsPaidStudy.jsx';
 import OpsCommunications from './OpsCommunications.jsx';
+import OpsManagementQuote from './OpsManagementQuote.jsx';
+import OpsManagementDraft from './OpsManagementDraft.jsx';
 import './OpsPaidCase.css';
 
 function CaseList(){
@@ -28,10 +30,10 @@ function Resource({caseId,resources,authFetch}){
       if(!ctl.signal.aborted)setRead(value);
     }catch(e){if(!ctl.signal.aborted)setError(e.message);}finally{if(!ctl.signal.aborted)setBusy(false);}
   }
-  return <section><h2>Recurso</h2>{resources.status==='not_recorded'?<><p>Recurso todavía no preparado en el archivo de recursos consultado.</p><p>El siguiente paso es completar la valoración del estudio. La contratación de la gestión y la preparación/corrección del recurso son etapas posteriores; esta entrega no las habilita.</p></>:
+  return <section><h2>Archivo anterior de recursos</h2>{resources.status==='not_recorded'?<p>No consta un recurso en este archivo anterior. El estado del borrador de la gestión se consulta arriba.</p>:
     <><p>Versiones conservadas en el archivo de recursos. Su lectura no las modifica ni regenera.</p>{resources.items.map(r=><button key={r.id} onClick={()=>void open(r.id)}>Leer versión {r.version}{r.is_final?' · marcada final':''}</button>)}</>}
     {busy&&<p role="status">Recuperando versión…</p>}{error&&<p role="alert">{error}</p>}{read&&<article><h3>Versión {read.version}</h3><pre className="cw-resource">{read.content}</pre><details><summary>Integridad</summary><code>{read.sha256}</code></details></article>}
-    <p>La lectura de este archivo no acredita el contenido de otros almacenes. El sistema de versiones y correcciones de octubre se conserva para su adaptación posterior; no se ha sustituido por otro editor.</p></section>;
+    <p>Este archivo conserva sus versiones originales. Su consulta no genera ni sustituye el borrador de la gestión.</p></section>;
 }
 
 function Case({caseId}){
@@ -80,10 +82,9 @@ function Case({caseId}){
       {document&&<OpsDocumentViewer key={`${caseId}:${document.id}`} caseId={caseId} document={document} authFetch={auth.authFetch} onReviewed={markReviewed} onClose={()=>setDocument(null)}/>}</div>
     <div hidden={tab!=='Estudio'}><details><summary>Extracciones anteriores pendientes de revisión</summary>{work.extractions.length?<>{work.extractions.map(e=><pre key={e.id}>{JSON.stringify(e.values,null,2)}</pre>)}<p>No se han convertido automáticamente en hechos validados.</p></>:<p>Esta lectura no devuelve extracciones. Los originales pueden revisarse en Documentos.</p>}</details>
       <OpsPaidStudy caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} documents={docs.items||[]} reviewed={reviewed} canWrite={paid&&work.capabilities.study_write} onRefresh={setWork}/></div>
-    <div hidden={tab!=='Presupuesto y pagos'}><h2>Presupuesto y pagos</h2><p>{paid?'El pago del estudio consta en RTM. No se ofrece repetirlo.':'Estado registrado: '+fieldText(fields.payment_status)}</p>
-      <p>La propuesta de gestión, su aceptación versionada y el saldo requieren la siguiente fase de integración. Esta pantalla no crea cobros ni modifica importes o estados.</p></div>
+    <div hidden={tab!=='Presupuesto y pagos'}><OpsManagementQuote caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} canWrite={work.capabilities.study_write}/></div>
     {tab==='Comunicaciones'&&<OpsCommunications caseId={caseId} authFetch={auth.authFetch} canWrite={work.capabilities.study_write}/>}
-    <div hidden={tab!=='Recurso'}><Resource caseId={caseId} resources={work.resources} authFetch={auth.authFetch}/></div>
+    <div hidden={tab!=='Recurso'}><OpsManagementDraft caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} resources={work.resources} canWrite={work.capabilities.study_write}/><details><summary>Archivo anterior conservado</summary><Resource caseId={caseId} resources={work.resources} authFetch={auth.authFetch}/></details></div>
     <div hidden={tab!=='Historial'}><h2>Historial del trabajo</h2><ol>{work.study.history.map(h=><li key={h.operation_id}>Valoración {h.revision} · {h.author.name} · {new Date(h.created_at).toLocaleString('es-ES')}</li>)}</ol>
       <details><summary>Identificadores y eventos técnicos</summary><p>Expediente: {caseId}</p><pre>{JSON.stringify(work.workspace.sections.timeline,null,2)}</pre></details></div>
     <footer className="cw-no-presentation">No presentado. Esta entrega no firma, aprueba un recurso ni actúa en una sede administrativa.</footer>
