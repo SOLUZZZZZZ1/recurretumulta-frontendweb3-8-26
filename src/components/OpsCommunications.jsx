@@ -2,13 +2,19 @@ import React,{useEffect,useRef,useState} from 'react';
 import {jsonRequest,root} from '../lib/paidCasework.js';
 import OpsDocumentViewer from './OpsDocumentViewer.jsx';
 import OpsMailTextViewer from './OpsMailTextViewer.jsx';
+import {mailOperationKey,pendingMail,rememberMail,clearMail} from '../lib/mailOperationJournal.js';
 const LABEL={prepared:'Preparado · no enviado',queued:'Pendiente de envío',sending:'Envío en curso',provider_accepted:'Aceptado por el proveedor · entrega no confirmada',delivered:'Entrega confirmada por evidencia',bounced:'Rebotado',failed:'Envío fallido',unknown:'Resultado desconocido · reconciliación necesaria',received:'Recibido',pending_assignment:'Pendiente de asignar'};
-export default function OpsCommunications({caseId,authFetch,canWrite}){
+export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}){
   const [data,setData]=useState(null),[query,setQuery]=useState(''),[error,setError]=useState(''),[epoch,setEpoch]=useState(0);
   const [draft,setDraft]=useState({recipient:'',subject:'',body:'',reply_id:null}),[pending,setPending]=useState(null),[prepared,setPrepared]=useState(null);
   const [phase,setPhase]=useState('editing'),[approve,setApprove]=useState(false),[attachment,setAttachment]=useState(null);
   const live=useRef(true),lock=useRef(false),controllers=useRef(new Set());
   useEffect(()=>{live.current=true;return()=>{live.current=false;controllers.current.forEach(c=>c.abort());};},[]);
+  useEffect(()=>{
+    const restore=()=>{try{const item=pendingMail(caseId,operatorId);if(item){setPending(item);setPrepared(null);setApprove(false);setPhase('unknown');}}catch(e){setError(e.message);setPhase('unknown');}};
+    restore();const changed=e=>{if(e.key===mailOperationKey(caseId,operatorId)||e.key===null)restore();};
+    window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed);
+  },[caseId,operatorId]);
   useEffect(()=>{const ctl=new AbortController();controllers.current.add(ctl);setError('');
     jsonRequest(authFetch,`${root(caseId)}/communications?q=${encodeURIComponent(query)}`,{signal:ctl.signal}).then(r=>{
       if(r.case_id!==caseId||!Array.isArray(r.messages))throw new Error('Conversación no confirmada.');if(!ctl.signal.aborted)setData(r);
@@ -18,13 +24,19 @@ export default function OpsCommunications({caseId,authFetch,canWrite}){
     try{await fn(ctl.signal);}catch(e){if(live.current&&!ctl.signal.aborted){setError(e.message);setPhase('unknown');}}finally{controllers.current.delete(ctl);lock.current=false;}}
   async function recover(operation,signal){
     const result=await jsonRequest(authFetch,`${root(caseId)}/communications/${operation.operation_id}`,{signal});
-    if(result.case_id!==caseId||result.id!==operation.operation_id||result.message.subject!==operation.subject||
-      result.message.body.trimEnd()!==operation.body.trimEnd()||result.message.recipients.length!==1||result.message.recipients[0]!==operation.recipient)throw new Error('El mensaje recuperado no coincide con el preparado.');
+    if(result.case_id!==caseId||result.id!==operation.operation_id||result.author_id!==operatorId||result.request_sha256!==operation.request_sha256)throw new Error('El mensaje recuperado no coincide con la operación preparada.');
     if(!live.current||signal.aborted)return;
-    setPrepared(result);setPhase('prepared');setApprove(false);setEpoch(e=>e+1);
+    setPrepared(result);setPhase(result.state==='prepared'?'prepared':'queued');setApprove(false);setEpoch(e=>e+1);
   }
-  function prepare(){if(phase!=='editing'||!canWrite)return;const operation={...draft,operation_id:crypto.randomUUID()};setPending(operation);setPhase('preparing');setError('');
-    return task(async signal=>{await jsonRequest(authFetch,`${root(caseId)}/communications`,{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(operation)});await recover(operation,signal);});}
+  function prepare(){if(phase!=='editing'||!canWrite)return;const operation={...draft,operation_id:crypto.randomUUID()};setPhase('preparing');setError('');
+    return task(async signal=>{
+      if(!navigator.locks?.request)throw new Error('El navegador no puede coordinar la comunicación entre pestañas.');
+      await navigator.locks.request(mailOperationKey(caseId,operatorId),{ifAvailable:true},async lease=>{
+        if(!lease)throw new Error('Otra pestaña prepara esta comunicación.');
+        const reference=await rememberMail(caseId,operatorId,operation);setPending(reference);
+        await jsonRequest(authFetch,`${root(caseId)}/communications`,{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify(operation)});await recover(reference,signal);
+      });
+    });}
   function queue(){if(!approve||!prepared)return;setApprove(false);setPhase('queueing');
     return task(async signal=>{
       await jsonRequest(authFetch,`${root(caseId)}/communications/${prepared.id}/queue`,{method:'POST',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({approve_exact_message:true,original_sha256:prepared.message.raw_sha256})});
@@ -58,7 +70,8 @@ export default function OpsCommunications({caseId,authFetch,canWrite}){
       {phase==='unknown'&&pending&&<button onClick={()=>void task(signal=>recover(pending,signal))}>Consultar la misma operación antes de repetir</button>}
       {prepared&&<article className="cw-snapshot"><h3>Mensaje recuperado</h3><p>{LABEL[prepared.state]}</p><pre>{prepared.message.body}</pre>
         {phase==='prepared'&&prepared.state==='prepared'&&<><label><input type="checkbox" checked={approve} onChange={e=>setApprove(e.target.checked)}/> Apruebo el envío de este contenido exacto a {prepared.message.recipients.join(', ')}.</label><button disabled={!approve} onClick={()=>void queue()}>Poner este mensaje en la cola de envío</button></>}
-        {phase==='queued'&&<button onClick={()=>{setDraft({recipient:'',subject:'',body:'',reply_id:null});setPending(null);setPrepared(null);setPhase('editing');}}>Preparar otra comunicación</button>}</article>}
+        {phase==='queued'&&pending&&<><button onClick={()=>void task(signal=>recover(pending,signal))}>Consultar el estado de esta comunicación</button>
+          {['provider_accepted','delivered','bounced','failed'].includes(prepared.state)&&<button onClick={()=>{try{clearMail(pending);setDraft({recipient:'',subject:'',body:'',reply_id:null});setPending(null);setPrepared(null);setPhase('editing');}catch(e){setError(e.message);}}}>Preparar otra comunicación</button>}</>}</article>}
     </>}
     {attachment&&attachment.part.mime==='text/plain'?<OpsMailTextViewer key={`${attachment.item.id}:${attachment.part.part}`} caseId={caseId}
       documentId={`${attachment.item.id}:${attachment.part.part}`} viewBase={`${root(caseId)}/communications/${attachment.item.id}/attachments/${attachment.part.part}`}

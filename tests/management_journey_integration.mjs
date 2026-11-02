@@ -7,7 +7,7 @@ const cfg=JSON.parse(Buffer.concat(chunks).toString('utf8'));
 const {chromium}=await import(pathToFileURL(cfg.playwright_path).href);
 const origin='https://www.recurretumulta.eu',build=path.resolve(cfg.build),output=path.resolve(cfg.output);
 fs.mkdirSync(output,{recursive:true});
-const checks=[],errors=[],http=[],inflight=new Set();let browser,ops,customer,phase='start',passed=false,closing=false,loseDraft=false,loseClientLogout=false,checkoutReached=false;
+const checks=[],errors=[],http=[],inflight=new Set();let browser,ops,customer,phase='start',passed=false,closing=false,loseDraft=false,loseClientLogout=false,loseMail=false,checkoutReached=false;
 const check=(name,ok=true)=>{assert.ok(ok,name);checks.push(name);};
 const safe=e=>({name:e.name,message:String(e.message).replaceAll(cfg.password,'[redacted]').replace(/([?&]enlace=)[A-Za-z0-9_-]+/g,'$1[redacted]'),stack:String(e.stack||'').split('\n').filter(l=>/^\s+at /.test(l)).join('\n')});
 async function control(action){const r=await fetch(`http://127.0.0.1:${cfg.control_port}/${action}`,{method:'POST'});assert.equal(r.status,200,'fixture '+action);return r.json();}
@@ -31,6 +31,7 @@ async function transport(route){
       loseDraft=false;entry.injected_lost_response_after_server_commit=true;assert.equal(response.status(),200);return route.abort();
     }
     if(loseClientLogout&&u.pathname.endsWith('/client/management/logout')){loseClientLogout=false;entry.lost_logout_response=true;assert.equal(response.status(),200);return route.abort();}
+    if(loseMail&&u.pathname.endsWith('/communications')&&request.method()==='POST'){loseMail=false;entry.lost_prepare_response_after_commit=true;assert.equal(response.status(),200);return route.abort();}
     return route.fulfill({response});
   }
   const file=path.resolve(build,'.'+decodeURIComponent(u.pathname));if(file!==build&&!file.startsWith(build+path.sep))return route.abort();
@@ -73,8 +74,14 @@ try{
   await p.getByRole('button',{name:'Consultar adjunto protegido'}).click();await p.getByText('ADJUNTO INOCUO SINTETICO',{exact:true}).waitFor();check('Reply and protected original text attachment in same case');await p.getByRole('button',{name:'Cerrar adjunto'}).click();
   phase='ops_reply';const incoming=p.getByRole('listitem').filter({has:p.getByRole('heading',{name:'Respuesta sintética al presupuesto',exact:true})});
   await incoming.getByRole('button',{name:'Responder a este mensaje'}).click();await p.getByLabel('Contenido del mensaje',{exact:true}).fill('CONTESTACION SINTETICA DESDE OPS AL MISMO HILO');
-  await p.getByRole('button',{name:'Guardar mensaje preparado',exact:true}).click();await p.getByRole('heading',{name:'Mensaje recuperado'}).waitFor();
-  await p.getByLabel('Apruebo el envío de este contenido exacto',{exact:false}).check();await p.getByRole('button',{name:'Poner este mensaje en la cola de envío'}).click();await p.getByRole('button',{name:'Preparar otra comunicación'}).waitFor();
+  loseMail=true;await p.getByRole('button',{name:'Guardar mensaje preparado',exact:true}).click();await p.getByRole('button',{name:'Consultar la misma operación antes de repetir'}).waitFor();
+  const mailRef=await p.evaluate(()=>Object.entries(localStorage).filter(([key])=>key.startsWith('rtm.mail.operation.v1.')).map(([,value])=>JSON.parse(value)));
+  check('Pending prepared mail persists metadata only',mailRef.length===1&&Object.keys(mailRef[0]).sort().join(',')==='actor,case_id,operation_id,request_sha256');
+  const mailWrites=http.filter(r=>r.path.endsWith('/communications')&&r.method==='POST').length;
+  await p.reload();await login(p);await p.getByRole('button',{name:'Comunicaciones',exact:true}).click();
+  await p.getByRole('button',{name:'Consultar la misma operación antes de repetir'}).click();await p.getByRole('heading',{name:'Mensaje recuperado'}).waitFor();
+  check('Prepared mail recovered after reload without duplicate POST',http.filter(r=>r.path.endsWith('/communications')&&r.method==='POST').length===mailWrites);
+  await p.getByLabel('Apruebo el envío de este contenido exacto',{exact:false}).check();await p.getByRole('button',{name:'Poner este mensaje en la cola de envío'}).click();await p.getByRole('button',{name:'Consultar el estado de esta comunicación'}).waitFor();
   check('OPS reply leaves through persistent outbox without duplicate',(await control('mail')).count===3);
   phase='draft';await p.getByRole('button',{name:'Recurso',exact:true}).click();await p.getByRole('button',{name:'Consultar versiones y requisitos'}).click();await p.getByRole('button',{name:'Preparar borrador del recurso',exact:true}).click();
   await p.getByLabel('Actuación y fase revisadas').selectOption('Alegaciones');
