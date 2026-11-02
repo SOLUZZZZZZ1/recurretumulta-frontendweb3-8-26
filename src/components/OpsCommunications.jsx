@@ -4,6 +4,26 @@ import OpsDocumentViewer from './OpsDocumentViewer.jsx';
 import OpsMailTextViewer from './OpsMailTextViewer.jsx';
 import {mailOperationKey,pendingMail,rememberMail,clearMail} from '../lib/mailOperationJournal.js';
 const LABEL={prepared:'Preparado · no enviado',queued:'Pendiente de envío',sending:'Envío en curso',provider_accepted:'Aceptado por el proveedor · entrega no confirmada',delivered:'Entrega confirmada por evidencia',bounced:'Rebotado',failed:'Envío fallido',unknown:'Resultado desconocido · reconciliación necesaria',received:'Recibido',pending_assignment:'Pendiente de asignar'};
+function PendingAssignment({item,caseId,authFetch,canWrite,onAssigned}){
+  const [evidence,setEvidence]=useState(''),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const controller=useRef(null);
+  useEffect(()=>()=>controller.current?.abort(),[]);
+  async function assign(){
+    if(controller.current||!confirmed||!canWrite)return;
+    const ctl=new AbortController();controller.current=ctl;setBusy(true);setError('');
+    try{
+      const r=await jsonRequest(authFetch,`${root(caseId)}/communications/${item.id}/assign`,{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({original_sha256:item.message.raw_sha256,independently_verified:true,evidence:evidence.trim()})});
+      if(r.case_id!==caseId||r.id!==item.id)throw new Error('Asignación no confirmada.');
+      if(!ctl.signal.aborted)onAssigned();
+    }catch(e){if(!ctl.signal.aborted)setError(e.message+' Consulta el resultado antes de cambiar la comprobación o repetir.');}
+    finally{controller.current=null;if(!ctl.signal.aborted)setBusy(false);}
+  }
+  return <article className="cw-snapshot"><h4>{item.message.subject}</h4><p>{item.message.sender} · {item.message.sent_at||'Fecha no disponible'}</p><pre className="cw-resource">{item.message.body}</pre>
+    <p>El hilo apunta solo a este expediente, pero la recepción no acreditó la identidad del remitente. El correo no autoriza pagos, cambios ni actuaciones.</p>
+    <label>Comprobación independiente del remitente y del expediente<textarea minLength={20} maxLength={2000} value={evidence} disabled={busy} onChange={e=>{setEvidence(e.target.value);setConfirmed(false);}}/></label>
+    <label><input type="checkbox" checked={confirmed} disabled={busy||!canWrite} onChange={e=>setConfirmed(e.target.checked)}/> He verificado por un medio independiente que este mensaje corresponde al participante y a este expediente.</label>
+    <button disabled={!canWrite||busy||!confirmed||evidence.trim().length<20} onClick={()=>void assign()}>Incorporar este mensaje verificado</button>{error&&<p role="alert">{error}</p>}</article>;
+}
 export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}){
   const [data,setData]=useState(null),[query,setQuery]=useState(''),[error,setError]=useState(''),[epoch,setEpoch]=useState(0);
   const [draft,setDraft]=useState({recipient:'',subject:'',body:'',reply_id:null}),[pending,setPending]=useState(null),[prepared,setPrepared]=useState(null);
@@ -52,6 +72,11 @@ export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}
     {!data&&!error&&<p role="status">Consultando comunicaciones y estado de sincronización…</p>}
     {data&&<><p>Dirección operativa: {data.mailbox}</p><div role="status">{data.sync.state==='unconfigured'?'Recepción automática no configurada.':data.sync.state==='error'?'La última sincronización tiene un error. Puede haber mensajes pendientes.':'Últimas comprobaciones del buzón:'}
       {data.sync.folders.map(f=><p key={f.folder}>{f.folder}: último éxito {f.last_success_at||'no acreditado'}{f.error_code?' · '+f.error_code:''}</p>)}</div>
+      {!!data.ingestion_issues?.length&&<aside role="alert"><p>Hay mensajes del buzón retenidos o en cuarentena. No se han descartado; requieren revisión del responsable del buzón.</p><details><summary>Motivos de recepción</summary>{data.ingestion_issues.map(i=><p key={i.code}>{i.code}: {i.count}</p>)}</details></aside>}
+      <details><summary>Pendientes de asignar a este expediente ({data.pending_assignment?.messages.length||0})</summary>
+        <p>Solo se muestran candidatos cuyo hilo corresponde exclusivamente a este expediente. Los mensajes sin vínculo suficiente o con varios expedientes se conservan para una revisión con el ámbito adecuado.</p>
+        {data.pending_assignment?.truncated&&<p>La consulta está acotada; no acredita que se haya revisado toda la cola.</p>}
+        {data.pending_assignment?.messages.map(item=><PendingAssignment key={item.id} item={item} caseId={caseId} authFetch={authFetch} canWrite={canWrite} onAssigned={()=>setEpoch(e=>e+1)}/>)}</details>
       {data.messages.length===0&&<p>La consulta del archivo no devuelve mensajes{query?' que coincidan con la búsqueda':''}. Esto no acredita que el buzón esté al día.</p>}
       {data.truncated&&<p>Se muestran los primeros 200 resultados. Acota la búsqueda.</p>}
       <ol>{data.messages.map(item=><li key={item.id} className="cw-snapshot"><h3>{item.message.subject}</h3><p>{item.direction==='incoming'?'Entrante':'Saliente'} · {LABEL[item.state]||'Estado no reconocido'}</p>
