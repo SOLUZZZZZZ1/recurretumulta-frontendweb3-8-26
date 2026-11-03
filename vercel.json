@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "rtm-domain-controlled-20261103": false
+    }
+  },
   "routes": [
     { "handle": "filesystem" },
 
