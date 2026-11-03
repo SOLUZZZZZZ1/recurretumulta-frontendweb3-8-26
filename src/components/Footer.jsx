@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import RtmBrand from "./RtmBrand.jsx";
+import { publicOrigin } from '../lib/publicSite.js';
 
 export default function Footer() {
   const { search, hash } = useLocation();
@@ -128,7 +129,7 @@ export default function Footer() {
         <br />
         Este sitio presta asesoramiento jurídico pero no garantiza resultados.
         <br />
-        www.recurretumulta.eu
+        {new URL(publicOrigin()).hostname}
       </div>
     </footer>
   );
