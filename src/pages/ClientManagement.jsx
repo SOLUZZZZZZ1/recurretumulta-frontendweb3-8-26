@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {useLocation,useNavigate,useParams} from 'react-router-dom';
 import {jsonRequest,UUID} from '../lib/paidCasework.js';
-import {post,money,BALANCE_LABELS} from '../lib/managementJourney.js';
+import {post,money,BALANCE_LABELS,GENERATION_LABELS} from '../lib/managementJourney.js';
 import {QuoteDetails} from '../components/OpsManagementQuote.jsx';
 import '../components/OpsPaidCase.css';
 
@@ -45,6 +45,9 @@ export default function ClientManagement(){
       await post(request,path+'/payment-status',{},signal);await load(signal);}});
     return()=>{active.current=false;controller.current?.abort();controller.current=null;locked.current=false;current.current=null;window.removeEventListener('storage',changed);};},[caseId]);
   function askLink(){return task(async signal=>{const r=await post(request,base+'/access',{case_id:caseId,email},signal);if(valid(signal))setNotice(r.message);});}
+  useEffect(()=>{if(closing||data?.balance?.state!=='confirmed'||!['pending','running','retry'].includes(data?.generation?.state))return;
+    const timer=setInterval(()=>void task(signal=>load(signal)),5000);return()=>clearInterval(timer);
+  },[caseId,closing,data?.balance?.state,data?.generation?.state]);
   function enter(){return task(async signal=>{await post(request,base+'/redeem',{token:link},signal);if(!valid(signal))return;setLink('');setAccepted(false);broadcast('changed');await load(signal);if(valid(signal))setNotice('Sesión privada de cliente.');});}
   async function finishLogout(sessionRef,signal){
     const r=await post(request,base+'/logout',{session_ref:sessionRef},signal);
@@ -84,7 +87,7 @@ export default function ClientManagement(){
           {!['accepted','settled'].includes(data.quote.state)&&<label><input type="checkbox" checked={accepted===binding(data)} disabled={busy} onChange={e=>setAccepted(e.target.checked?binding(data):false)}/> He leído el alcance, las exclusiones, la valoración y el precio. Acepto expresamente el presupuesto versión {data.quote.revision}.</label>}
           <button disabled={busy||(accepted!==binding(data)&&!['accepted','settled'].includes(data.quote.state))} onClick={()=>void pay()}>{data.balance.state==='unknown'?'Recuperar la misma sesión de pago':data.quote.state==='accepted'?'Continuar con el pago de '+money(data.quote.economics.balance_cents):'Aceptar y pagar '+money(data.quote.economics.balance_cents)}</button></>}
         {new Date(data.quote.expires_at)<=new Date()&&data.balance.state!=='confirmed'&&<p>La vigencia comercial ha terminado. El operador debe revisar la propuesta y cualquier pago pendiente antes de abrir otro cobro.</p>}
-        {data.balance.state==='confirmed'&&<p>Saldo registrado. El operador puede continuar la preparación y revisión del recurso cuando estén completos los requisitos documentales y jurídicos. Un borrador interno no se entrega automáticamente.</p>}</>:
+        {data.balance.state==='confirmed'&&<p role="status">{GENERATION_LABELS[data.generation?.state]||'Pago íntegro registrado. Consultando la generación del recurso.'}</p>}</>:
         <p>La consulta se ha completado: todavía no hay una propuesta habilitada para tu acceso privado.</p>}
     </>}
     <footer className="cw-no-presentation">No presentado. Aceptar o pagar no firma ni presenta un recurso.</footer></main>;

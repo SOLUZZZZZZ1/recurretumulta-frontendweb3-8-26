@@ -7,7 +7,7 @@ export function QuoteDetails({quote}){
   const q=quote.snapshot||quote,e=q.economics;
   return <article className="cw-snapshot"><h3>Presupuesto · versión {q.revision}</h3><h4>{q.title}</h4>
     <p>Valoración autorizada para el cliente</p><pre className="cw-resource">{q.client_summary}</pre>
-    <h4>Alcance</h4><pre className="cw-resource">{q.scope}</pre><h4>Exclusiones</h4><pre className="cw-resource">{q.exclusions}</pre>
+    {q.document_type&&<p>Escrito previsto: {q.document_type}</p>}<h4>Alcance</h4><pre className="cw-resource">{q.scope}</pre><h4>Exclusiones</h4><pre className="cw-resource">{q.exclusions}</pre>
     <dl><div><dt>Total, impuestos incluidos</dt><dd>{money(e.total_cents)}</dd></div><div><dt>Base</dt><dd>{money(e.net_cents)}</dd></div>
       <div><dt>{e.tax_label} · {e.tax_basis_points/100}%</dt><dd>{money(e.tax_cents)}</dd></div><div><dt>Estudio inicial abonado y aplicado</dt><dd>{money(e.study_credit_cents)}</dd></div><div><dt>Saldo de gestión</dt><dd>{money(e.balance_cents)}</dd></div></dl>
     <p>Oferta válida hasta {new Date(q.expires_at).toLocaleString('es-ES')}. Esta fecha no es el plazo administrativo de la multa.</p><p>{q.mode==='test'?'Stripe TEST · ensayo sin dinero real':'Pago LIVE'} · No presentado.</p></article>;
@@ -24,7 +24,7 @@ export default function OpsManagementQuote({caseId,operatorId,authFetch,study,ca
   async function task(fn){if(locked.current)return;locked.current=true;setBusy(true);setError('');const ctl=new AbortController();controller.current=ctl;
     try{await fn(ctl.signal);}catch(e){if(live.current&&!ctl.signal.aborted)setError(e.message);}finally{locked.current=false;if(live.current)setBusy(false);}}
   useEffect(()=>{void task(signal=>load(signal));},[]);
-  function edit(){const old=data.quotes.latest?.snapshot;setForm({expected_quote_id:old?.id||null,study_operation_id:study.latest.snapshot.operation_id,study_sha256:study.latest.sha256,title:old?.title||'Recurso de multa · una actuación y fase',scope:old?.scope||FINE_OFFER.basicScope,exclusions:old?.exclusions||FINE_OFFER.exclusions,client_summary:'',total_cents:data.agreed_total_cents||old?.economics.total_cents||3900,expires_at:new Date(Date.now()+7*86400000-Date.now()%60000-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16),review_confirmed:false});setNotice('');}
+  function edit(){const old=data.quotes.latest?.snapshot;setForm({expected_quote_id:old?.id||null,study_operation_id:study.latest.snapshot.operation_id,study_sha256:study.latest.sha256,document_type:old?.document_type||'',title:old?.title||'Recurso de multa · una actuación y fase',scope:old?.scope||FINE_OFFER.basicScope,exclusions:old?.exclusions||FINE_OFFER.exclusions,client_summary:'',total_cents:data.agreed_total_cents||old?.economics.total_cents||3900,expires_at:new Date(Date.now()+7*86400000-Date.now()%60000-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16),review_confirmed:false});setNotice('');}
   async function save(){if(!form||!study.latest)return;await task(signal=>withOperationLock(caseId,operatorId,'quote',async()=>{
     const payload={...form,operation_id:crypto.randomUUID(),expires_at:new Date(form.expires_at).toISOString()};
     const ref=await rememberOperation(caseId,operatorId,'quote',payload);setPending(ref);
@@ -59,6 +59,8 @@ export default function OpsManagementQuote({caseId,operatorId,authFetch,study,ca
       {form&&<form onSubmit={e=>{e.preventDefault();void save();}}><fieldset disabled={busy||!!pending||!canWrite}>
         {form.expected_quote_id!==(data.quotes.latest?.snapshot.id||null)&&<p role="alert">Otra versión se ha guardado. Tu texto y su base se conservan; revisa ambas propuestas antes de crear otra.</p>}
         {[['title','Actuación propuesta'],['scope','Alcance'],['exclusions','Exclusiones'],['client_summary','Valoración autorizada para el cliente (sin notas internas)']].map(([key,label])=><label key={key}>{label}<textarea aria-label={label} required value={form[key]} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))}/></label>)}
+        <label>Escrito y fase del procedimiento<select aria-label="Escrito y fase del procedimiento" required value={form.document_type} onChange={e=>setForm(f=>({...f,document_type:e.target.value}))}><option value="">Seleccionar tras revisar la notificación</option>{['Alegaciones','Recurso de reposición','Recurso de alzada'].map(t=><option key={t}>{t}</option>)}</select></label>
+        <p>Al confirmarse el pago íntegro, RTM generará el escrito de esta fase para revisión en OPS.</p>
         <label>Total, impuestos incluidos (€)<input type="number" min="39" step="0.01" required readOnly={!!data.agreed_total_cents} value={form.total_cents/100} onChange={e=>setForm(f=>({...f,total_cents:Math.round(Number(e.target.value)*100)}))}/></label>
         <p>El servidor verificará y aplicará los 10 € una sola vez. {data.tax_label}: {data.tax_basis_points/100}% incluido.</p>
         <label>Vigencia comercial (hora local)<input type="datetime-local" required value={form.expires_at} onChange={e=>setForm(f=>({...f,expires_at:e.target.value}))}/></label>

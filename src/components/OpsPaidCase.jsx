@@ -1,3 +1,4 @@
+import { isCaseworkProfile } from "../ops-auth/opsAuthApi.js";
 import React,{useEffect,useRef,useState} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {OpsAuthProvider,OpsAuthBoundary,useOpsAuth} from '../ops-auth/OpsAuthContext.jsx';
@@ -94,7 +95,7 @@ function Case({caseId}){
 function Entry({fallback}){
   const auth=useOpsAuth();const {caseId}=useParams();
   if(!auth.status && !auth.error)return <main className="sr-container py-8"><p role="status">Comprobando el acceso de OPS…</p></main>;
-  if(auth.status?.authProfile!=='production_casework')return fallback;
+  if(!isCaseworkProfile(auth.status?.authProfile))return fallback;
   return <OpsAuthBoundary>{auth.session&&(caseId?<Case key={`${caseId}:${auth.session.sessionId}`} caseId={caseId}/>:<CaseList/>)}</OpsAuthBoundary>;
 }
 export default function OpsPaidCaseEntry({fallback}) {return <OpsAuthProvider><Entry fallback={fallback}/></OpsAuthProvider>;}

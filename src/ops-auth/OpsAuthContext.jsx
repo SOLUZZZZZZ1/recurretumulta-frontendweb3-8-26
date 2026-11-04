@@ -1,3 +1,4 @@
+import { isCaseworkProfile } from "./opsAuthApi.js";
 import React, {
   createContext,
   useCallback,
@@ -248,7 +249,7 @@ export function OpsAuthProvider({ children }) {
     void readOpsAuthStatus({ signal: controller.signal, allowLocalDevelopment: true })
       .then((nextStatus) => {
         if (!controller.signal.aborted) {
-          productionRef.current=nextStatus.authProfile==='production_casework';
+          productionRef.current=isCaseworkProfile(nextStatus.authProfile);
           if(productionRef.current)coordinatorRef.current=deviceClosure();
           setStatus(nextStatus);
         }
@@ -264,7 +265,7 @@ export function OpsAuthProvider({ children }) {
   }, [statusEpoch]);
 
   useEffect(()=>{
-    if(status?.authProfile!=='production_casework')return;
+    if(!isCaseworkProfile(status?.authProfile))return;
     const coordinator=coordinatorRef.current;
     return coordinator.subscribe(state=>{
       if(!mountedRef.current)return;
@@ -342,7 +343,7 @@ export function OpsAuthProvider({ children }) {
           return;
         }
         if (authenticated.operator.mustChangePassword) {
-          if (status?.authProfile === "production_casework") {
+          if (isCaseworkProfile(status?.authProfile)) {
             await logoutOpsOperator({ bearerToken: authenticated.bearerToken }).catch(() => {});
             clearSession("Esta cuenta necesita completar su activación individual antes de trabajar. No se ha abierto el expediente.");
             return;
