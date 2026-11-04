@@ -1,59 +1,9 @@
+import { clientRequest } from "../lib/clientApi.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
-
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const MAX_FILES = 5;
-
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail =
-      data?.detail?.message ||
-      data?.detail ||
-      data?.message ||
-      data?.error ||
-      text ||
-      `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (error) {
-      errors.push(`${url} → ${error?.message || "Error"}`);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
-}
 
 function getCaseId(search) {
   const params = new URLSearchParams(search);
@@ -109,7 +59,7 @@ export default function EliminarCoche() {
       }
 
       try {
-        const data = await fetchJsonFallback(
+        const data = await clientRequest(
           `/cases/${encodeURIComponent(caseId)}/public-status`,
           { method: "GET" }
         );
@@ -178,13 +128,13 @@ export default function EliminarCoche() {
       if (documents.length) {
         const fd = new FormData();
         documents.forEach((file) => fd.append("files", file));
-        await fetchJsonFallback(`/cases/${encodeURIComponent(caseId)}/append-documents`, {
+        await clientRequest(`/cases/${encodeURIComponent(caseId)}/append-documents`, {
           method: "POST",
           body: fd,
         });
       }
 
-      const data = await fetchJsonFallback("/vehicle-removal/create-checkout-session", {
+      const data = await clientRequest("/vehicle-removal/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

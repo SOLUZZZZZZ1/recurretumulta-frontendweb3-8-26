@@ -1,42 +1,7 @@
+import { clientRequest } from "../lib/clientApi.js";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const API = "/api";
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-const API_CANDIDATES = [
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-  API,
-].filter(Boolean);
-
-async function parseResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail =
-      data?.detail ||
-      data?.message ||
-      data?.error ||
-      text ||
-      `HTTP ${response.status}`;
-
-    throw new Error(
-      typeof detail === "string"
-        ? `HTTP ${response.status}: ${detail}`
-        : `HTTP ${response.status}`
-    );
-  }
-
-  return data;
-}
 
 function looksLikeUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -44,42 +9,12 @@ function looksLikeUuid(value) {
   );
 }
 
-async function fetchPublicStatusWithFallback(caseId) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const cleanBase = String(base).replace(/\/$/, "");
-    const url = `${cleanBase}/cases/${encodeURIComponent(caseId)}/public-status`;
-
-    try {
-      const response = await fetch(url, { method: "GET" });
-      return await parseResponse(response);
-    } catch (error) {
-      errors.push(`${url} → ${error?.message || "error"}`);
-    }
-  }
-
-  throw new Error(`No se pudo recuperar el expediente. ${errors.join(" | ")}`);
+function fetchPublicStatusWithFallback(caseId) {
+  return clientRequest(`/cases/${encodeURIComponent(caseId)}/public-status`);
 }
 
-async function fetchContinueLookupWithFallback(caseIdOrExpediente) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const cleanBase = String(base).replace(/\/$/, "");
-    const url = `${cleanBase}/cases/continue-lookup?q=${encodeURIComponent(
-      caseIdOrExpediente
-    )}`;
-
-    try {
-      const response = await fetch(url, { method: "GET" });
-      return await parseResponse(response);
-    } catch (error) {
-      errors.push(`${url} → ${error?.message || "error"}`);
-    }
-  }
-
-  throw new Error(`No se pudo recuperar el expediente. ${errors.join(" | ")}`);
+function fetchContinueLookupWithFallback(reference) {
+  return clientRequest(`/cases/continue-lookup?q=${encodeURIComponent(reference)}`);
 }
 
 function getCasePhase(data) {

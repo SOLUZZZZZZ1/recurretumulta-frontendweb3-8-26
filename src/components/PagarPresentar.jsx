@@ -1,51 +1,5 @@
+import { clientRequest } from "../lib/clientApi.js";
 import { useEffect, useMemo, useState } from "react";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
-
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail = data?.detail || data?.message || text || `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (e) {
-      errors.push(`${url} → ${e?.message || "Error"}`);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
-}
 
 function getEmailFromStatus(status) {
   return (
@@ -111,7 +65,7 @@ export default function PagarPresentar({ caseId, publicStatus, onUpdated }) {
     if (!caseId) return null;
 
     try {
-      const data = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+      const data = await clientRequest(`/cases/${caseId}/public-status`);
       setFreshStatus(data);
 
       const e = getEmailFromStatus(data);
@@ -136,7 +90,7 @@ export default function PagarPresentar({ caseId, publicStatus, onUpdated }) {
       await refreshStatus();
 
       try {
-        const data = await fetchJsonFallback(`/billing/status/${caseId}`);
+        const data = await clientRequest(`/billing/status/${caseId}`);
         setPaymentStatus(data?.payment_status || "");
 
         if (data?.authorized === true || data?.authorized === "true") {
@@ -175,7 +129,7 @@ export default function PagarPresentar({ caseId, publicStatus, onUpdated }) {
     setLoading(true);
 
     try {
-      const data = await fetchJsonFallback("/billing/checkout", {
+      const data = await clientRequest("/billing/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
