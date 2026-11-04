@@ -3,6 +3,7 @@ import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import ResumenExpediente from "./pages/ResumenExpediente.jsx";
 import Autorizar from "./pages/Autorizar.jsx";
+import ClientManagement from "./pages/ClientManagement.jsx";
 
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/gestorias" element={<Gestorias />} />
         <Route path="/resumen" element={<ResumenExpediente />} />
         <Route path="/autorizar" element={<Autorizar />} />
+        <Route path="/cliente/expediente/:caseId" element={<ClientManagement />} />
         <Route path="/partner/upload" element={<PartnerUpload />} />
         <Route path="/partner/change-password" element={<PartnerChangePassword />} />
         <Route path="/partner/panel" element={<PartnerPanelExpedientes />} />
