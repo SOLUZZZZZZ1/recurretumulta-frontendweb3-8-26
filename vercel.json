@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "rtm-domain-controlled-20261103": false,
-      "rtm-full-journey-20261104": false
+      "rtm-full-journey-20261104": false,
+      "rtm-production-journey-20261107": false
     }
   },
   "routes": [
