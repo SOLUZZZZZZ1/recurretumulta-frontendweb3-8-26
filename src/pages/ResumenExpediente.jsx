@@ -1,49 +1,6 @@
+import { clientRequest } from "../lib/clientApi.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
-
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail = data?.detail || data?.message || text || `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (e) {
-      errors.push(`${url} → ${e?.message || "Error"}`);
-    }
-  }
-  throw new Error(errors.join(" | "));
-}
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
@@ -150,7 +107,7 @@ export default function Resumen() {
       let last = null;
       // varios intentos para evitar ver estados intermedios justo tras pago/autorización
       for (let i = 0; i < 4; i += 1) {
-        last = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+        last = await clientRequest(`/cases/${caseId}/public-status`);
         if (isPaid(last?.payment_status) || isAuthorized(last)) break;
         await new Promise((resolve) => setTimeout(resolve, 900));
       }
@@ -176,7 +133,7 @@ export default function Resumen() {
 
     try {
       // Refresco justo antes de pagar para no pedir doble pago.
-      const current = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+      const current = await clientRequest(`/cases/${caseId}/public-status`);
       setData(current);
 
       if (isPaid(current?.payment_status)) {
@@ -195,7 +152,7 @@ export default function Resumen() {
         return;
       }
 
-      const checkout = await fetchJsonFallback("/billing/checkout", {
+      const checkout = await clientRequest("/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
