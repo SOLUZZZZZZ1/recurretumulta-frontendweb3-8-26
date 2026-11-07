@@ -7,7 +7,7 @@ export default function StagingClient(){
   const [pass,setPass]=useState(''),[trial,setTrial]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   async function enter(event){event.preventDefault();if(busy)return;setError('');setBusy(true);
     try{
-      if(!validClientPass(pass.trim()))throw new Error('Introduce el pase de cliente facilitado para este ensayo.');
+      if(!validClientPass(pass.trim()))throw new Error('El pase no tiene el formato completo. Vuelve a OPS, pulsa «Copiar pase» y pégalo aquí.');
       const value=pass.trim(),data=await clientRequest('/staging/client/profile',{headers:{'X-RTM-Client-Pass':value},cache:'no-store'});
       if(data.version!==CLIENT_TRIAL_VERSION||data.synthetic_only!==true||data.payment_mode!=='test')throw new Error('No se ha confirmado el entorno de ensayo.');
       const old=readClientAccess(data.case_id);
