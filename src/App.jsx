@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import ResumenExpediente from "./pages/ResumenExpediente.jsx";
 import Autorizar from "./pages/Autorizar.jsx";
 import ClientManagement from "./pages/ClientManagement.jsx";
+import StagingClient from "./pages/StagingClient.jsx";
 
 import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
@@ -64,6 +65,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<InicioRTM />} />
+        <Route path="/ensayo/cliente" element={<StagingClient />} />
         <Route path="/trafico" element={<Trafico />} />
         <Route path="/iniciar-expediente/:department/:caseType" element={<IniciarExpedienteRTM />} />
         <Route path="/iniciar-expediente/:department" element={<IniciarExpedienteRTM />} />

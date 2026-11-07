@@ -9,6 +9,7 @@ import OpsCommunications from './OpsCommunications.jsx';
 import OpsManagementQuote from './OpsManagementQuote.jsx';
 import OpsManagementDraft from './OpsManagementDraft.jsx';
 import './OpsPaidCase.css';
+import OpsClientRehearsal from './OpsClientRehearsal.jsx';
 
 function CaseList(){
   const auth=useOpsAuth();const [result,setResult]=useState(null),[error,setError]=useState('');
@@ -16,6 +17,7 @@ function CaseList(){
     jsonRequest(auth.authFetch,'/api/ops/core/cases',{signal:ctl.signal}).then(r=>{if(!ctl.signal.aborted)setResult(r);}).catch(e=>{if(!ctl.signal.aborted)setError(e.message);});
     return()=>ctl.abort();},[auth.authFetch]);
   return <main className="cw-case sr-container"><header><h1>Expedientes para trabajar</h1><p>{auth.session.operator.displayName} · sesión individual</p><button onClick={auth.logout}>Cerrar sesión</button></header>
+    {auth.status?.authProfile==='provider_test_casework'&&<OpsClientRehearsal authFetch={auth.authFetch}/>}
     {error?<p role="alert">{error}</p>:!result?<p role="status">Consultando expedientes autorizados…</p>:result.cases.map(c=><article key={c.id}><h2>{fieldText(c.case.identities.interested.full_name)}</h2>
       <p>{fieldText(c.case.fields.customer_comment)}</p><Link to={`/ops/case/${c.id}`}>Abrir expediente</Link></article>)}</main>;
 }

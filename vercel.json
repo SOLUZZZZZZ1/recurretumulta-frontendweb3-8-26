@@ -1,17 +1,15 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
-    "deploymentEnabled": {
-      "rtm-domain-controlled-20261103": false,
-      "rtm-full-journey-20261104": false
-    }
+    "deploymentEnabled": false
   },
   "routes": [
     {
-      "handle": "filesystem"
+      "src": "/api/(.*)",
+      "dest": "https://recurretumulta-backend-1.onrender.com/$1"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "https://recurretumulta-backend.onrender.com/$1"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",

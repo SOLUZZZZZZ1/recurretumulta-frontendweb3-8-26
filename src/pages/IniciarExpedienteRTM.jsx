@@ -2,6 +2,7 @@ import { clientRequest, clientApiUrl } from "../lib/clientApi.js";
 import React, { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import {clientCaseRequest,readClientAccess,saveClientAccess,downloadCasePdf} from '../lib/clientCaseAccess.js';
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
@@ -69,13 +70,13 @@ function formatBytes(bytes = 0) {
   return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function IniciarExpedienteRTM() {
+export default function IniciarExpedienteRTM({trial=null}) {
   const navigate = useNavigate();
   const params = useParams();
   const [searchParams] = useSearchParams();
 
   const requestedDepartment =
-    params.department ||
+    trial?.fields?.department || params.department ||
     searchParams.get("department") ||
     searchParams.get("service") ||
     "";
@@ -101,6 +102,7 @@ export default function IniciarExpedienteRTM() {
     preferred_contact: "email",
     case_type: initialType,
     customer_comment: "",
+    ...(trial?.fields || {}),
     representation_confirmed: false,
     privacy_accepted: false,
   });
@@ -108,8 +110,10 @@ export default function IniciarExpedienteRTM() {
   const [dniFront, setDniFront] = useState(null);
   const [dniBack, setDniBack] = useState(null);
   const [signedAuthorization, setSignedAuthorization] = useState(null);
-  const [draftCase, setDraftCase] = useState(null);
-  const [authorizationUploaded, setAuthorizationUploaded] = useState(false);
+  const [mainDocument,setMainDocument]=useState(null);
+  const [mainDocumentUploaded,setMainDocumentUploaded]=useState(()=>trial?readClientAccess(trial.case_id)?.mainDocumentUploaded===true:false);
+  const [draftCase, setDraftCase] = useState(()=>trial?readClientAccess(trial.case_id)?.draft||null:null);
+  const [authorizationUploaded, setAuthorizationUploaded] = useState(()=>trial?readClientAccess(trial.case_id)?.candidateUploaded===true:false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
@@ -117,6 +121,7 @@ export default function IniciarExpedienteRTM() {
   const dniFrontRef = useRef(null);
   const dniBackRef = useRef(null);
   const authRef = useRef(null);
+  const mainDocumentRef=useRef(null);
 
   const domicilio = useMemo(() => {
     const line1 = [form.street, form.street_number, form.floor ? `Piso ${form.floor}` : "", form.door ? `Puerta ${form.door}` : ""].filter(Boolean).join(", ");
@@ -183,6 +188,17 @@ export default function IniciarExpedienteRTM() {
       fd.append("dni_front", dniFront);
       fd.append("dni_back", dniBack);
 
+      if(trial){
+        fd.append('public_service_family',trial.fields.public_service_family);
+        fd.append('prejudicial_counsel_requested',trial.fields.prejudicial_counsel_requested);
+        const data=await clientRequest('/staging/client/intake-draft',{method:'POST',body:fd,headers:{'X-RTM-Client-Pass':trial.pass}});
+        if(data.case_id!==trial.case_id||data.test_mode!==true)throw new Error('El expediente recibido no corresponde a este ensayo.');
+        const draft={caseId:data.case_id,nextPath:config.nextPath,pdfPath:`/cases/${data.case_id}/authorization-pdf`,binding:null};
+        saveClientAccess(data.case_id,{...readClientAccess(data.case_id),caseId:data.case_id,token:data.case_access_token,draft});
+        setDraftCase(draft);setMessage('✅ Expediente creado. Revisa los datos y confirma la autorización en el siguiente paso.');
+        return;
+      }
+
       const data = await clientRequest("/cases/intake-draft", { method: "POST", body: fd });
       const caseId = data?.case_id || data?.id;
       if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
@@ -208,9 +224,14 @@ export default function IniciarExpedienteRTM() {
     try {
       const fd = new FormData();
       fd.append("file", signedAuthorization);
-      await clientRequest(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
+      if(trial){
+        if(!draftCase.binding)throw new Error('Confirma primero la autorización de este expediente.');
+        Object.entries(draftCase.binding).forEach(([key,value])=>fd.append(key,value));
+        await clientCaseRequest(draftCase.caseId,`/cases/${draftCase.caseId}/upload-authorization-signed`,{method:'POST',body:fd});
+        saveClientAccess(draftCase.caseId,{...readClientAccess(draftCase.caseId),candidateUploaded:true});
+      }else await clientRequest(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
       setAuthorizationUploaded(true);
-      setMessage("✅ Autorización firmada recibida. Ya puedes continuar con la documentación del expediente.");
+      setMessage(trial?"✅ Candidato de firma recibido. Queda pendiente de revisión humana; puedes consultar el resumen.":"✅ Autorización firmada recibida. Ya puedes continuar con la documentación del expediente.");
     } catch (error) {
       setMessage(error?.message || "No se pudo subir la autorización.");
     } finally {
@@ -218,7 +239,36 @@ export default function IniciarExpedienteRTM() {
     }
   }
 
+  async function authorizeTrial(){
+    if(loading||!draftCase||!mainDocumentUploaded||!form.representation_confirmed||!form.privacy_accepted)return;
+    setLoading(true);setMessage('');
+    try{
+      const data=await clientCaseRequest(draftCase.caseId,`/cases/${draftCase.caseId}/authorize`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({authority_version:'v1_dgt_homologado',consent:true,representation_confirmed:true})});
+      if(data.case_id!==draftCase.caseId||!data.authorization_document_binding)throw new Error('La autorización recibida no coincide con el expediente.');
+      const draft={...draftCase,binding:data.authorization_document_binding};
+      saveClientAccess(draft.caseId,{...readClientAccess(draft.caseId),draft});setDraftCase(draft);
+      await downloadCasePdf(draft.caseId,'authorization-pdf','AUTORIZACION_ENSAYO_RTM.pdf');
+      setMessage('✅ Autorización generada. Léela antes de descargar y subir el candidato de firma ficticia. La subida queda pendiente de revisión humana.');
+    }catch(e){setMessage(e.message);}finally{setLoading(false);}
+  }
+
+  async function downloadTrial(kind){try{await downloadCasePdf(draftCase.caseId,kind,kind==='candidate-fixture'?'AUTORIZACION_FICTICIA_CANDIDATO.pdf':'AUTORIZACION_ENSAYO_RTM.pdf');}catch(e){setMessage(e.message);}}
+
+  async function uploadTrialOriginal(){
+    if(uploading||!mainDocument||!draftCase||mainDocumentUploaded)return;
+    setUploading(true);setMessage('');
+    try{
+      const body=new FormData();body.append('files',mainDocument);
+      const result=await clientCaseRequest(draftCase.caseId,`/cases/${draftCase.caseId}/append-documents`,{method:'POST',body});
+      if(result.case_id!==draftCase.caseId)throw new Error('La documentación no corresponde al expediente.');
+      saveClientAccess(draftCase.caseId,{...readClientAccess(draftCase.caseId),mainDocumentUploaded:true});
+      setMainDocumentUploaded(true);setForm(current=>({...current,representation_confirmed:false,privacy_accepted:false}));
+      setMessage('✅ Documento recibido. Revisa ahora los datos y confirma la autorización sobre la documentación aportada.');
+    }catch(e){setMessage(e.message);}finally{setUploading(false);}
+  }
+
   function continueToDocuments() {
+    if(trial){navigate(`/resumen?case=${encodeURIComponent(draftCase.caseId)}`);return;}
     const separator = draftCase.nextPath.includes("?") ? "&" : "?";
     navigate(`${draftCase.nextPath}${separator}case=${encodeURIComponent(draftCase.caseId)}`);
   }
@@ -403,10 +453,10 @@ export default function IniciarExpedienteRTM() {
           <header style={{ marginBottom: 26 }}>
             <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>Inicia tu expediente</h1>
             <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
-              Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación.
+              {trial?'Completa los datos ficticios, aporta la notificación y después confirma la autorización vinculada al expediente.':'Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación.'}
             </p>
             <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
-              Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración
+              {trial?'Un único expediente RTM · Datos → Documentación → Autorización → Revisión de firma → Pago del estudio':'Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración'}
             </div>
           </header>
 
@@ -458,18 +508,32 @@ export default function IniciarExpedienteRTM() {
             {!draftCase && <>
               <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Deseo generar la autorización RTM vinculada a este expediente.</Check>
               <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
-              <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : "Crear expediente y descargar autorización"}</button>
+              <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : trial ? "Crear expediente" : "Crear expediente y descargar autorización"}</button>
             </>}
           </form>
 
-          {draftCase && <Section title="6. Descargar y subir la autorización RTM">
+          {trial&&draftCase&&<Section title="6. Documento principal">
+            {mainDocumentUploaded?<p>Documento recibido: {trial.fixtures.original.filename}</p>:<><p>Sube la notificación ficticia antes de generar la autorización. Así la autorización quedará vinculada a la documentación que se va a revisar.</p>
+            <UploadBox label="Notificación ficticia" file={mainDocument} inputRef={mainDocumentRef} onChange={setMainDocument} accept="application/pdf"/>
+            <button type="button" className="sr-btn-primary" onClick={()=>void uploadTrialOriginal()} disabled={uploading||!mainDocument} style={{marginTop:16}}>{uploading?'Subiendo…':'Guardar documento del caso'}</button></>}
+          </Section>}
+          {draftCase && <Section title={trial?'7. Descargar y subir la autorización RTM':'6. Descargar y subir la autorización RTM'}>
             <div style={{ padding: 14, marginBottom: 16, borderRadius: 14, background: "#dcfce7", color: "#166534", fontWeight: 900, overflowWrap: "anywhere" }}>Expediente: {draftCase.caseId}</div>
-            <button type="button" className="sr-btn-primary" onClick={() => openBackendFile(draftCase.pdfPath)}>⬇ Descargar autorización RTM</button>
+            {trial&&!mainDocumentUploaded?<p>Aporta primero la notificación ficticia en el paso anterior.</p>:<>{trial?<>
+              {!draftCase.binding?<>
+                <Check checked={form.representation_confirmed} onChange={v=>update('representation_confirmed',v)}>Confirmo generar la autorización con los datos revisados de este expediente ficticio.</Check>
+                <Check checked={form.privacy_accepted} onChange={v=>update('privacy_accepted',v)}>Confirmo la política de privacidad para el ensayo.</Check>
+                <button type="button" className="sr-btn-primary" onClick={()=>void authorizeTrial()} disabled={loading||!form.representation_confirmed||!form.privacy_accepted}>{loading?'Generando…':'Confirmar autorización y descargar'}</button>
+              </>:<><button type="button" className="sr-btn-secondary" onClick={()=>void downloadTrial('authorization-pdf')}>Descargar autorización RTM</button>
+                <p>Lee la autorización y utiliza únicamente la firma ficticia preparada para este ensayo. Su subida no equivale a aprobación.</p>
+                <button type="button" className="sr-btn-secondary" onClick={()=>void downloadTrial('candidate-fixture')}>Descargar candidato de firma ficticia</button></>}
+            </>:<button type="button" className="sr-btn-primary" onClick={() => openBackendFile(draftCase.pdfPath)}>⬇ Descargar autorización RTM</button>}
             <div style={{ marginTop: 18 }}>
               <UploadBox label="Autorización firmada" file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,.jpg,.jpeg,.png,image/*" />
             </div>
-            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : "Subir autorización firmada"}</button>
-            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación del caso</button>}
+            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization || (trial&&!draftCase.binding)} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : "Subir autorización firmada"}</button>
+            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>{trial?'Ver resumen del expediente':'Continuar y subir documentación del caso'}</button>}
+            </>}
           </Section>}
 
           {message && <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850 }}>{message}</div>}

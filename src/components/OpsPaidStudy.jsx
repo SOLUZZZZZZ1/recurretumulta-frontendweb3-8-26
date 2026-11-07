@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from "react";
 import {blankStudy,FACT_LABELS,jsonRequest,root,verifyAssessment,documentLabel} from "../lib/paidCasework.js";
 import {journalKey,loadStudyReference,storeStudyReference,clearStudyReference,studyRequestDigest,withStudyLock} from '../lib/studyOperationJournal.js';
+import {studyReviewRequirements,studyWriteConflictMessage} from '../lib/studyReviewRequirements.js';
 
 export default function OpsPaidStudy({caseId,operatorId,authFetch,study,documents,reviewed,canWrite,onRefresh}) {
   const [recovery]=useState(()=>{try{return {reference:loadStudyReference(caseId,operatorId)}}catch(e){return {error:e.message}}});
@@ -24,6 +25,7 @@ export default function OpsPaidStudy({caseId,operatorId,authFetch,study,document
     window.addEventListener('storage',receive);return()=>window.removeEventListener('storage',receive);
   },[caseId,operatorId]);
   const editable=phase==='editing'||phase==='verified';
+  const missingReviews=studyReviewRequirements(documents,reviewed);
   function change(key,value){dirty.current=true;setForm(f=>({...f,[key]:value}));setAck(false);}
   function factChange(key,value,sourceId){
     const previous=form.facts[key];
@@ -81,7 +83,7 @@ export default function OpsPaidStudy({caseId,operatorId,authFetch,study,document
     } catch(e) {
       if(!live.current||signal.aborted)return;
       setPhase(e.status===409?'conflict':'unknown');
-      setMessage(e.status===409?'El servidor rechazó la escritura. Conservamos tu texto; consulta el historial antes de preparar otra operación.':
+      setMessage(e.status===409?studyWriteConflictMessage(e.code):
         'No sabemos si se guardó. Conservamos el texto y la identidad de la operación; hay que consultar antes de repetir.');
       return;
     }
@@ -92,7 +94,7 @@ export default function OpsPaidStudy({caseId,operatorId,authFetch,study,document
     try{await confirmKnown(known,signal);}catch(e){if(live.current&&!signal.aborted){setPhase('known');setMessage('La escritura está confirmada, pero su lectura falló. Recupera esa misma versión; no se permite otro guardado. '+e.message);}}
   }
   function save(){
-    if(!editable||!ack||!canWrite)return;
+    if(!editable||!ack||!canWrite||missingReviews.length)return;
     const payload={...structuredClone(form),operation_id:crypto.randomUUID(),expected_revision:head,documents:structuredClone(reviewed)};
     return task(async signal=>{
       const prior=loadStudyReference(caseId,operatorId);
@@ -141,13 +143,14 @@ export default function OpsPaidStudy({caseId,operatorId,authFetch,study,document
       if(live.current&&!signal.aborted)setPreview(result);
     }catch(e){if(live.current&&!signal.aborted)setMessage(e.message);}
   });}
-  const ready=canWrite&&editable&&ack&&form.assessment.trim()&&form.next_action.trim()&&reviewed.length>=3;
-  return <section aria-label="Estudio inicial"><h2>Estudio inicial pagado</h2>
+  const ready=canWrite&&editable&&ack&&form.assessment.trim()&&form.next_action.trim()&&!missingReviews.length;
+  return <section aria-label="Estudio inicial"><h2>Estudio inicial</h2>
     <p>La valoración es interna. Guardarla no la comunica al cliente, no genera un recurso ni contrata la gestión posterior.</p>
     <p>Responsable de la última valoración: {study.latest?.snapshot.author.name||'Sin valoración guardada'}. Los hechos sin revisar conservan su estado pendiente.</p>
     <form onSubmit={e=>{e.preventDefault();void save();}}>
       <fieldset disabled={!editable||!canWrite}><legend>Revisión documental y valoración</legend>
       <p>Documentos confirmados en esta sesión: {reviewed.length}. Abre y revisa la multa, la autorización y la identidad antes de guardar.</p>
+      {!!missingReviews.length&&<aside aria-label="Documentos pendientes de revisión"><p>Para guardar esta valoración, revisa e incorpora desde Documentos:</p><ul>{missingReviews.map(label=><li key={label}>{label}</li>)}</ul></aside>}
       {Object.entries(FACT_LABELS).map(([key,label])=><div className="cw-fact" key={key}>
         <label>{label}<textarea aria-label={label} value={factText[key]} maxLength={8000} onChange={e=>factChange(key,e.target.value)}/></label>
         <label>Documento que sustenta la revisión<select value={form.facts[key].sources[0]?.document_id||''} onChange={e=>factChange(key,undefined,e.target.value)}>

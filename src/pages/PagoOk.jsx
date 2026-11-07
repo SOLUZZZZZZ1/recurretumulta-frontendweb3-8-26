@@ -1,4 +1,5 @@
 import { clientRequest } from "../lib/clientApi.js";
+import {clientCaseRequest} from '../lib/clientCaseAccess.js';
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
@@ -12,18 +13,18 @@ function paramsFromSearch(search) {
 }
 
 function postConfirm(caseId, sessionId) {
-  return clientRequest("/billing/confirm", {
+  return clientCaseRequest(caseId,"/billing/confirm", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ case_id: caseId, session_id: sessionId }),
   });
 }
 
 function getPublicStatus(caseId) {
-  return clientRequest(`/cases/${encodeURIComponent(caseId)}/public-status`);
+  return clientCaseRequest(caseId,`/cases/${encodeURIComponent(caseId)}/public-status`);
 }
 
 function getBillingStatus(caseId) {
-  return clientRequest(`/billing/status/${encodeURIComponent(caseId)}`);
+  return clientCaseRequest(caseId,`/billing/status/${encodeURIComponent(caseId)}`);
 }
 
 function isPaid(value) {
@@ -57,7 +58,7 @@ export default function PagoOk() {
       try {
         if (!sessionId) {
           setState("processing");
-          setMessage("Pago recibido. Estamos sincronizando el expediente.");
+          setMessage("Estamos consultando la confirmación del pago. No repitas el pago mientras se comprueba.");
         } else {
           await postConfirm(caseId, sessionId);
         }
@@ -87,7 +88,7 @@ export default function PagoOk() {
           setMessage("Tu pago se ha realizado correctamente. Estamos gestionando tu expediente.");
         } else {
           setState("processing");
-          setMessage("Pago recibido. Estamos terminando de sincronizar el expediente.");
+          setMessage("El pago todavía no está confirmado en RTM. Estamos consultando su estado.");
         }
 
         setTimeout(() => {
@@ -99,7 +100,7 @@ export default function PagoOk() {
         // No mostramos al cliente que “falló el pago” si Stripe lo ha cobrado.
         // Guardamos el detalle técnico y lo mandamos al resumen.
         setState("processing");
-        setMessage("Pago recibido. Estamos terminando de confirmar el expediente.");
+        setMessage("No hemos podido confirmar todavía el pago. Consulta el estado antes de volver a pagar.");
         setDetail(e?.message || "");
 
         setTimeout(() => {

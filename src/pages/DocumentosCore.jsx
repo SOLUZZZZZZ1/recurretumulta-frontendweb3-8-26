@@ -1,4 +1,5 @@
 import { clientRequest } from "../lib/clientApi.js";
+import {clientCaseRequest} from '../lib/clientCaseAccess.js';
 import { useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
@@ -73,7 +74,7 @@ export default function DocumentosCore() {
       const formData = new FormData();
       files.forEach((item) => formData.append("files", item.file));
 
-      await clientRequest(`/cases/${caseId}/append-documents`, {
+      await clientCaseRequest(caseId,`/cases/${caseId}/append-documents`, {
         method: "POST",
         body: formData,
       });

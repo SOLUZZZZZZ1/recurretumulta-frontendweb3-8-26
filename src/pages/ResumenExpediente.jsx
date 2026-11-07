@@ -1,4 +1,5 @@
 import { clientRequest } from "../lib/clientApi.js";
+import {clientCaseRequest,readClientAccess,CLIENT_TRIAL_VERSION} from '../lib/clientCaseAccess.js';
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -86,6 +87,7 @@ export default function Resumen() {
   const location = useLocation();
   const navigate = useNavigate();
   const caseId = useMemo(() => getCaseId(location.search), [location.search]);
+  const trial=readClientAccess(caseId)?.trial===CLIENT_TRIAL_VERSION;
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +109,7 @@ export default function Resumen() {
       let last = null;
       // varios intentos para evitar ver estados intermedios justo tras pago/autorización
       for (let i = 0; i < 4; i += 1) {
-        last = await clientRequest(`/cases/${caseId}/public-status`);
+        last = await clientCaseRequest(caseId,`/cases/${caseId}/public-status`);
         if (isPaid(last?.payment_status) || isAuthorized(last)) break;
         await new Promise((resolve) => setTimeout(resolve, 900));
       }
@@ -133,7 +135,7 @@ export default function Resumen() {
 
     try {
       // Refresco justo antes de pagar para no pedir doble pago.
-      const current = await clientRequest(`/cases/${caseId}/public-status`);
+      const current = await clientCaseRequest(caseId,`/cases/${caseId}/public-status`);
       setData(current);
 
       if (isPaid(current?.payment_status)) {
@@ -147,23 +149,29 @@ export default function Resumen() {
         current?.email ||
         "";
 
-      if (!email) {
+      if (!email && !trial) {
         setPayError("Falta el email del interesado. Vuelve a autorización y guarda los datos.");
         return;
       }
 
-      const checkout = await clientRequest("/billing/checkout", {
+      if(trial&&current.progress?.ready_for_review_payment!==true)throw new Error(current.message||'La documentación requiere revisión antes del pago.');
+      if(trial){
+        const review=await clientCaseRequest(caseId,`/cases/${caseId}/review`,{method:'POST'});
+        if(review.case_id!==caseId||review.readiness?.ready!==true)throw new Error('El expediente todavía no está preparado para contratar el estudio. Revisa su estado.');
+      }
+      const checkout = await clientCaseRequest(caseId,"/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           case_id: caseId,
-          product: getReviewInfo(current).product,
+          product: trial?current.review_quote?.billing_code:getReviewInfo(current).product,
           payment_stage: "review",
-          email,
+          ...(email?{email}:{}),
         }),
       });
 
       if (checkout?.redirect) {
+        if(trial&&new URL(checkout.redirect,window.location.origin).origin!==window.location.origin)throw new Error('Retorno de pago no verificable.');
         window.location.href = checkout.redirect;
         return;
       }
@@ -172,6 +180,7 @@ export default function Resumen() {
         throw new Error("No se recibió URL de Stripe.");
       }
 
+      if(trial){const target=new URL(checkout.url);if(target.protocol!=='https:'||target.hostname!=='checkout.stripe.com')throw new Error('Destino de pago no verificable.');}
       window.location.href = checkout.url;
     } catch (e) {
       setPayError(e?.message || "No se pudo iniciar el pago.");
@@ -182,12 +191,12 @@ export default function Resumen() {
 
   const paid = isPaid(data?.payment_status);
   const authorized = isAuthorized(data);
-  const reviewInfo = getReviewInfo(data);
-  const showPayButton = authorized && !paid;
-  const showAuthNeeded = !authorized && !paid;
+  const reviewInfo = trial&&data?.review_quote?{...getReviewInfo(data),amount:data.review_quote.amount_cents/100}:getReviewInfo(data);
+  const showPayButton = (trial?data?.progress?.ready_for_review_payment===true:authorized) && !paid;
+  const showAuthNeeded = !trial && !authorized && !paid;
 
   return (
-    <main className="sr-page">
+    <main className="sr-page" style={trial?{maxWidth:1100,margin:'0 auto',padding:'32px 18px'}:undefined}>
       <section className="sr-section">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <h1 className="sr-h1">Resumen del expediente</h1>
@@ -206,7 +215,8 @@ export default function Resumen() {
 
           <div style={{ marginTop: 16 }}>
             <strong>Estado del expediente</strong>
-            <p className="sr-p" style={{ marginTop: 6 }}>{messageFor(data, loading)}</p>
+            <p className="sr-p" style={{ marginTop: 6 }}>{trial?(data?.message||'Consultando el expediente del ensayo…'):messageFor(data, loading)}</p>
+            {trial&&<p>Ensayo con datos ficticios y pagos TEST. {data?.authorization_evidence_status==='pending_review'?'La firma está pendiente de revisión humana. El pago se habilitará cuando quede verificada.':''}</p>}
 
             <button className="sr-btn-secondary" onClick={() => loadStatus()} disabled={loading}>
               {loading ? "Revisando…" : "Revisar de nuevo"}
@@ -305,7 +315,7 @@ export default function Resumen() {
 
         {!showPayButton && !showAuthNeeded && !paid ? (
           <div className="sr-card" style={{ marginTop: 16 }}>
-            <h2 className="sr-h2">Gestión iniciada</h2>
+            <h2 className="sr-h2">{trial?'Solicitud recibida':'Gestión iniciada'}</h2>
             <p className="sr-p">
               Hemos recibido la información. Desde aquí podrás seguir el estado del expediente.
             </p>
