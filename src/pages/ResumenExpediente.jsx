@@ -1,6 +1,7 @@
 import { clientRequest } from "../lib/clientApi.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import InvoiceRequestFields, { emptyInvoiceData, validInvoiceData } from "../components/InvoiceRequestFields.jsx";
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
@@ -92,6 +93,8 @@ export default function Resumen() {
   const [technicalError, setTechnicalError] = useState("");
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [invoiceRequested, setInvoiceRequested] = useState(false);
+  const [invoiceData, setInvoiceData] = useState(emptyInvoiceData);
 
   async function loadStatus({ silent = false } = {}) {
     if (!caseId) {
@@ -129,6 +132,10 @@ export default function Resumen() {
 
   async function startPayment() {
     setPayError("");
+    if (invoiceRequested && !validInvoiceData(invoiceData)) {
+      setPayError("Completa todos los datos fiscales para solicitar la factura.");
+      return;
+    }
     setPaying(true);
 
     try {
@@ -160,6 +167,8 @@ export default function Resumen() {
           product: getReviewInfo(current).product,
           payment_stage: "review",
           email,
+          invoice_requested: invoiceRequested,
+          invoice_data: invoiceRequested ? invoiceData : null,
         }),
       });
 
@@ -278,6 +287,14 @@ export default function Resumen() {
                 continuar con una gestión de pago, descontaremos este importe del precio que
                 corresponda. No se realizará ningún cobro posterior sin informarte primero.
               </p>
+
+              <InvoiceRequestFields
+                requested={invoiceRequested}
+                onRequestedChange={setInvoiceRequested}
+                data={invoiceData}
+                onDataChange={setInvoiceData}
+                disabled={paying}
+              />
 
               <button className="sr-btn-primary" onClick={startPayment} disabled={paying || loading}>
                 {paying ? "Abriendo pago…" : `Pagar revisión inicial · ${reviewInfo.amount} €`}

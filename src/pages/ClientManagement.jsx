@@ -3,6 +3,7 @@ import {useLocation,useNavigate,useParams} from 'react-router-dom';
 import {jsonRequest,UUID} from '../lib/paidCasework.js';
 import {post,money,BALANCE_LABELS,GENERATION_LABELS} from '../lib/managementJourney.js';
 import {QuoteDetails} from '../components/OpsManagementQuote.jsx';
+import InvoiceRequestFields,{emptyInvoiceData,validInvoiceData} from '../components/InvoiceRequestFields.jsx';
 import '../components/OpsPaidCase.css';
 
 const base='/api/client/management';
@@ -15,6 +16,7 @@ export default function ClientManagement(){
   const {caseId}=useParams(),location=useLocation(),navigate=useNavigate();
   const [link,setLink]=useState(new URLSearchParams(location.search).get('enlace')||'');
   const [data,setData]=useState(null),[email,setEmail]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[needsLogin,setNeedsLogin]=useState(false),[accepted,setAccepted]=useState(false),[closing,setClosing]=useState(false);
+  const [invoiceRequested,setInvoiceRequested]=useState(false),[invoiceData,setInvoiceData]=useState(emptyInvoiceData);
   const active=useRef(true),controller=useRef(null),locked=useRef(false),current=useRef(null);
   const path=base+'/cases/'+caseId;
   useEffect(()=>{
@@ -22,7 +24,7 @@ export default function ClientManagement(){
     if(incoming){withdraw(401);setLink(incoming);navigate('/cliente/expediente/'+caseId,{replace:true});}
   },[caseId,location.search,navigate]);
   function broadcast(kind){localStorage.setItem(accessEventKey,JSON.stringify({kind,nonce:crypto.randomUUID()}));}
-  function withdraw(status){controller.current?.abort();controller.current=null;locked.current=false;setBusy(false);current.current=null;setData(null);setAccepted(false);setEmail('');setLink('');setNotice('');setNeedsLogin(status===401);}
+  function withdraw(status){controller.current?.abort();controller.current=null;locked.current=false;setBusy(false);current.current=null;setData(null);setAccepted(false);setEmail('');setLink('');setNotice('');setInvoiceRequested(false);setInvoiceData(emptyInvoiceData);setNeedsLogin(status===401);}
   function valid(signal){return active.current&&!signal.aborted&&controller.current?.signal===signal;}
   async function load(signal){const r=await jsonRequest(request,path,{signal});if(!valid(signal))throw new DOMException('Consulta retirada','AbortError');
     if(r.case_id!==caseId){const e=new Error('El acceso no corresponde a este expediente.');e.status=403;throw e;}
@@ -35,7 +37,7 @@ export default function ClientManagement(){
     try{await fn(ctl.signal);}catch(e){if(valid(ctl.signal)){if(e.status===401||e.status===403){withdraw(e.status);broadcast(String(e.status));}setError(e.status===403?'El acceso a este expediente no está autorizado o ha caducado.':e.message);}}finally{if(controller.current===ctl){controller.current=null;locked.current=false;if(active.current)setBusy(false);}}}
   useEffect(()=>{active.current=true;
     if(!UUID.test(caseId||'')){setError('El enlace no contiene una referencia válida.');return;}
-    current.current=null;setData(null);setAccepted(false);setNeedsLogin(false);setError('');
+    current.current=null;setData(null);setAccepted(false);setInvoiceRequested(false);setInvoiceData(emptyInvoiceData);setNeedsLogin(false);setError('');
     const changed=e=>{
       if(e.key===accessEventKey){let kind;try{kind=JSON.parse(e.newValue)?.kind;}catch{return;}withdraw(kind==='401'?401:403);setError('El acceso cambió en otra pestaña. Consulta de nuevo antes de continuar.');}
       if(e.key===closureKey){withdraw(401);setClosing(e.newValue!==null);setNeedsLogin(e.newValue===null);}
@@ -59,6 +61,7 @@ export default function ClientManagement(){
     return task(async signal=>{localStorage.setItem(closureKey,sessionRef);if(pendingClosure()!==sessionRef)throw new Error('No se pudo conservar la referencia de cierre.');await finishLogout(sessionRef,signal);});}
   function resolveLogout(){return task(async signal=>{const ref=pendingClosure();if(!ref)throw new Error('No se ha confirmado la referencia de cierre.');await finishLogout(ref,signal);});}
   function pay(){return task(async signal=>{
+    if(invoiceRequested&&!validInvoiceData(invoiceData))throw new Error('Completa todos los datos fiscales para solicitar la factura.');
     const expected=binding(data),confirmed=accepted,q=data.quote;
     if(!q||(!['accepted','settled'].includes(q.state)&&confirmed!==expected))throw new Error('Confirma expresamente la versión del presupuesto.');
     const fresh=await load(signal);
@@ -68,7 +71,8 @@ export default function ClientManagement(){
     if(!UUID.test(operation))throw new Error('La referencia de aceptación necesita revisión.');
     if(!['accepted','settled'].includes(fresh.quote.state))await post(request,path+'/accept',{operation_id:operation,quote_id:q.id,quote_sha256:q.sha256,accept_exact_version:true,expected_session_ref:fresh.session_ref},signal);
     if(!valid(signal))return;
-    const r=await post(request,path+'/checkout',{quote_id:q.id,quote_sha256:q.sha256,expected_session_ref:fresh.session_ref},signal);
+    const r=await post(request,path+'/checkout',{quote_id:q.id,quote_sha256:q.sha256,expected_session_ref:fresh.session_ref,
+      invoice_requested:invoiceRequested,invoice_data:invoiceRequested?invoiceData:null},signal);
     if(!valid(signal))return;
     if(r.balance.checkout_url){const url=new URL(r.balance.checkout_url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com'||url.username||url.password||!url.pathname.startsWith('/c/'))throw new Error('Dirección de pago no verificada.');window.location.assign(url.href);}
     else{await load(signal);setNotice(BALANCE_LABELS[r.balance.state]||'Consulta del pago pendiente.');}
@@ -86,6 +90,7 @@ export default function ClientManagement(){
         {!['confirmed','review_required','expired','retiring'].includes(data.balance.state)&&new Date(data.quote.expires_at)>new Date()&&<>
           {!['accepted','settled'].includes(data.quote.state)&&<label><input type="checkbox" checked={accepted===binding(data)} disabled={busy} onChange={e=>setAccepted(e.target.checked?binding(data):false)}/> He leído el alcance, las exclusiones, la valoración y el precio. Acepto expresamente el presupuesto versión {data.quote.revision}.</label>}
           <button disabled={busy||(accepted!==binding(data)&&!['accepted','settled'].includes(data.quote.state))} onClick={()=>void pay()}>{data.balance.state==='unknown'?'Recuperar la misma sesión de pago':data.quote.state==='accepted'?'Continuar con el pago de '+money(data.quote.economics.balance_cents):'Aceptar y pagar '+money(data.quote.economics.balance_cents)}</button></>}
+        {!['confirmed','review_required','expired','retiring'].includes(data.balance.state)&&new Date(data.quote.expires_at)>new Date()&&<InvoiceRequestFields requested={invoiceRequested} onRequestedChange={setInvoiceRequested} data={invoiceData} onDataChange={setInvoiceData} disabled={busy}/>}
         {new Date(data.quote.expires_at)<=new Date()&&data.balance.state!=='confirmed'&&<p>La vigencia comercial ha terminado. El operador debe revisar la propuesta y cualquier pago pendiente antes de abrir otro cobro.</p>}
         {data.balance.state==='confirmed'&&<p role="status">{GENERATION_LABELS[data.generation?.state]||'Pago íntegro registrado. Consultando la generación del recurso.'}</p>}</>:
         <p>La consulta se ha completado: todavía no hay una propuesta habilitada para tu acceso privado.</p>}
