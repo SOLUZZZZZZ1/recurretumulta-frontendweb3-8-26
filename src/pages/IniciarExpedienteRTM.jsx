@@ -1,14 +1,7 @@
+import { clientRequest, clientApiUrl } from "../lib/clientApi.js";
 import React, { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 
@@ -17,7 +10,7 @@ const SERVICE_CONFIG = {
     label: "Tráfico",
     icon: "🚗",
     defaultCaseType: "fine",
-    nextPath: "/multas",
+    nextPath: "/multas/documentos",
     caseTypes: {
       fine: "Recurrir una multa",
       vehicle_removal: "Eliminar un vehículo",
@@ -60,41 +53,8 @@ const SERVICE_CONFIG = {
   },
 };
 
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-  if (!response.ok) {
-    const detail = data?.detail?.message || data?.detail || data?.message || text || `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-  for (const base of API_CANDIDATES) {
-    try {
-      const response = await fetch(buildUrl(base, path), options);
-      return await readResponse(response);
-    } catch (error) {
-      errors.push(error?.message || "Error");
-    }
-  }
-  throw new Error(errors.join(" | "));
-}
-
 function openBackendFile(path) {
-  const base = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "/api";
-  window.open(buildUrl(base, path), "_blank", "noopener,noreferrer");
+  window.open(clientApiUrl(path), "_blank", "noopener,noreferrer");
 }
 
 function normalizeDni(value = "") {
@@ -223,7 +183,7 @@ export default function IniciarExpedienteRTM() {
       fd.append("dni_front", dniFront);
       fd.append("dni_back", dniBack);
 
-      const data = await fetchJsonFallback("/cases/intake-draft", { method: "POST", body: fd });
+      const data = await clientRequest("/cases/intake-draft", { method: "POST", body: fd });
       const caseId = data?.case_id || data?.id;
       if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
 
@@ -248,7 +208,7 @@ export default function IniciarExpedienteRTM() {
     try {
       const fd = new FormData();
       fd.append("file", signedAuthorization);
-      await fetchJsonFallback(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
+      await clientRequest(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
       setAuthorizationUploaded(true);
       setMessage("✅ Autorización firmada recibida. Ya puedes continuar con la documentación del expediente.");
     } catch (error) {

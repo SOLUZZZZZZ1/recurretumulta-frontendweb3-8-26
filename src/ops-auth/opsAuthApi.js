@@ -209,6 +209,10 @@ export async function readOpsAuthStatus({
   });
 }
 
+export function isCaseworkProfile(profile) {
+  return profile === 'production_casework' || profile === 'provider_test_casework';
+}
+
 export function validateOpsAuthStatus(payload, {
   allowLocalDevelopment = false,
   localRuntimeEnabled = false,
@@ -220,18 +224,23 @@ export function validateOpsAuthStatus(payload, {
     payload?.auth_profile === "production_casework" && payload?.casework_only === true &&
     payload?.local_only === false && payload?.staging_only === false &&
     payload?.device_logout_contract === 'rtm_device_logout_v1';
+  const acceptedProviderTestProfile = payload?.auth_environment === 'staging' &&
+    payload?.auth_profile === 'provider_test_casework' && payload?.casework_only === true &&
+    payload?.local_only === false && payload?.staging_only === true &&
+    payload?.payment_mode === 'test' && payload?.device_logout_contract === 'rtm_device_logout_v1';
   // Existing staging envelopes remain valid. Contradictory local markers cannot
   // turn a local backend into staging or sidestep the separate caller opt-in.
   const acceptedStagingProfile =
     payload?.staging_only === true &&
     payload?.local_only !== true &&
     payload?.auth_profile !== "local_development" &&
+    !isCaseworkProfile(payload?.auth_profile) &&
     payload?.auth_environment !== "development";
   if (
     payload?.ok !== true ||
     typeof payload?.individual_login_enabled !== "boolean" ||
     payload?.configuration_valid !== true ||
-    (!acceptedStagingProfile && !acceptedLocalProfile && !acceptedProductionProfile) ||
+    (!acceptedStagingProfile && !acceptedLocalProfile && !acceptedProductionProfile && !acceptedProviderTestProfile) ||
     payload?.shared_ops_login_accepted !== false
   ) {
     fail(
@@ -244,6 +253,7 @@ export function validateOpsAuthStatus(payload, {
     configurationValid: payload.configuration_valid,
     sharedOpsLoginAccepted: false,
     ...(acceptedProductionProfile ? {authEnvironment:"production", authProfile:"production_casework"} : {}),
+    ...(acceptedProviderTestProfile ? {authEnvironment:'staging', authProfile:'provider_test_casework', paymentMode:'test'} : {}),
     ...(acceptedLocalProfile ? {
       authEnvironment: "development",
       authProfile: "local_development",

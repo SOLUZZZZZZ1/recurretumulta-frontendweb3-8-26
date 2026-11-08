@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import FineOfferSummary from '../components/FineOfferSummary.jsx';
 
 const REVIEW_PRICES = [
   {
@@ -250,7 +251,7 @@ export default function Precios() {
                 📄
               </span>
               <h2 style={{ margin: "12px 0 9px", fontSize: 23, fontWeight: 950 }}>
-                Recurso administrativo de multa
+                Recursos de multas desde 39 €
               </h2>
               <div
                 style={{
@@ -260,12 +261,13 @@ export default function Precios() {
                   fontWeight: 950,
                 }}
               >
-                39 €
+                Desde 39 € en total
               </div>
               <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
-                Tarifa de gestión cuando corresponda esta actuación. Se
-                descontará lo abonado previamente por la revisión inicial.
+                Impuestos incluidos. Revisión inicial por 10 €, descontables
+                íntegramente del presupuesto si decides continuar.
               </p>
+              <FineOfferSummary showScope />
             </article>
 
             <article

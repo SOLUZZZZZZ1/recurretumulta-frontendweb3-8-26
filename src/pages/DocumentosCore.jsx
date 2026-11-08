@@ -1,64 +1,10 @@
+import { clientRequest } from "../lib/clientApi.js";
 import { useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
-
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
-
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail =
-      data?.detail?.message ||
-      data?.detail ||
-      data?.message ||
-      data?.error ||
-      text ||
-      `HTTP ${response.status}`;
-
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (error) {
-      errors.push(`${url} → ${error?.message || "Error"}`);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
-}
 
 function getCaseId(search) {
   const params = new URLSearchParams(search);
@@ -127,7 +73,7 @@ export default function DocumentosCore() {
       const formData = new FormData();
       files.forEach((item) => formData.append("files", item.file));
 
-      await fetchJsonFallback(`/cases/${caseId}/append-documents`, {
+      await clientRequest(`/cases/${caseId}/append-documents`, {
         method: "POST",
         body: formData,
       });
