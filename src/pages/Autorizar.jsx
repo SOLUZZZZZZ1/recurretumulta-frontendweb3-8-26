@@ -1,57 +1,10 @@
+import { clientRequest, clientApiUrl } from "../lib/clientApi.js";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
   return qs.get("case") || qs.get("case_id") || qs.get("id") || "";
-}
-
-function buildUrl(base, path) {
-  const cleanBase = String(base || "").replace(/\/$/, "");
-  return `${cleanBase}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail = data?.detail || data?.message || text || `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (e) {
-      errors.push(`${url} → ${e?.message || "Failed to fetch"}`);
-    }
-  }
-
-  throw new Error(errors.join(" | "));
 }
 
 function openPdf(pathOrUrl) {
@@ -63,7 +16,7 @@ function openPdf(pathOrUrl) {
     return;
   }
 
-  window.open(buildUrl("/api", url), "_blank", "noopener,noreferrer");
+  window.open(clientApiUrl(url), "_blank", "noopener,noreferrer");
 }
 
 function unwrapExtracted(value) {
@@ -117,7 +70,7 @@ export default function Autorizar() {
       setDebug("");
 
       try {
-        const status = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+        const status = await clientRequest(`/cases/${caseId}/public-status`);
         setCaseData(status);
 
         const interested = status?.interested_data || {};
@@ -251,7 +204,7 @@ export default function Autorizar() {
     setLoading(true);
 
     try {
-      await fetchJsonFallback(`/cases/${caseId}/details`, {
+      await clientRequest(`/cases/${caseId}/details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -269,7 +222,7 @@ export default function Autorizar() {
       let pdfUrl = `/cases/${caseId}/authorization-pdf`;
 
       try {
-        const auth = await fetchJsonFallback(`/cases/${caseId}/authorize`, {
+        const auth = await clientRequest(`/cases/${caseId}/authorize`, {
           method: "POST",
         });
 
@@ -306,7 +259,7 @@ export default function Autorizar() {
       const fd = new FormData();
       fd.append("file", signedFile);
 
-      await fetchJsonFallback(`/cases/${caseId}/upload-authorization-signed`, {
+      await clientRequest(`/cases/${caseId}/upload-authorization-signed`, {
         method: "POST",
         body: fd,
       });
@@ -416,7 +369,6 @@ export default function Autorizar() {
               de alegaciones y/o recursos ante la DGT u organismo competente.
             </div>
 
-
             <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
               <CheckRow
                 checked={checks.autorizo_gestion}
@@ -473,7 +425,6 @@ export default function Autorizar() {
                 <li>Recurso y defensa del expediente</li>
               </ul>
             </div>
-
 
             <div className="sr-cta-row" style={{ marginTop: 16, justifyContent: "flex-start" }}>
               <button

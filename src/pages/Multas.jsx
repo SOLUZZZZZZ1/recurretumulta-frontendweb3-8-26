@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import FineOfferSummary from '../components/FineOfferSummary.jsx';
 
 const API = "/api";
 const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
@@ -1563,10 +1564,7 @@ export default function Multas() {
             </div>
 
             <div className="mt-discount">
-              <strong>Si decides continuar:</strong> el recurso administrativo
-              de multa tiene una tarifa de 39 €. Los 10 € abonados por la
-              Revisión Inicial se descuentan íntegramente, por lo que quedarían
-              29 € pendientes.
+              <FineOfferSummary />
             </div>
           </div>
         </section>

@@ -1,49 +1,7 @@
+import { clientRequest } from "../lib/clientApi.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-
-const DIRECT_BACKEND = "https://recurretumulta-backend.onrender.com";
-
-const API_CANDIDATES = [
-  "/api",
-  import.meta.env.VITE_API_BASE_URL,
-  import.meta.env.VITE_API_URL,
-  DIRECT_BACKEND,
-].filter(Boolean);
-
-function buildUrl(base, path) {
-  return `${String(base || "").replace(/\/$/, "")}${path}`;
-}
-
-async function readResponse(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const detail = data?.detail || data?.message || text || `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
-}
-
-async function fetchJsonFallback(path, options = {}) {
-  const errors = [];
-  for (const base of API_CANDIDATES) {
-    const url = buildUrl(base, path);
-    try {
-      const response = await fetch(url, options);
-      return await readResponse(response);
-    } catch (e) {
-      errors.push(`${url} → ${e?.message || "Error"}`);
-    }
-  }
-  throw new Error(errors.join(" | "));
-}
+import InvoiceRequestFields, { emptyInvoiceData, validInvoiceData } from "../components/InvoiceRequestFields.jsx";
 
 function getCaseId(search) {
   const qs = new URLSearchParams(search);
@@ -135,6 +93,8 @@ export default function Resumen() {
   const [technicalError, setTechnicalError] = useState("");
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [invoiceRequested, setInvoiceRequested] = useState(false);
+  const [invoiceData, setInvoiceData] = useState(emptyInvoiceData);
 
   async function loadStatus({ silent = false } = {}) {
     if (!caseId) {
@@ -150,7 +110,7 @@ export default function Resumen() {
       let last = null;
       // varios intentos para evitar ver estados intermedios justo tras pago/autorización
       for (let i = 0; i < 4; i += 1) {
-        last = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+        last = await clientRequest(`/cases/${caseId}/public-status`);
         if (isPaid(last?.payment_status) || isAuthorized(last)) break;
         await new Promise((resolve) => setTimeout(resolve, 900));
       }
@@ -172,11 +132,15 @@ export default function Resumen() {
 
   async function startPayment() {
     setPayError("");
+    if (invoiceRequested && !validInvoiceData(invoiceData)) {
+      setPayError("Completa todos los datos fiscales para solicitar la factura.");
+      return;
+    }
     setPaying(true);
 
     try {
       // Refresco justo antes de pagar para no pedir doble pago.
-      const current = await fetchJsonFallback(`/cases/${caseId}/public-status`);
+      const current = await clientRequest(`/cases/${caseId}/public-status`);
       setData(current);
 
       if (isPaid(current?.payment_status)) {
@@ -195,7 +159,7 @@ export default function Resumen() {
         return;
       }
 
-      const checkout = await fetchJsonFallback("/billing/checkout", {
+      const checkout = await clientRequest("/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -203,6 +167,8 @@ export default function Resumen() {
           product: getReviewInfo(current).product,
           payment_stage: "review",
           email,
+          invoice_requested: invoiceRequested,
+          invoice_data: invoiceRequested ? invoiceData : null,
         }),
       });
 
@@ -321,6 +287,14 @@ export default function Resumen() {
                 continuar con una gestión de pago, descontaremos este importe del precio que
                 corresponda. No se realizará ningún cobro posterior sin informarte primero.
               </p>
+
+              <InvoiceRequestFields
+                requested={invoiceRequested}
+                onRequestedChange={setInvoiceRequested}
+                data={invoiceData}
+                onDataChange={setInvoiceData}
+                disabled={paying}
+              />
 
               <button className="sr-btn-primary" onClick={startPayment} disabled={paying || loading}>
                 {paying ? "Abriendo pago…" : `Pagar revisión inicial · ${reviewInfo.amount} €`}
