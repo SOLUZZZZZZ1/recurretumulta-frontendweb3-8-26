@@ -24,8 +24,10 @@ function PendingAssignment({item,caseId,authFetch,canWrite,onAssigned}){
     <label><input type="checkbox" checked={confirmed} disabled={busy||!canWrite} onChange={e=>setConfirmed(e.target.checked)}/> He verificado por un medio independiente que este mensaje corresponde al participante y a este expediente.</label>
     <button disabled={!canWrite||busy||!confirmed||evidence.trim().length<20} onClick={()=>void assign()}>Incorporar este mensaje verificado</button>{error&&<p role="alert">{error}</p>}</article>;
 }
-export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}){
+export default function OpsCommunications({caseId,operatorId,authFetch,canWrite,caseEmail}){
+  const normalizedCaseEmail=caseEmail?.trim().toLowerCase()||'';
   const [data,setData]=useState(null),[query,setQuery]=useState(''),[error,setError]=useState(''),[epoch,setEpoch]=useState(0);
+  const [verifyEvidence,setVerifyEvidence]=useState(''),[verifyConfirmed,setVerifyConfirmed]=useState(false),[verifyBusy,setVerifyBusy]=useState(false),[verifyError,setVerifyError]=useState(''),[verifyNotice,setVerifyNotice]=useState('');
   const [draft,setDraft]=useState({recipient:'',subject:'',body:'',reply_id:null}),[pending,setPending]=useState(null),[prepared,setPrepared]=useState(null);
   const [phase,setPhase]=useState('editing'),[approve,setApprove]=useState(false),[attachment,setAttachment]=useState(null);
   const live=useRef(true),lock=useRef(false),controllers=useRef(new Set());
@@ -42,6 +44,14 @@ export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}
     return()=>ctl.abort();},[caseId,authFetch,epoch,query]);
   async function task(fn){if(lock.current)return;lock.current=true;const ctl=new AbortController();controllers.current.add(ctl);
     try{await fn(ctl.signal);}catch(e){if(live.current&&!ctl.signal.aborted){setError(e.message);setPhase('unknown');}}finally{controllers.current.delete(ctl);lock.current=false;}}
+  async function verifyParticipant(event){event.preventDefault();if(verifyBusy||!canWrite||!verifyConfirmed||verifyEvidence.trim().length<20||!normalizedCaseEmail)return;
+    const ctl=new AbortController();controllers.current.add(ctl);setVerifyBusy(true);setVerifyError('');setVerifyNotice('');
+    try{const r=await jsonRequest(authFetch,`${root(caseId)}/communications/participants/verify`,{method:'POST',signal:ctl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({email:normalizedCaseEmail,independently_verified:true,verification_reference:verifyEvidence.trim()})});
+      if(r.case_id!==caseId||r.email!==normalizedCaseEmail||r.ok!==true)throw new Error('La verificación devuelta no coincide con el expediente.');
+      if(!ctl.signal.aborted){setVerifyNotice(r.already_verified?'El destinatario ya constaba verificado.':'Destinatario verificado y auditado por el operador. No se ha enviado ningún correo.');setVerifyEvidence('');setVerifyConfirmed(false);if(data)setData(d=>({...d,verified_recipients:[...new Set([...(d?.verified_recipients||[]),normalizedCaseEmail])]}));}
+    }catch(e){if(!ctl.signal.aborted)setVerifyError(e.message+' Si el resultado es incierto, repetir esta misma comprobación no duplica el participante.');}
+    finally{controllers.current.delete(ctl);if(!ctl.signal.aborted)setVerifyBusy(false);}
+  }
   async function recover(operation,signal){
     const result=await jsonRequest(authFetch,`${root(caseId)}/communications/${operation.operation_id}`,{signal});
     if(result.case_id!==caseId||result.id!==operation.operation_id||result.author_id!==operatorId||result.request_sha256!==operation.request_sha256)throw new Error('El mensaje recuperado no coincide con la operación preparada.');
@@ -67,6 +77,11 @@ export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}
   function reply(item){if(phase!=='editing')return;setDraft({recipient:item.direction==='incoming'?item.message.sender:item.message.recipients[0],subject:'Re: '+item.message.subject.replace(/^Re:\s*/i,''),body:'',reply_id:item.id});}
   return <section aria-label="Comunicaciones"><h2>Comunicaciones del expediente</h2>
     <p>Mensajes destinados al cliente y respuestas recibidas. Las notas y valoraciones internas permanecen separadas y no se envían automáticamente.</p>
+    {normalizedCaseEmail&&!verifyNotice&&!data?.verified_recipients?.includes(normalizedCaseEmail)&&<article className="cw-snapshot"><h3>Verificar destinatario del expediente</h3><p>Dirección guardada en el expediente: <strong>{normalizedCaseEmail}</strong>. Esta acción registra una comprobación del operador; no envía mensajes ni activa la sincronización. Comprueba con el titular, por un medio independiente, que controla este correo y quiere recibir aquí las comunicaciones del expediente. La prueba técnica de entrega solo acredita acceso al buzón.</p>
+      <form onSubmit={verifyParticipant}><fieldset disabled={!canWrite||verifyBusy}><label>Referencia de la comprobación independiente<textarea required minLength={20} maxLength={500} value={verifyEvidence} onChange={e=>{setVerifyEvidence(e.target.value);setVerifyConfirmed(false);setVerifyError('');}}/></label>
+        <label><input type="checkbox" checked={verifyConfirmed} onChange={e=>setVerifyConfirmed(e.target.checked)}/> Confirmo que he comprobado con el titular, por un medio independiente, el uso de este correo para este expediente.</label>
+        <button type="submit" disabled={!canWrite||verifyBusy||!verifyConfirmed||verifyEvidence.trim().length<20}>Registrar verificación</button></fieldset></form>
+      {verifyBusy&&<p role="status">Registrando la verificación…</p>}{verifyError&&<p role="alert">{verifyError}</p>}{verifyNotice&&<p role="status">{verifyNotice}</p>}</article>}
     <label>Buscar en esta conversación<input value={query} maxLength={200} onChange={e=>setQuery(e.target.value)}/></label><button onClick={()=>setEpoch(e=>e+1)}>Actualizar comunicaciones</button>
     {error&&<p role="alert">{error} No se interpreta como ausencia de novedades.</p>}
     {!data&&!error&&<p role="status">Consultando comunicaciones y estado de sincronización…</p>}
@@ -105,3 +120,4 @@ export default function OpsCommunications({caseId,operatorId,authFetch,canWrite}
       authFetch={authFetch} onClose={()=>setAttachment(null)}/>}
   </section>;
 }
+

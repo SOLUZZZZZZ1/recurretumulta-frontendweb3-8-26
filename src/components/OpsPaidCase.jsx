@@ -84,7 +84,7 @@ function Case({caseId}){
     <div hidden={tab!=='Estudio'}><details><summary>Extracciones anteriores pendientes de revisión</summary>{work.extractions.length?<>{work.extractions.map(e=><pre key={e.id}>{JSON.stringify(e.values,null,2)}</pre>)}<p>No se han convertido automáticamente en hechos validados.</p></>:<p>Esta lectura no devuelve extracciones. Los originales pueden revisarse en Documentos.</p>}</details>
       <OpsPaidStudy caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} documents={docs.items||[]} reviewed={reviewed} canWrite={paid&&work.capabilities.study_write} onRefresh={setWork}/></div>
     <div hidden={tab!=='Presupuesto y pagos'}><OpsManagementQuote caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} canWrite={work.capabilities.study_write}/></div>
-    {tab==='Comunicaciones'&&<OpsCommunications caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} canWrite={work.capabilities.study_write}/>}
+    {tab==='Comunicaciones'&&<OpsCommunications caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} canWrite={work.capabilities.study_write} caseEmail={identities.contact.email?.status==='available'?identities.contact.email.value:null}/>}
     <div hidden={tab!=='Recurso'}><OpsManagementDraft caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} resources={work.resources} canWrite={work.capabilities.study_write}/><details><summary>Archivo anterior conservado</summary><Resource caseId={caseId} resources={work.resources} authFetch={auth.authFetch}/></details></div>
     <div hidden={tab!=='Historial'}><h2>Historial del trabajo</h2><ol>{work.study.history.map(h=><li key={h.operation_id}>Valoración {h.revision} · {h.author.name} · {new Date(h.created_at).toLocaleString('es-ES')}</li>)}</ol>
       <details><summary>Identificadores y eventos técnicos</summary><p>Expediente: {caseId}</p><pre>{JSON.stringify(work.workspace.sections.timeline,null,2)}</pre></details></div>
@@ -99,3 +99,4 @@ function Entry({fallback}){
   return <OpsAuthBoundary>{auth.session&&(caseId?<Case key={`${caseId}:${auth.session.sessionId}`} caseId={caseId}/>:<CaseList/>)}</OpsAuthBoundary>;
 }
 export default function OpsPaidCaseEntry({fallback}) {return <OpsAuthProvider><Entry fallback={fallback}/></OpsAuthProvider>;}
+
