@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import {FINE_OFFER} from '../lib/fineOffer.js';
 
 const FAQ_GROUPS = [
   {
@@ -40,6 +41,10 @@ const FAQ_GROUPS = [
       {
         q: "¿Todos los servicios tienen un precio fijo?",
         a: "No. Algunas actuaciones tienen una tarifa publicada. Los procedimientos complejos, judiciales o que requieran un estudio específico se realizan mediante presupuesto previo.",
+      },
+      {
+        q: "¿Los recursos de multas cuestan 39 € además de la revisión?",
+        a: `${FINE_OFFER.headline}. ${FINE_OFFER.terms} ${FINE_OFFER.explanation} Con un presupuesto total de 39 € y 10 € ya abonados quedan 29 €. ${FINE_OFFER.basicScope} ${FINE_OFFER.exclusions}`,
       },
       {
         q: "¿Pagar la revisión inicial me obliga a continuar?",

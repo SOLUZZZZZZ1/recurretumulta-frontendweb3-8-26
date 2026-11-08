@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import FineOfferSummary from '../components/FineOfferSummary.jsx';
 
 const SERVICES = [
   {
@@ -90,6 +91,7 @@ export default function Trafico() {
               >
                 Cuéntenos qué ocurre. Le ayudamos a encontrar el camino.
               </h1>
+              <FineOfferSummary />
 
               <p
                 style={{

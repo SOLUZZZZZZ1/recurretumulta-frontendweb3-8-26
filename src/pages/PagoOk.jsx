@@ -1,8 +1,7 @@
+import { clientRequest } from "../lib/clientApi.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const BACKEND_URL = "https://recurretumulta-backend.onrender.com";
 
 function paramsFromSearch(search) {
   const qs = new URLSearchParams(search);
@@ -12,52 +11,19 @@ function paramsFromSearch(search) {
   };
 }
 
-async function readJson(response) {
-  const text = await response.text().catch(() => "");
-  let data = {};
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    data = { raw: text };
-  }
-
-  if (!response.ok) {
-    const detail = data?.detail || data?.message || data?.raw || `HTTP ${response.status}`;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-  }
-
-  return data;
+function postConfirm(caseId, sessionId) {
+  return clientRequest("/billing/confirm", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ case_id: caseId, session_id: sessionId }),
+  });
 }
 
-async function postConfirm(caseId, sessionId) {
-  const response = await fetch(`${BACKEND_URL}/billing/confirm`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      case_id: caseId,
-      session_id: sessionId,
-    }),
-  });
-
-  return readJson(response);
+function getPublicStatus(caseId) {
+  return clientRequest(`/cases/${encodeURIComponent(caseId)}/public-status`);
 }
 
-async function getPublicStatus(caseId) {
-  const response = await fetch(`${BACKEND_URL}/cases/${encodeURIComponent(caseId)}/public-status`, {
-    method: "GET",
-  });
-
-  return readJson(response);
-}
-
-async function getBillingStatus(caseId) {
-  const response = await fetch(`${BACKEND_URL}/billing/status/${encodeURIComponent(caseId)}`, {
-    method: "GET",
-  });
-
-  return readJson(response);
+function getBillingStatus(caseId) {
+  return clientRequest(`/billing/status/${encodeURIComponent(caseId)}`);
 }
 
 function isPaid(value) {

@@ -1,17 +1,19 @@
 {
   "git": {
     "deploymentEnabled": {
-      "rtm-domain-controlled-20261103": false
+      "rtm-domain-controlled-20261103": false,
+      "rtm-full-journey-20261104": false,
+      "rtm-production-journey-20261107": false
     }
   },
   "routes": [
-    { "handle": "filesystem" },
-
+    {
+      "handle": "filesystem"
+    },
     {
       "src": "/api/(.*)",
       "dest": "https://recurretumulta-backend.onrender.com/$1"
     },
-
     {
       "src": "/(.*)",
       "dest": "/index.html"
