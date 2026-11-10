@@ -1,4 +1,5 @@
 import React from "react";
+import Seo from "../components/Seo.jsx";
 
 export default function Contacto() {
   const supportEmail = "soporte@recurretumulta.eu";
@@ -6,7 +7,13 @@ export default function Contacto() {
   const mailto = `mailto:${supportEmail}?subject=${subject}`;
 
   return (
-    <main
+    <>
+      <Seo
+        title="Contacto RTM | Soporte e información"
+        description="Contacta con RTM para consultas sobre expedientes, soporte técnico e información general."
+        canonical="https://www.recurretumulta.eu/contacto"
+      />
+      <main
       style={{
         minHeight: "calc(100vh - 120px)",
         padding: "56px 20px 72px",
@@ -169,6 +176,7 @@ export default function Contacto() {
           a las consultas relacionadas con expedientes, incidencias o colaboraciones.
         </div>
       </div>
-    </main>
+      </main>
+    </>
   );
 }
