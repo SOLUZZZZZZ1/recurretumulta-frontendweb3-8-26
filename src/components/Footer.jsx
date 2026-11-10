@@ -75,17 +75,21 @@ export default function Footer() {
           <p style={{ lineHeight: 1.7, color: "#e5e7eb", margin: 0 }}>
             Para cualquier consulta sobre el uso de la plataforma, escríbenos a:
           </p>
-          <p style={{ marginTop: 6 }}>
-            <a
-              href="mailto:soporte@recurretumulta.eu"
-              style={{ color: "#2bb673", fontWeight: 700 }}
-            >
+          <p style={{ marginTop: 6, marginBottom: 4 }}>
+            Soporte técnico:{" "}
+            <a href="mailto:soporte@recurretumulta.eu" style={{ color: "#2bb673", fontWeight: 700 }}>
               soporte@recurretumulta.eu
             </a>
           </p>
+          <p style={{ marginTop: 0 }}>
+            Información general:{" "}
+            <a href="mailto:info@recurretumulta.eu" style={{ color: "#2bb673", fontWeight: 700 }}>
+              info@recurretumulta.eu
+            </a>
+          </p>
           <p style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.6 }}>
-            ofrecemos también asesoramiento jurídico. Este canal es exclusivamente
-            para consultas técnicas o de funcionamiento del servicio.
+            También ofrecemos asesoramiento jurídico. El canal de soporte es
+            exclusivamente para consultas técnicas o de funcionamiento del servicio.
           </p>
         </div>
 

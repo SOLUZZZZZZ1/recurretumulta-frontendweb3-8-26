@@ -23,8 +23,12 @@ export default function Privacidad() {
           </p>
 
           <p className="sr-p">
-            Puedes ejercer tus derechos escribiendo a
+            Puedes ejercer tus derechos de protección de datos escribiendo a
             <a href="mailto:info@recurretumulta.eu"> info@recurretumulta.eu</a>.
+          </p>
+          <p className="sr-p">
+            Para consultas técnicas sobre el funcionamiento de la plataforma, escribe a
+            <a href="mailto:soporte@recurretumulta.eu"> soporte@recurretumulta.eu</a>.
           </p>
         </div>
       </main>

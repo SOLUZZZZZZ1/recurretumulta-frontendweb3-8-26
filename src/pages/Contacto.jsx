@@ -101,6 +101,12 @@ export default function Contacto() {
                 Si tu consulta corresponde a un expediente existente, incluye el
                 número de expediente en el asunto o en el mensaje.
               </p>
+              <p style={{ margin: "14px 0 0", color: "#64748b", lineHeight: 1.6 }}>
+                Para información general:{" "}
+                <a href="mailto:info@recurretumulta.eu" style={{ color: "#159455", fontWeight: 800 }}>
+                  info@recurretumulta.eu
+                </a>
+              </p>
             </div>
 
             <div style={{ textAlign: "center" }}>
