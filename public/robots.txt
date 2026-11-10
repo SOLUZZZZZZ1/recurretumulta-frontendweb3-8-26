@@ -1,11 +1,23 @@
 User-agent: *
 Allow: /
 
-# Zonas internas (no indexar)
+# Zonas internas y de gestión: fuera del índice
 Disallow: /gestorias
 Disallow: /ops
+Disallow: /partner
+Disallow: /cliente
+Disallow: /admin
+Disallow: /api/
 
-# Opcional: si tienes endpoints expuestos públicamente en el mismo dominio
+# Permitir que ChatGPT Search descubra las páginas públicas de RTM.
+# Las rutas internas siguen excluidas para este crawler.
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /gestorias
+Disallow: /ops
+Disallow: /partner
+Disallow: /cliente
+Disallow: /admin
 Disallow: /api/
 
 Sitemap: https://www.recurretumulta.eu/sitemap.xml

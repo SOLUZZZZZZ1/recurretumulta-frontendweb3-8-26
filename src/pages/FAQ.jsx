@@ -166,7 +166,7 @@ export default function FAQ() {
     <>
       <Seo
         title="Preguntas frecuentes · RTM"
-        description="Respuestas sobre la revisión inicial, precios, expediente, documentación, autorizaciones y plazos en RTM."
+        description="Resuelve tus dudas sobre el estudio documental, recursos de multas, precios, documentación, expedientes y plazos de RTM." canonical="https://www.recurretumulta.eu/faq"
       />
 
       <main

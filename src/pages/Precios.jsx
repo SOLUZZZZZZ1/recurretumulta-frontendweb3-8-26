@@ -35,7 +35,7 @@ export default function Precios() {
     <>
       <Seo
         title="Precios · RTM"
-        description="Consulta las tarifas de revisión inicial y el funcionamiento de los presupuestos de gestión de RTM."
+        description="Consulta los precios del estudio documental y de los recursos de multas de RTM, qué incluye cada servicio y cuándo recibirás un presupuesto." canonical="https://www.recurretumulta.eu/precios"
       />
 
       <main

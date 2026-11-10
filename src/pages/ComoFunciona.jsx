@@ -77,7 +77,7 @@ export default function ComoFunciona() {
     <>
       <Seo
         title="Cómo trabajamos · RTM"
-        description="Conoce el proceso de RTM: revisión inicial, valoración, decisión y seguimiento organizado de tu expediente."
+        description="Así funciona RTM: estudio de la documentación, valoración de opciones y presupuesto antes de que decidas si continúas." canonical="https://www.recurretumulta.eu/como-funciona"
       />
 
       <style>{`

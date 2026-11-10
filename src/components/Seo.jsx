@@ -5,7 +5,7 @@ export default function Seo({
   title = "RecurreTuMulta | Asistencia administrativa para recurrir sanciones",
   description = "Recurrimos sanciones administrativas de forma clara y eficiente. Tráfico, ayuntamientos, hacienda y más. Análisis rápido y tramitación completa.",
   canonical = "https://www.recurretumulta.eu/",
-  image = "https://www.recurretumulta.eu/og-recurretumulta.png?v=2",
+  image = "https://www.recurretumulta.eu/og-cover.jpg",
   noindex = false,
 }) {
   canonical=publicUrl(canonical);image=publicUrl(image);
