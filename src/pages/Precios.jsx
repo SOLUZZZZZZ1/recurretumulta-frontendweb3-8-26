@@ -35,7 +35,7 @@ export default function Precios() {
     <>
       <Seo
         title="Precios · RTM"
-        description="Consulta los precios del estudio documental y de los recursos de multas de RTM, qué incluye cada servicio y cuándo recibirás un presupuesto." canonical="https://www.recurretumulta.eu/precios"
+        description="Consulta el precio del estudio documental y cómo recibirás un presupuesto personalizado antes de preparar un recurso." canonical="https://www.recurretumulta.eu/precios"
       />
 
       <main
@@ -226,8 +226,7 @@ export default function Precios() {
                 lineHeight: 1.6,
               }}
             >
-              El importe abonado por la Revisión Inicial del Expediente se
-              descontará íntegramente del precio de la gestión contratada.
+              Si decides continuar, primero recibirás un presupuesto personalizado para la preparación del recurso. El importe de la revisión inicial se descontará íntegramente del presupuesto aceptado.
             </p>
           </section>
 
@@ -251,7 +250,7 @@ export default function Precios() {
                 📄
               </span>
               <h2 style={{ margin: "12px 0 9px", fontSize: 23, fontWeight: 950 }}>
-                Recursos de multas desde 39 €
+                Preparación de recursos de multas
               </h2>
               <div
                 style={{
@@ -261,12 +260,10 @@ export default function Precios() {
                   fontWeight: 950,
                 }}
               >
-                Desde 39 € en total
+                Presupuesto personalizado
               </div>
               <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
-                Impuestos incluidos. La revisión inicial cuesta 10 € y comprende
-                únicamente el estudio documental. Si decides continuar, esos 10 €
-                se descuentan íntegramente del presupuesto del recurso.
+                La revisión inicial cuesta 10 € e incluye el estudio documental y la preparación del expediente para valorar la fase concreta del asunto. Si quieres continuar, te enviaremos antes un presupuesto personalizado para el recurso. Los 10 € se descuentan del presupuesto aceptado.
               </p>
               <FineOfferSummary showScope />
             </article>

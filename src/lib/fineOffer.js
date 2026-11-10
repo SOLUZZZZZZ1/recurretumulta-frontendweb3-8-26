@@ -1,7 +1,7 @@
 export const FINE_OFFER = Object.freeze({
-  headline: 'Recursos de multas desde 39 €',
-  terms: 'Impuestos incluidos. Revisión inicial por 10 €, descontables íntegramente del presupuesto si decides continuar.',
-  explanation: 'El precio definitivo se comunica después del estudio, según la complejidad y el alcance. Tú decides si aceptas. Los 39 € son el total mínimo, incluidos los 10 € de la revisión inicial.',
-  basicScope: 'El servicio básico comprende el estudio documental y la preparación de un escrito de alegaciones o recurso administrativo para una multa y una fase concretas, su revisión y las correcciones dentro del alcance acordado, con versiones recuperables.',
-  exclusions: 'No incluye presentación administrativa, firma, actuaciones judiciales, informes periciales ni trámites adicionales. El presupuesto concretará la actuación y las exclusiones antes de contratar.',
+  headline: 'Preparación de recursos de multas con presupuesto previo',
+  terms: 'La revisión inicial cuesta 10 € e incluye el estudio documental y la preparación del expediente para valorar la fase concreta del asunto. Este importe se descuenta íntegramente del presupuesto aceptado si decides continuar.',
+  explanation: 'Si después del estudio quieres que preparemos un recurso, recibirás primero un presupuesto personalizado según la situación y el alcance. No comenzaremos a preparar el recurso hasta que aceptes el presupuesto.',
+  basicScope: 'El servicio básico comprende el estudio documental y la preparación de un expediente para valorar la fase concreta en que se encuentra el asunto. Incluye su revisión y las correcciones dentro del alcance acordado, con versiones recuperables.',
+  exclusions: 'El servicio básico no incluye la redacción ni la presentación de alegaciones o recursos. Estas actuaciones se presupuestan aparte antes de empezar. Tampoco incluye procedimientos judiciales, informes periciales ni trámites adicionales, salvo que se indiquen expresamente en el presupuesto aceptado.',
 });
