@@ -264,8 +264,9 @@ export default function Precios() {
                 Desde 39 € en total
               </div>
               <p style={{ margin: 0, color: "#64748b", lineHeight: 1.55 }}>
-                Impuestos incluidos. Revisión inicial por 10 €, descontables
-                íntegramente del presupuesto si decides continuar.
+                Impuestos incluidos. La revisión inicial cuesta 10 € y comprende
+                únicamente el estudio documental. Si decides continuar, esos 10 €
+                se descuentan íntegramente del presupuesto del recurso.
               </p>
               <FineOfferSummary showScope />
             </article>
@@ -301,6 +302,24 @@ export default function Precios() {
               </p>
             </article>
           </section>
+
+          <div
+            style={{
+              marginTop: 22,
+              padding: 20,
+              borderRadius: 18,
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              color: "#475569",
+              textAlign: "center",
+              lineHeight: 1.7,
+            }}
+          >
+            ¿Tienes dudas sobre las tarifas?{" "}
+            <a href="mailto:soporte@recurretumulta.eu">soporte@recurretumulta.eu</a>
+            {" · "}
+            <a href="mailto:info@recurretumulta.eu">info@recurretumulta.eu</a>
+          </div>
 
           <div
             style={{
