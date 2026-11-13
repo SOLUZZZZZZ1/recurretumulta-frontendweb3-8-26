@@ -87,7 +87,7 @@ export default function ComoFunciona() {
         .cw-kicker{display:inline-flex;align-items:center;gap:10px;margin-bottom:18px;color:var(--blue);font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.cw-kicker:before{content:"";width:34px;height:3px;border-radius:999px;background:var(--blue)}
         .cw-hero h1{max-width:660px;margin:0;color:var(--navy);font-size:clamp(48px,6.2vw,78px);font-weight:950;line-height:.98;letter-spacing:-.058em}.cw-lead{max-width:650px;margin:25px 0 0;color:#35445a;font-size:clamp(18px,2vw,22px);line-height:1.62}.cw-lead strong{color:var(--navy)}
         .cw-actions{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-top:30px}.cw-primary,.cw-secondary{min-height:52px;display:inline-flex;align-items:center;justify-content:center;border-radius:14px;text-decoration:none;font-weight:900}.cw-primary{padding:14px 23px;color:#fff;background:var(--green);box-shadow:0 14px 30px rgba(43,182,115,.22)}.cw-secondary{padding:14px 4px;color:var(--navy)}
-        .cw-hero-visual{position:relative;min-height:495px;overflow:hidden;border-radius:32px;background:linear-gradient(180deg,transparent 52%,rgba(7,25,49,.72) 100%),url("/hero-como-trabajamos.png") center/cover no-repeat,#e7edf3;box-shadow:0 30px 74px rgba(15,23,42,.20)}
+        .cw-hero-visual{position:relative;min-height:495px;overflow:hidden;border-radius:32px;background:linear-gradient(145deg,#eaf3ff,#f7fbff 54%,#dce9f7);box-shadow:0 30px 74px rgba(15,23,42,.20)}.cw-hero-art{position:absolute;inset:0;width:100%;height:100%}
         .cw-caption{position:absolute;right:24px;bottom:24px;left:24px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 20px;border:1px solid rgba(255,255,255,.22);border-radius:18px;color:#fff;background:rgba(8,34,67,.68);backdrop-filter:blur(12px)}.cw-caption strong{display:block;margin-bottom:3px;font-size:17px}.cw-caption span{color:rgba(255,255,255,.77);font-size:14px}.cw-caption b{display:grid;width:46px;height:46px;place-items:center;border-radius:14px;background:var(--blue);font-size:21px}
         .cw-strip{padding:28px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(255,255,255,.82)}.cw-strip-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}.cw-strip-item{display:flex;gap:13px;align-items:flex-start;padding:8px 12px}.cw-strip-icon{display:grid;flex:0 0 auto;width:42px;height:42px;place-items:center;border-radius:13px;background:var(--soft);font-size:21px}.cw-strip-item strong{display:block;margin-bottom:4px;color:var(--navy);font-size:16px}.cw-strip-item span{color:var(--muted);font-size:14px;line-height:1.45}
         .cw-story{padding:94px 0}.cw-block{display:grid;grid-template-columns:1fr 1fr;gap:72px;align-items:center;margin-bottom:108px}.cw-block:last-child{margin-bottom:0}.cw-block.reverse .cw-copy{order:2}.cw-block.reverse .cw-visual{order:1}
@@ -117,7 +117,22 @@ export default function ComoFunciona() {
                 <Link className="cw-secondary" to="/precios">Consultar precios →</Link>
               </div>
             </div>
-            <div className="cw-hero-visual" role="img" aria-label="Expediente y documentación organizados en un espacio de trabajo">
+            <div className="cw-hero-visual" role="img" aria-label="Ilustración de un expediente digital organizado">
+              <svg className="cw-hero-art" viewBox="0 0 900 620" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
+                <circle cx="730" cy="125" r="120" fill="#D8E9FF"/><circle cx="164" cy="510" r="150" fill="#E2F1FF"/>
+                <rect x="190" y="96" width="490" height="390" rx="28" fill="#C7D9EF" opacity=".55" transform="rotate(-5 190 96)"/>
+                <rect x="230" y="118" width="490" height="390" rx="28" fill="#fff" stroke="#D8E4F1" stroke-width="3" transform="rotate(3 230 118)"/>
+                <rect x="242" y="105" width="490" height="390" rx="28" fill="white" stroke="#D8E4F1" stroke-width="3"/>
+                <rect x="242" y="105" width="490" height="68" rx="28" fill="#F4F8FD"/><path d="M242 145v28h490v-28" fill="#F4F8FD"/>
+                <circle cx="276" cy="139" r="7" fill="#9BB1CB"/><circle cx="301" cy="139" r="7" fill="#9BB1CB"/><circle cx="326" cy="139" r="7" fill="#9BB1CB"/>
+                <rect x="280" y="207" width="94" height="94" rx="24" fill="#E7F2FF"/><path d="M306 232h42v52h-42z" fill="white" stroke="#2B70C9" stroke-width="4"/><path d="M314 246h26M314 257h26M314 268h18" stroke="#91B6E4" stroke-width="4" stroke-linecap="round"/>
+                <text x="400" y="234" fill="#0C2F61" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="2">EXPEDIENTE DIGITAL</text>
+                <text x="400" y="269" fill="#142033" font-family="Arial,sans-serif" font-size="27" font-weight="700">Documentación organizada</text>
+                <rect x="400" y="287" width="240" height="10" rx="5" fill="#DCE7F3"/><rect x="400" y="307" width="198" height="10" rx="5" fill="#DCE7F3"/>
+                <rect x="280" y="333" width="414" height="58" rx="14" fill="#F5F9FE"/><circle cx="309" cy="362" r="12" fill="#DDF6E9"/><path d="m303 362 4 4 8-9" stroke="#21A467" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="334" y="355" width="168" height="8" rx="4" fill="#B8C9DD"/><rect x="334" y="370" width="118" height="6" rx="3" fill="#D3DFEC"/>
+                <rect x="280" y="407" width="414" height="58" rx="14" fill="#F5F9FE"/><circle cx="309" cy="436" r="12" fill="#DDF6E9"/><path d="m303 436 4 4 8-9" stroke="#21A467" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="334" y="429" width="205" height="8" rx="4" fill="#B8C9DD"/><rect x="334" y="444" width="148" height="6" rx="3" fill="#D3DFEC"/>
+                <rect x="611" y="72" width="124" height="76" rx="20" fill="white" stroke="#DCE7F3" stroke-width="2"/><path d="m643 110 12 12 25-29" stroke="#20A66A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
               <div className="cw-caption"><div><strong>Un proceso ordenado y trazable</strong><span>Desde la revisión inicial hasta el cierre.</span></div><b>✓</b></div>
             </div>
           </div>
