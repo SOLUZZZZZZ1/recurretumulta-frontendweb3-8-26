@@ -35,8 +35,8 @@ export default function Trafico() {
   return (
     <>
       <Seo
-        title="Tráfico, multas y vehículos · RTM"
-        description="Acceda a los servicios RTM de multas, sanciones, baja de vehículos y otros trámites de tráfico."
+        title="Estudio de multas de tráfico y sanciones · RTM"
+        description="Estudio documental de multas de la DGT y ayuntamientos. Revisamos notificación, plazos y pruebas; cualquier recurso requiere presupuesto y aceptación previa."
         canonical="https://www.resuelvetusmovidas.es/trafico"
       />
 
@@ -89,7 +89,7 @@ export default function Trafico() {
                   fontWeight: 950,
                 }}
               >
-                Cuéntenos qué ocurre. Le ayudamos a encontrar el camino.
+                Estudio de multas de tráfico y trámites de vehículos.
               </h1>
               <FineOfferSummary />
 
@@ -102,8 +102,7 @@ export default function Trafico() {
                   color: "rgba(255,255,255,.88)",
                 }}
               >
-                Una multa, un vehículo que ya no utiliza o un trámite que no sabe cómo resolver.
-                Empiece por elegir la opción que más se parece a su caso.
+                Si ha recibido una multa de la DGT o de un ayuntamiento, o necesita resolver un trámite de tráfico, empezamos por estudiar la documentación y la situación del expediente. Si procede una gestión posterior, conocerá antes su alcance y coste y decidirá si quiere continuar.
               </p>
             </div>
 

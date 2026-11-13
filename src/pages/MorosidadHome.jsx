@@ -63,13 +63,13 @@ export default function MorosidadHome() {
     <>
       <Seo
         title="Deudas y morosidad · ASNEF y Equifax · RTM"
-        description="Revisión inicial de inclusiones en ASNEF, Equifax y otros ficheros de morosidad, deudas discutidas y reclamaciones frente a acreedores."
+        description="¿Apareces en ASNEF, Equifax u otro fichero? Estudiamos el origen de la deuda, las comunicaciones y tus documentos. La gestión posterior requiere presupuesto y aceptación."
         canonical="https://www.resuelvetusmovidas.es/morosidad"
       />
 
       <main style={{ background: "#f8fbff", color: "#0f172a" }}>
         <section style={{ padding: "66px 20px 58px", background: "linear-gradient(135deg,#eef5ff 0%,#ffffff 54%,#edf9f3 100%)" }}>
-          <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(310px,1fr))", gap: 38, alignItems: "center" }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,310px),1fr))", gap: 38, alignItems: "center" }}>
             <div>
               <div style={badge}>💳 Deudas y morosidad</div>
 
