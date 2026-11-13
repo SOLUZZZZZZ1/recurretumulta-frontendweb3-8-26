@@ -30,19 +30,31 @@ try {
 
   for (const route of routes) {
     const { markup, head } = renderPublicRoute(route);
-    let html = shell
-      .replace(/<title>[\\s\\S]*?<\\/title>\\s*/i, "")
-      .replace(/<meta\\s+name="description"[\\s\\S]*?\\/>\\s*/i, "");
+    let html = shell;
+    const titleStart = html.indexOf("<title>");
+    const titleEnd = html.indexOf("</title>", titleStart);
+    if (titleStart >= 0 && titleEnd >= 0) {
+      html = html.slice(0, titleStart) + html.slice(titleEnd + "</title>".length);
+    }
+
+    const descriptionPosition = html.indexOf('name="description"');
+    if (descriptionPosition >= 0) {
+      const tagStart = html.lastIndexOf("<meta", descriptionPosition);
+      const tagEnd = html.indexOf("/>", descriptionPosition);
+      if (tagStart >= 0 && tagEnd >= 0) {
+        html = html.slice(0, tagStart) + html.slice(tagEnd + 2);
+      }
+    }
 
     if (!html.includes('<div id="root"></div>')) {
       throw new Error("No se encuentra el contenedor vacío de React en dist/index.html");
     }
 
     html = html
-      .replace("</head>", `${head}\\n  </head>`)
+      .replace("</head>", head + "\n  </head>")
       .replace(
         '<div id="root"></div>',
-        `<div id="root" data-prerendered="true">${markup}</div>`
+        '<div id="root" data-prerendered="true">' + markup + "</div>"
       );
 
     const outputPath = route === "/"
@@ -52,7 +64,7 @@ try {
     await writeFile(outputPath, html, "utf8");
   }
 
-  console.log(`Prerendered ${routes.length} public RTM routes.`);
+  console.log("Prerendered " + routes.length + " public RTM routes.");
 } finally {
   await vite.close();
 }
