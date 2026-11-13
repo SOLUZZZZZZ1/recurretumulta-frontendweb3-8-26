@@ -20,4 +20,4 @@ Disallow: /cliente
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://www.recurretumulta.eu/sitemap.xml
+Sitemap: https://www.resuelvetusmovidas.es/sitemap.xml

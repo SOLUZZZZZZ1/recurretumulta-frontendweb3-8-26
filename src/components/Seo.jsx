@@ -4,8 +4,8 @@ import { publicUrl } from '../lib/publicSite.js';
 export default function Seo({
   title = "RecurreTuMulta | Asistencia administrativa para recurrir sanciones",
   description = "Recurrimos sanciones administrativas de forma clara y eficiente. Tráfico, ayuntamientos, hacienda y más. Análisis rápido y tramitación completa.",
-  canonical = "https://www.recurretumulta.eu/",
-  image = "https://www.recurretumulta.eu/og-cover.jpg",
+  canonical = "https://www.resuelvetusmovidas.es/",
+  image = "https://www.resuelvetusmovidas.es/og-cover.jpg",
   noindex = false,
 }) {
   canonical=publicUrl(canonical);image=publicUrl(image);
