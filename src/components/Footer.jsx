@@ -41,7 +41,7 @@ export default function Footer() {
             </li>
             <li>
               <Link to="/como-funciona" style={{ color: "#e5e7eb" }}>
-                Cómo funciona
+                Cómo trabajamos
               </Link>
             </li>
             <li>
