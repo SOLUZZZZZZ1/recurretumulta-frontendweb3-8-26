@@ -164,8 +164,8 @@ export default function ComoFunciona() {
             <span className="cw-label">Personas y tecnología</span>
             <h2>Cómo se revisa tu expediente</h2>
             <p>Tú nos cuentas qué ha ocurrido y aportas la documentación que tienes. La plataforma RTM utiliza herramientas de inteligencia artificial para ayudar a ordenar los documentos y localizar datos relevantes. Después, una persona del equipo revisa la información y el apoyo generado por la IA, valora el expediente con los datos disponibles y te explica qué opciones y limitaciones aprecia.</p>
-            <p>La IA es una herramienta de apoyo: no decide por sí sola ni garantiza el resultado. La revisión inicial estudia tu situación y te ayuda a decidir el siguiente paso; no inicia un recurso ni otra gestión. Si se propone continuar, recibirás antes el alcance y el presupuesto para que decidas si los aceptas.</p>
-            <div className="cw-human-note">La IA ayuda a analizar y organizar la información; la revisión y la explicación del expediente las realiza una persona del equipo.</div>
+            <p>La IA ayuda a organizar la información; una persona del equipo revisa el expediente y te explica las opciones y limitaciones que aprecia. La valoración se basa en los datos disponibles. La revisión inicial no inicia un recurso ni otra gestión. Si se propone continuar, recibirás antes el alcance y el presupuesto. Aceptarlo es decisión tuya; el resultado de cualquier actuación posterior no puede garantizarse.</p>
+            <div className="cw-human-note">La plataforma aporta herramientas de IA y una persona del equipo realiza la revisión y te explica la valoración.</div>
           </article>
         </div></section>
 
@@ -176,7 +176,7 @@ export default function ComoFunciona() {
           </article>
 
           <article className="cw-block">
-            <div className="cw-copy"><span className="cw-label"><b className="cw-number">04</b> Acompañar</span><h2>Tu expediente permanece organizado.</h2><p>Si decides continuar, la documentación, las actuaciones y el historial quedarán reunidos dentro del mismo expediente para que nunca pierdas el contexto de lo que está ocurriendo.</p><div className="cw-note"><b>→</b><p>Podrás conocer el estado del asunto y el siguiente paso previsto durante todo el proceso.</p></div></div>
+            <div className="cw-copy"><span className="cw-label"><b className="cw-number">04</b> Acompañar</span><h2>Tu expediente permanece organizado.</h2><p>Si decides continuar, la documentación, las actuaciones y el historial quedan reunidos en el expediente para facilitar la consulta del contexto del asunto.</p><div className="cw-note"><b>→</b><p>El expediente muestra el estado del asunto y el siguiente paso previsto según la información disponible.</p></div></div>
             <div className="cw-visual"><DashboardScene /></div>
           </article>
         </div></section>
