@@ -8,10 +8,9 @@ export default function Footer() {
 
   // Visible solo si detecta ops=1 en query (compatibilidad con HashRouter)
   const q1 = new URLSearchParams(search);
-  const q2 = new URLSearchParams(window.location.search);
   const q3 = new URLSearchParams(hash?.split("?")[1] || "");
   const showOps =
-    q1.get("ops") === "1" || q2.get("ops") === "1" || q3.get("ops") === "1";
+    q1.get("ops") === "1" || q3.get("ops") === "1";
 
   return (
     <footer

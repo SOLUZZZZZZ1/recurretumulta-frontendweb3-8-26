@@ -1,6 +1,6 @@
 // src/main.jsx
 import React from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { BrowserRouter as Router } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App.jsx";
@@ -31,7 +31,8 @@ function normalizeLegacyHashRoute() {
 
 normalizeLegacyHashRoute();
 
-createRoot(document.getElementById("root")).render(
+const root = document.getElementById("root");
+const renderApp = (
   <React.StrictMode>
     <HelmetProvider>
       <Router>
@@ -40,3 +41,9 @@ createRoot(document.getElementById("root")).render(
     </HelmetProvider>
   </React.StrictMode>
 );
+
+if (root.dataset.prerendered === "true") {
+  hydrateRoot(root, renderApp);
+} else {
+  createRoot(root).render(renderApp);
+}
