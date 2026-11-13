@@ -21,6 +21,7 @@ const vite = await createServer({
   appType: "custom",
   logLevel: "error",
   server: { middlewareMode: true },
+  ssr: { noExternal: ["react-helmet-async", "react-router-dom", "@remix-run/router"] },
 });
 
 try {
