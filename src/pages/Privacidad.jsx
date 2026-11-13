@@ -6,7 +6,7 @@ export default function Privacidad() {
       <Seo
         title="Privacidad · RecurreTuMulta"
         description="Política de privacidad conforme al RGPD."
-        canonical="https://www.recurretumulta.eu/privacidad"
+        canonical="https://www.resuelvetusmovidas.es/privacidad"
       />
 
       <main className="sr-container py-12">

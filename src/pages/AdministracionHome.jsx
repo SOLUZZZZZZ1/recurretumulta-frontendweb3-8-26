@@ -64,7 +64,7 @@ export default function AdministracionHome() {
       <Seo
         title="Administración Pública · Revisión de expedientes · RTM"
         description="Revisión inicial de expedientes de Hacienda, Seguridad Social, ayuntamientos, Catastro y otros organismos públicos."
-        canonical="https://www.recurretumulta.eu/administracion"
+        canonical="https://www.resuelvetusmovidas.es/administracion"
       />
 
       <main style={{ background: "#f8fbff", color: "#0f172a" }}>

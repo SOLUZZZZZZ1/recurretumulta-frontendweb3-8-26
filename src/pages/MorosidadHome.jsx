@@ -64,7 +64,7 @@ export default function MorosidadHome() {
       <Seo
         title="Deudas y morosidad · ASNEF y Equifax · RTM"
         description="Revisión inicial de inclusiones en ASNEF, Equifax y otros ficheros de morosidad, deudas discutidas y reclamaciones frente a acreedores."
-        canonical="https://www.recurretumulta.eu/morosidad"
+        canonical="https://www.resuelvetusmovidas.es/morosidad"
       />
 
       <main style={{ background: "#f8fbff", color: "#0f172a" }}>

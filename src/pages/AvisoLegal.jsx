@@ -6,7 +6,7 @@ export default function AvisoLegal() {
       <Seo
         title="Aviso legal · RecurreTuMulta"
         description="Aviso legal del sitio web RecurreTuMulta."
-        canonical="https://www.recurretumulta.eu/aviso-legal"
+        canonical="https://www.resuelvetusmovidas.es/aviso-legal"
       />
 
       <main className="sr-container py-12">
@@ -15,7 +15,7 @@ export default function AvisoLegal() {
         <div className="sr-card">
           <p className="sr-p">
             En cumplimiento de la Ley 34/2002 (LSSI-CE), se informa de que el sitio web
-            <b> recurretumulta.eu</b> es titularidad de:
+            <b> www.resuelvetusmovidas.es</b> es titularidad de:
           </p>
 
           <ul className="sr-p list-disc pl-5">

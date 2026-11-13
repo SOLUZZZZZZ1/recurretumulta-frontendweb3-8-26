@@ -37,7 +37,7 @@ export default function Trafico() {
       <Seo
         title="Tráfico, multas y vehículos · RTM"
         description="Acceda a los servicios RTM de multas, sanciones, baja de vehículos y otros trámites de tráfico."
-        canonical="https://www.recurretumulta.eu/trafico"
+        canonical="https://www.resuelvetusmovidas.es/trafico"
       />
 
       <main

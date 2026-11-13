@@ -35,7 +35,7 @@ export default function ViajesHome() {
       <Seo
         title="Reclamaciones de viajes, vuelos y cruceros · RTM"
         description="Revisión de incidencias con vuelos cancelados o retrasados, equipaje, overbooking, cruceros y agencias de viajes."
-        canonical="https://www.recurretumulta.eu/viajes"
+        canonical="https://www.resuelvetusmovidas.es/viajes"
       />
 
       <main style={{ background: "#f8fbff", color: "#0f172a" }}>

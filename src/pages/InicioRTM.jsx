@@ -143,7 +143,7 @@ export default function InicioRTM() {
       <Seo
         title="RecurreTuMulta | Estudio de multas y recursos"
         description="Estudio documental de multas y expedientes administrativos. Revisamos la documentación y explicamos las opciones, precios y siguientes pasos antes de que decidas."
-        canonical="https://www.recurretumulta.eu/"
+        canonical="https://www.resuelvetusmovidas.es/"
       />
 
       <main
