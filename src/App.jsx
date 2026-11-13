@@ -1,6 +1,6 @@
 // src/App.jsx — RecurreTuMulta
-import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import ResumenExpediente from "./pages/ResumenExpediente.jsx";
 import Autorizar from "./pages/Autorizar.jsx";
 import ClientManagement from "./pages/ClientManagement.jsx";
@@ -49,6 +49,14 @@ import Privacidad from "./pages/Privacidad.jsx";
 import Cookies from "./pages/Cookies.jsx";
 
 export default function App() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (["/aviso-legal", "/privacidad", "/cookies"].includes(pathname)) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [pathname]);
+
   return (
     <div
       className="min-h-screen text-zinc-900"
