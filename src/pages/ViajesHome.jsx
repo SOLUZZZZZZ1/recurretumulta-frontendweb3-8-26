@@ -33,20 +33,20 @@ export default function ViajesHome() {
   return (
     <>
       <Seo
-        title="Reclamaciones de viajes, vuelos y cruceros · RTM"
-        description="Revisión de incidencias con vuelos cancelados o retrasados, equipaje, overbooking, cruceros y agencias de viajes."
+        title="Reclamaciones de vuelos y viajes · RTM"
+        description="Estudio de reclamaciones por vuelos cancelados o retrasados, equipaje, overbooking y viajes combinados. Te explicamos las opciones y el presupuesto antes de cualquier gestión."
         canonical="https://www.resuelvetusmovidas.es/viajes"
       />
 
       <main style={{ background: "#f8fbff", color: "#0f172a" }}>
         <section style={{ background: "linear-gradient(135deg,#eef6ff 0%,#ffffff 52%,#e9f8f2 100%)", padding: "64px 20px" }}>
-          <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 34, alignItems: "center" }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 34, alignItems: "center" }}>
             <div>
               <div style={badge}>✈️ Viajes y reclamaciones</div>
               <h1 style={{ margin: "16px 0", fontSize: "clamp(40px,6vw,66px)", lineHeight: 1.02, letterSpacing: "-.045em" }}>
-                Reclamamos por ti.<br/><span style={{ color: "#159455" }}>Para que recuperes lo que te corresponde.</span>
+                ¿Vuelo cancelado, retrasado o problema con tu viaje?<br/><span style={{ color: "#159455" }}>Estudiamos tus opciones antes de cualquier reclamación.</span>
               </h1>
-              <p style={lead}>Problemas con vuelos, equipaje, cruceros o agencias de viajes. Revisamos tu caso y te indicamos la forma más adecuada de actuar.</p>
+              <p style={lead}>Estudiamos la documentación de incidencias con vuelos, equipaje, cruceros y agencias de viajes. Te explicamos las opciones y, si procede una gestión posterior, recibes su alcance y presupuesto antes de decidir.</p>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 24 }}>
                 {["Revisión antes de actuar", "Presupuesto previo si procede", "Información clara"].map(x => <span key={x} style={pill}>✓ {x}</span>)}
               </div>
