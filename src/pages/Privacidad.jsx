@@ -9,7 +9,7 @@ export default function Privacidad() {
         canonical="https://www.resuelvetusmovidas.es/privacidad"
       />
 
-      <main className="sr-container py-12">
+      <main className="sr-container legal-page">
         <h1 className="sr-h1 mb-4">Política de privacidad</h1>
 
         <div className="sr-card">

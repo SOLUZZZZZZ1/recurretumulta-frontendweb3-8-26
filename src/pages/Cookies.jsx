@@ -9,7 +9,7 @@ export default function Cookies() {
         canonical="https://www.resuelvetusmovidas.es/cookies"
       />
 
-      <main className="sr-container py-12">
+      <main className="sr-container legal-page">
         <h1 className="sr-h1 mb-4">Política de cookies</h1>
 
         <div className="sr-card">
