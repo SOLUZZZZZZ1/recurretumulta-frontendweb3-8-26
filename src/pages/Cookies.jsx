@@ -6,7 +6,7 @@ export default function Cookies() {
       <Seo
         title="Cookies · RecurreTuMulta"
         description="Política de cookies del sitio web."
-        canonical="https://www.recurretumulta.eu/cookies"
+        canonical="https://www.resuelvetusmovidas.es/cookies"
       />
 
       <main className="sr-container py-12">
