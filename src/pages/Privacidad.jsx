@@ -24,11 +24,11 @@ export default function Privacidad() {
 
           <p className="sr-p">
             Puedes ejercer tus derechos de protección de datos escribiendo a
-            <a href="mailto:info@recurretumulta.eu"> info@recurretumulta.eu</a>.
+            <a href="mailto:info@resuelvetusmovidas.es"> info@resuelvetusmovidas.es</a>.
           </p>
           <p className="sr-p">
             Para consultas técnicas sobre el funcionamiento de la plataforma, escribe a
-            <a href="mailto:soporte@recurretumulta.eu"> soporte@recurretumulta.eu</a>.
+            <a href="mailto:soporte@resuelvetusmovidas.es"> soporte@resuelvetusmovidas.es</a>.
           </p>
         </div>
       </main>
