@@ -313,9 +313,9 @@ export default function Precios() {
             }}
           >
             ¿Tienes dudas sobre las tarifas?{" "}
-            <a href="mailto:soporte@recurretumulta.eu">soporte@recurretumulta.eu</a>
+            <a href="mailto:soporte@resuelvetusmovidas.es">soporte@resuelvetusmovidas.es</a>
             {" · "}
-            <a href="mailto:info@recurretumulta.eu">info@recurretumulta.eu</a>
+            <a href="mailto:info@resuelvetusmovidas.es">info@resuelvetusmovidas.es</a>
           </div>
 
           <div

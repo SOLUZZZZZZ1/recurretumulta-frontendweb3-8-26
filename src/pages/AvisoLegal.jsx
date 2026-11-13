@@ -22,8 +22,8 @@ export default function AvisoLegal() {
             <li><b>Titular:</b> LA TALAMANQUINA, S.L.</li>
             <li><b>NIF:</b> B75440115</li>
             <li><b>Domicilio social:</b> Calle Velázquez, 15 – 28001 Madrid (España)</li>
-            <li><b>Correo de información general:</b> <a href="mailto:info@recurretumulta.eu">info@recurretumulta.eu</a></li>
-            <li><b>Soporte técnico:</b> <a href="mailto:soporte@recurretumulta.eu">soporte@recurretumulta.eu</a></li>
+            <li><b>Correo de información general:</b> <a href="mailto:info@resuelvetusmovidas.es">info@resuelvetusmovidas.es</a></li>
+            <li><b>Soporte técnico:</b> <a href="mailto:soporte@resuelvetusmovidas.es">soporte@resuelvetusmovidas.es</a></li>
           </ul>
 
           <p className="sr-p mt-4">

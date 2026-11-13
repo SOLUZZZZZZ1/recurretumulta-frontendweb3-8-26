@@ -77,14 +77,14 @@ export default function Footer() {
           </p>
           <p style={{ marginTop: 6, marginBottom: 4 }}>
             Soporte técnico:{" "}
-            <a href="mailto:soporte@recurretumulta.eu" style={{ color: "#2bb673", fontWeight: 700 }}>
-              soporte@recurretumulta.eu
+            <a href="mailto:soporte@resuelvetusmovidas.es" style={{ color: "#2bb673", fontWeight: 700 }}>
+              soporte@resuelvetusmovidas.es
             </a>
           </p>
           <p style={{ marginTop: 0 }}>
             Información general:{" "}
-            <a href="mailto:info@recurretumulta.eu" style={{ color: "#2bb673", fontWeight: 700 }}>
-              info@recurretumulta.eu
+            <a href="mailto:info@resuelvetusmovidas.es" style={{ color: "#2bb673", fontWeight: 700 }}>
+              info@resuelvetusmovidas.es
             </a>
           </p>
           <p style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.6 }}>

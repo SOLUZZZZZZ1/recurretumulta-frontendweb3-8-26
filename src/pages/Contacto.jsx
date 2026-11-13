@@ -2,7 +2,7 @@ import React from "react";
 import Seo from "../components/Seo.jsx";
 
 export default function Contacto() {
-  const supportEmail = "soporte@recurretumulta.eu";
+  const supportEmail = "soporte@resuelvetusmovidas.es";
   const subject = encodeURIComponent("Consulta RTM");
   const mailto = `mailto:${supportEmail}?subject=${subject}`;
 
@@ -110,8 +110,8 @@ export default function Contacto() {
               </p>
               <p style={{ margin: "14px 0 0", color: "#64748b", lineHeight: 1.6 }}>
                 Para información general:{" "}
-                <a href="mailto:info@recurretumulta.eu" style={{ color: "#159455", fontWeight: 800 }}>
-                  info@recurretumulta.eu
+                <a href="mailto:info@resuelvetusmovidas.es" style={{ color: "#159455", fontWeight: 800 }}>
+                  info@resuelvetusmovidas.es
                 </a>
               </p>
             </div>
