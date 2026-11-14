@@ -5,6 +5,7 @@ import { createServer } from "vite";
 const routes = [
   "/",
   "/trafico",
+  "/revision-multa",
   "/como-funciona",
   "/precios",
   "/morosidad",

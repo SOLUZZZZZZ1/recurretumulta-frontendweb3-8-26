@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import FineOfferSummary from '../components/FineOfferSummary.jsx';
 
@@ -92,6 +92,7 @@ export default function Trafico() {
                 Estudio de multas de tráfico y trámites de vehículos.
               </h1>
               <FineOfferSummary />
+              <p style={{ margin: "18px 0", fontSize: 16 }}><Link to="/revision-multa" style={{ color: "#fff", textDecoration: "underline", textUnderlineOffset: 4 }}>Qué incluye la revisión de 10 € y cómo empezar</Link></p>
 
               <p
                 style={{

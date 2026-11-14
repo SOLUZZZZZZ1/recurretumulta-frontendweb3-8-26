@@ -1,0 +1,90 @@
+.fine-landing { --fine-navy: #123b73; --fine-ink: #18273d; --fine-muted: #46576d; --fine-green: #15803d; background: #fff; color: var(--fine-ink); }
+.fine-landing *, .fine-landing *::before, .fine-landing *::after { box-sizing: border-box; }
+.fine-landing-container { width: min(1120px, 100%); margin: 0 auto; padding: 0 28px; }
+.fine-landing h1, .fine-landing h2, .fine-landing h3, .fine-landing p { margin: 0; }
+.fine-landing h1 { max-width: 650px; font-size: clamp(34px, 4.8vw, 57px); line-height: 1.09; font-weight: 850; letter-spacing: -.035em; color: var(--fine-navy); }
+.fine-landing h1 span { color: #177147; }
+.fine-landing h2 { font-size: clamp(28px, 3.2vw, 38px); line-height: 1.16; font-weight: 800; letter-spacing: -.025em; color: var(--fine-navy); }
+.fine-landing h3 { font-size: 19px; line-height: 1.3; font-weight: 800; }
+.fine-landing p { line-height: 1.65; }
+.fine-landing .fine-landing-eyebrow { margin: 0 0 16px; font-size: 12px; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; color: #315b8d; }
+.fine-landing-hero { padding: 64px 0; background: linear-gradient(120deg, #edf4fc 0%, #f8fbff 55%, #f1faf5 100%); border-bottom: 1px solid #dbe6ef; }
+.fine-landing-hero-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .85fr); align-items: center; gap: 50px; }
+.fine-landing .fine-landing-lead { margin-top: 24px; font-size: 18px; color: var(--fine-muted); }
+.fine-landing-hero-action { margin-top: 24px; }
+.fine-landing-hero-action p { max-width: 430px; margin-top: 12px; font-size: 13px; color: var(--fine-muted); }
+.fine-landing-benefits { display: grid; gap: 12px; list-style: none; padding: 0; margin: 26px 0; font-size: 15px; }
+.fine-landing-benefits li { display: flex; gap: 10px; align-items: baseline; }
+.fine-landing-benefits li::before { content: "✓"; color: var(--fine-green); font-weight: 900; }
+.fine-landing-text-link, .fine-landing-inline-links a, .fine-landing-questions a { color: var(--fine-navy); text-decoration: underline; text-underline-offset: 4px; font-weight: 700; }
+.fine-landing-text-link { display: inline-block; padding: 10px 0; }
+.fine-landing-offer { padding: 30px; border-radius: 24px; background: #123b73; color: #fff; box-shadow: 0 18px 45px #123b7324; }
+.fine-landing .fine-landing-offer-label { font-weight: 700; font-size: 17px; }
+.fine-landing .fine-landing-price { margin: 12px 0 6px; font-size: 80px; line-height: 1; font-weight: 850; letter-spacing: -.04em; }
+.fine-landing-price span { font-size: .5em; }
+.fine-landing-offer-description { color: #e0ebfa; font-size: 16px; }
+.fine-landing-offer ul { padding: 20px 0 20px 18px; margin: 0; display: grid; gap: 9px; list-style: disc; font-size: 15px; line-height: 1.5; }
+.fine-landing .fine-landing-offer-boundary { padding: 16px 0; border-top: 1px solid #7393bb; font-size: 15px; line-height: 1.5; }
+.fine-landing-cta { display: inline-flex; gap: 18px; align-items: center; justify-content: center; min-height: 54px; padding: 15px 20px; border: 1px solid transparent; border-radius: 12px; background: var(--fine-green); color: #fff; font-weight: 800; font-size: 16px; line-height: 1.4; text-align: center; text-decoration: none; }
+.fine-landing-cta:hover { background: #166534; }
+.fine-landing a:focus-visible, .fine-landing summary:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
+.fine-landing-offer a:focus-visible { outline-color: #fff; }
+.fine-landing-offer .fine-landing-cta { width: 100%; }
+.fine-landing .fine-landing-offer-note { margin-top: 14px; font-size: 13px; color: #dce8f8; line-height: 1.6; }
+.fine-landing-section { padding: 58px 0; }
+.fine-landing-scope-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px; margin-top: 28px; }
+.fine-landing-scope-grid p { margin-top: 12px; color: var(--fine-muted); }
+.fine-landing-scope-separate { padding-left: 32px; border-left: 1px solid #cedae8; }
+.fine-landing .fine-landing-credit { margin-top: 28px; padding: 20px 24px; border-left: 4px solid var(--fine-green); border-radius: 0 12px 12px 0; background: #eef8f1; color: #245333; }
+.fine-landing-team { padding: 48px 0; background: #f1f5fa; border-top: 1px solid #e0e7f0; border-bottom: 1px solid #e0e7f0; }
+.fine-landing-team-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 44px; }
+.fine-landing-team p { color: var(--fine-muted); }
+.fine-landing .fine-landing-identity { margin-top: 20px; font-size: 14px; }
+.fine-landing-inline-links { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 18px; font-size: 14px; }
+.fine-landing #documentacion { scroll-margin-top: 100px; }
+.fine-landing .fine-landing-section-intro { margin-top: 12px; color: var(--fine-muted); }
+.fine-landing-documents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 36px; padding: 0; margin: 32px 0 0; list-style: none; }
+.fine-landing-documents li { display: flex; gap: 16px; padding-top: 22px; border-top: 1px solid #dbe4ee; }
+.fine-landing-document-number { color: #6480a1; font-size: 14px; font-weight: 800; padding-top: 3px; }
+.fine-landing-documents p { margin-top: 10px; color: var(--fine-muted); font-size: 15px; }
+.fine-landing-process { padding: 52px 0; background: #123b73; color: #fff; }
+.fine-landing-process h2 { color: #fff; }
+.fine-landing-process .fine-landing-eyebrow { color: #c4daf8; }
+.fine-landing-steps { list-style: none; padding: 0; margin: 30px 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; }
+.fine-landing-steps li > span { display: inline-grid; width: 36px; height: 36px; place-items: center; margin-bottom: 18px; border: 1px solid #799bc6; border-radius: 50%; font-weight: 800; }
+.fine-landing-steps h3 { font-size: 17px; }
+.fine-landing-steps p { margin-top: 12px; color: #dce8f8; font-size: 14px; }
+.fine-landing-questions { max-width: 880px; }
+.fine-landing-questions h2 { margin-bottom: 24px; }
+.fine-landing-questions details { padding: 20px 0; border-top: 1px solid #dbe4ee; }
+.fine-landing-questions details:last-child { border-bottom: 1px solid #dbe4ee; }
+.fine-landing-questions summary { cursor: pointer; font-weight: 750; line-height: 1.5; padding-right: 10px; }
+.fine-landing-questions details p { margin: 14px 0 0; color: var(--fine-muted); overflow-wrap: anywhere; }
+.fine-landing-final { padding: 38px 0 48px; background: #eef8f1; }
+.fine-landing-final-inner { display: flex; align-items: center; justify-content: space-between; gap: 36px; }
+.fine-landing-final h2 { font-size: clamp(25px, 2.8vw, 32px); }
+.fine-landing-final p { max-width: 650px; margin-top: 12px; color: var(--fine-muted); }
+.fine-landing-final .fine-landing-cta { flex-shrink: 0; }
+@media (max-width: 900px) {
+  .fine-landing-hero-grid { gap: 28px; grid-template-columns: minmax(0, 1fr) minmax(0, .9fr); }
+  .fine-landing-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fine-landing-final-inner { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 680px) {
+  .fine-landing-container { padding: 0 20px; }
+  .fine-landing-hero { padding: 32px 0 36px; }
+  .fine-landing-hero-grid, .fine-landing-scope-grid, .fine-landing-team-grid, .fine-landing-documents { grid-template-columns: minmax(0, 1fr); }
+  .fine-landing h1 { font-size: clamp(32px, 7.5vw, 44px); }
+  .fine-landing .fine-landing-lead { font-size: 17px; margin-top: 18px; }
+  .fine-landing-benefits { margin: 20px 0 14px; }
+  .fine-landing-offer { padding: 24px; border-radius: 20px; }
+  .fine-landing-section, .fine-landing-team, .fine-landing-process { padding: 38px 0; }
+  .fine-landing-scope-grid, .fine-landing-team-grid { gap: 24px; }
+  .fine-landing-scope-separate { padding: 24px 0 0; border-left: 0; border-top: 1px solid #cedae8; }
+  .fine-landing-documents { gap: 22px; margin-top: 24px; }
+  .fine-landing .fine-landing-credit { padding: 18px; }
+  .fine-landing-steps { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .fine-landing-steps li > span { float: left; margin: 0 16px 0 0; }
+  .fine-landing-steps h3, .fine-landing-steps p { margin-left: 52px; }
+  .fine-landing-final .fine-landing-cta { width: 100%; }
+}

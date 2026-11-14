@@ -4,6 +4,7 @@ import Navbar from "./components/Navbar.jsx";
 import Footer from "./components/Footer.jsx";
 import InicioRTM from "./pages/InicioRTM.jsx";
 import Trafico from "./pages/Trafico.jsx";
+import RevisionMulta from "./pages/RevisionMulta.jsx";
 import ComoFunciona from "./pages/ComoFunciona.jsx";
 import Precios from "./pages/Precios.jsx";
 import MorosidadHome from "./pages/MorosidadHome.jsx";
@@ -31,6 +32,7 @@ export default function PublicSeoApp() {
       <Routes>
         <Route path="/" element={<InicioRTM />} />
         <Route path="/trafico" element={<Trafico />} />
+        <Route path="/revision-multa" element={<RevisionMulta />} />
         <Route path="/como-funciona" element={<ComoFunciona />} />
         <Route path="/precios" element={<Precios />} />
         <Route path="/morosidad" element={<MorosidadHome />} />

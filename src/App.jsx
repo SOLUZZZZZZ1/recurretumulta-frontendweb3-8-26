@@ -12,6 +12,7 @@ import Footer from "./components/Footer.jsx";
 import InicioRTM from "./pages/InicioRTM.jsx";
 import InicioMultas from "./pages/Inicio.jsx";
 import Trafico from "./pages/Trafico.jsx";
+import RevisionMulta from "./pages/RevisionMulta.jsx";
 import ComoFunciona from "./pages/ComoFunciona.jsx";
 import Precios from "./pages/Precios.jsx";
 import FAQ from "./pages/FAQ.jsx";
@@ -78,6 +79,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<InicioRTM />} />
         <Route path="/trafico" element={<Trafico />} />
+        <Route path="/revision-multa" element={<RevisionMulta />} />
         <Route path="/iniciar-expediente/:department/:caseType" element={<IntakeRoute />} />
         <Route path="/iniciar-expediente/:department" element={<IntakeRoute />} />
         <Route path="/iniciar-expediente" element={<IntakeRoute />} />
