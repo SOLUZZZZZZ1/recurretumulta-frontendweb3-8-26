@@ -48,14 +48,19 @@ import AvisoLegal from "./pages/AvisoLegal.jsx";
 import Privacidad from "./pages/Privacidad.jsx";
 import Cookies from "./pages/Cookies.jsx";
 
+function IntakeRoute() {
+  const { pathname, search } = useLocation();
+  const query = new URLSearchParams(search);
+  const serviceKey = [pathname, ...["department", "service", "case_type", "issue"].map((name) => query.get(name) || "")].join("|");
+  return <IniciarExpedienteRTM key={serviceKey} />;
+}
+
 export default function App() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
 
   useEffect(() => {
-    if (["/aviso-legal", "/privacidad", "/cookies"].includes(pathname)) {
-      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    }
-  }, [pathname]);
+    if (!hash) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname, hash]);
 
   return (
     <div
@@ -73,9 +78,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<InicioRTM />} />
         <Route path="/trafico" element={<Trafico />} />
-        <Route path="/iniciar-expediente/:department/:caseType" element={<IniciarExpedienteRTM />} />
-        <Route path="/iniciar-expediente/:department" element={<IniciarExpedienteRTM />} />
-        <Route path="/iniciar-expediente" element={<IniciarExpedienteRTM />} />
+        <Route path="/iniciar-expediente/:department/:caseType" element={<IntakeRoute />} />
+        <Route path="/iniciar-expediente/:department" element={<IntakeRoute />} />
+        <Route path="/iniciar-expediente" element={<IntakeRoute />} />
         <Route path="/multas" element={<InicioMultas />} />
 
         <Route path="/multas/documentos" element={<DocumentosCore />} />

@@ -1,5 +1,5 @@
 import { clientRequest } from "../lib/clientApi.js";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import InvoiceRequestFields, { emptyInvoiceData, validInvoiceData } from "../components/InvoiceRequestFields.jsx";
 
@@ -63,8 +63,17 @@ function getReviewInfo(data) {
   };
 }
 
-function statusLabel(data) {
-  if (!data) return "Expediente recibido";
+function caseProgress(data) {
+  const status = normalizeCode(data?.status);
+  if (status === "resolved") return { label: "Expediente resuelto", message: "El expediente figura como resuelto. Si necesitas aclaraciones sobre el resultado, contacta con RTM indicando tu número de expediente." };
+  if (status === "closed") return { label: "Expediente cerrado", message: "El expediente figura como cerrado. Si necesitas aclaraciones, contacta con RTM indicando tu número de expediente." };
+  if (status === "submitted" || status.includes("presentado")) return { label: "Expediente presentado", message: "El expediente figura como presentado. Desde aquí puedes consultar su estado." };
+  return null;
+}
+
+function statusLabel(data, loading) {
+  if (!data) return loading ? "Revisando…" : "Estado no confirmado";
+  if (caseProgress(data)) return caseProgress(data).label;
   if (isPaid(data.payment_status)) return "Revisión inicial pagada";
   if (isAuthorized(data)) return "Autorización recibida";
   if (data.status === "generated") return "Documentación preparada";
@@ -73,7 +82,8 @@ function statusLabel(data) {
 
 function messageFor(data, loading) {
   if (loading && !data) return "Revisando la información del expediente…";
-  if (!data) return "Hemos recibido la información. Estamos actualizando el expediente.";
+  if (!data) return "El estado del expediente todavía no está disponible.";
+  if (caseProgress(data)) return caseProgress(data).message;
   if (isPaid(data.payment_status)) {
     return "La revisión inicial está confirmada. El expediente pasa ahora a valoración por RTM.";
   }
@@ -85,8 +95,14 @@ function messageFor(data, loading) {
 
 export default function Resumen() {
   const location = useLocation();
+  const caseId = getCaseId(location.search);
+  return <ResumenContent key={caseId} caseId={caseId} />;
+}
+
+function ResumenContent({ caseId }) {
   const navigate = useNavigate();
-  const caseId = useMemo(() => getCaseId(location.search), [location.search]);
+  const requestVersion = useRef(0);
+  const requestPending = useRef(false);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -97,36 +113,49 @@ export default function Resumen() {
   const [invoiceData, setInvoiceData] = useState(emptyInvoiceData);
 
   async function loadStatus({ silent = false } = {}) {
+    if (requestPending.current) return;
     if (!caseId) {
       setTechnicalError("No se ha encontrado el expediente.");
       setLoading(false);
       return;
     }
 
+    const version = ++requestVersion.current;
+    requestPending.current = true;
     if (!silent) setLoading(true);
-    setTechnicalError("");
 
     try {
       let last = null;
       // varios intentos para evitar ver estados intermedios justo tras pago/autorización
       for (let i = 0; i < 4; i += 1) {
         last = await clientRequest(`/cases/${caseId}/public-status`);
-        if (isPaid(last?.payment_status) || isAuthorized(last)) break;
+        if (version !== requestVersion.current) return;
+        if (isPaid(last?.payment_status) || isAuthorized(last) || caseProgress(last)) break;
         await new Promise((resolve) => setTimeout(resolve, 900));
+        if (version !== requestVersion.current) return;
       }
       setData(last);
+      setTechnicalError("");
     } catch (e) {
-      // No mostramos “Error API” al cliente como estado principal.
-      setTechnicalError(e?.message || "");
+      if (version !== requestVersion.current) return;
+      setData(null);
+      setTechnicalError(e?.message || "No se pudo consultar el expediente.");
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) {
+        requestPending.current = false;
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     loadStatus();
     const id = setInterval(() => loadStatus({ silent: true }), 5000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      requestVersion.current += 1;
+      requestPending.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
 
@@ -142,6 +171,7 @@ export default function Resumen() {
       // Refresco justo antes de pagar para no pedir doble pago.
       const current = await clientRequest(`/cases/${caseId}/public-status`);
       setData(current);
+      if (caseProgress(current)) return;
 
       if (isPaid(current?.payment_status)) {
         navigate(`/pago-ok?case=${encodeURIComponent(caseId)}`);
@@ -192,34 +222,40 @@ export default function Resumen() {
   const paid = isPaid(data?.payment_status);
   const authorized = isAuthorized(data);
   const reviewInfo = getReviewInfo(data);
-  const showPayButton = authorized && !paid;
-  const showAuthNeeded = !authorized && !paid;
+  const progress = caseProgress(data);
+  const showPayButton = Boolean(data) && !technicalError && !progress && authorized && !paid;
+  const showAuthNeeded = Boolean(data) && !technicalError && !progress && !authorized && !paid;
 
   return (
     <main className="sr-page">
       <section className="sr-section">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <h1 className="sr-h1">Resumen del expediente</h1>
           <button className="sr-btn-secondary" onClick={() => navigate(-1)}>← Volver</button>
         </div>
 
         <div className="sr-card">
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
             <tbody>
               <Row label="Expediente interno" value={caseId} />
-              <Row label="Estado" value={statusLabel(data)} />
-              <Row label="Autorización firmada" value={authorized ? "Recibida" : loading ? "Revisando…" : "Pendiente"} />
-              <Row label="Pago" value={paid ? "paid" : data?.payment_status || (loading ? "Revisando…" : "Pendiente")} />
+              <Row label="Estado" value={statusLabel(data, loading)} />
+              <Row label="Autorización firmada" value={!data ? (loading ? "Revisando…" : "Sin confirmar") : authorized ? "Recibida" : "Pendiente"} />
+              <Row label="Pago" value={!data ? (loading ? "Revisando…" : "Sin confirmar") : paid ? "Confirmado" : "Pendiente de confirmar"} />
             </tbody>
           </table>
 
           <div style={{ marginTop: 16 }}>
             <strong>Estado del expediente</strong>
-            <p className="sr-p" style={{ marginTop: 6 }}>{messageFor(data, loading)}</p>
+            {technicalError ? (
+              <p role="alert" className="sr-p" style={{ marginTop: 6, color: "#991b1b" }}>
+                {caseId ? "No hemos podido consultar el estado del expediente. Pulsa «Revisar de nuevo» para volver a intentarlo." : "Falta el número de expediente. Vuelve al inicio e introduce el número que recibiste."}
+              </p>
+            ) : <p className="sr-p" style={{ marginTop: 6 }}>{messageFor(data, loading)}</p>}
 
-            <button className="sr-btn-secondary" onClick={() => loadStatus()} disabled={loading}>
+            <button className="sr-btn-secondary" onClick={() => loadStatus()} disabled={loading || !caseId}>
               {loading ? "Revisando…" : "Revisar de nuevo"}
             </button>
+            {!caseId ? <Link className="sr-btn-secondary" to="/">Volver al inicio</Link> : null}
           </div>
 
           {technicalError ? (
@@ -290,9 +326,9 @@ export default function Resumen() {
 
               <InvoiceRequestFields
                 requested={invoiceRequested}
-                onRequestedChange={setInvoiceRequested}
+                onRequestedChange={(requested) => { setInvoiceRequested(requested); setPayError(""); }}
                 data={invoiceData}
-                onDataChange={setInvoiceData}
+                onDataChange={(nextData) => { setInvoiceData(nextData); setPayError(""); }}
                 disabled={paying}
               />
 
@@ -301,7 +337,7 @@ export default function Resumen() {
               </button>
 
               {payError ? (
-                <div style={{ marginTop: 12, color: "#991b1b", fontWeight: 800 }}>
+                <div role="alert" style={{ marginTop: 12, color: "#991b1b", fontWeight: 800 }}>
                   ❌ {payError}
                 </div>
               ) : null}
@@ -309,25 +345,17 @@ export default function Resumen() {
           </>
         ) : null}
 
-        {paid ? (
+        {paid && !progress ? (
           <div className="sr-card" style={{ marginTop: 16 }}>
             <h2 className="sr-h2">Revisión inicial en curso</h2>
             <p className="sr-p">
-              Hemos recibido el pago y la autorización. RTM revisará el expediente y te
+              Hemos recibido el pago de la revisión inicial. RTM revisará el expediente y te
               explicará el resultado, las opciones disponibles y el coste de cualquier
               gestión posterior antes de que tengas que decidir.
             </p>
           </div>
         ) : null}
 
-        {!showPayButton && !showAuthNeeded && !paid ? (
-          <div className="sr-card" style={{ marginTop: 16 }}>
-            <h2 className="sr-h2">Gestión iniciada</h2>
-            <p className="sr-p">
-              Hemos recibido la información. Desde aquí podrás seguir el estado del expediente.
-            </p>
-          </div>
-        ) : null}
       </section>
     </main>
   );
@@ -336,8 +364,8 @@ export default function Resumen() {
 function Row({ label, value }) {
   return (
     <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-      <td style={{ padding: "12px 0", fontWeight: 900, width: "25%" }}>{label}</td>
-      <td style={{ padding: "12px 0", color: "#64748b" }}>{value || "—"}</td>
+      <th scope="row" style={{ padding: "12px 10px 12px 0", textAlign: "left", fontWeight: 900, width: "42%", overflowWrap: "anywhere" }}>{label}</th>
+      <td style={{ padding: "12px 0", color: "#64748b", overflowWrap: "anywhere" }}>{value || "—"}</td>
     </tr>
   );
 }

@@ -69,7 +69,7 @@ export default function AdministracionHome() {
 
       <main style={{ background: "#f8fbff", color: "#0f172a" }}>
         <section style={{ padding: "66px 20px 58px", background: "linear-gradient(135deg,#eef5ff 0%,#ffffff 54%,#eef8f4 100%)" }}>
-          <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(310px,1fr))", gap: 38, alignItems: "center" }}>
+          <div style={{ maxWidth: 1160, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,310px),1fr))", gap: 38, alignItems: "center" }}>
             <div>
               <div style={badge}>🏛️ Administración pública</div>
               <h1 style={{ margin: "16px 0", fontSize: "clamp(40px,5.7vw,64px)", lineHeight: 1.03, letterSpacing: "-.045em", color: "#123b73" }}>

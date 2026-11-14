@@ -1,10 +1,8 @@
 import { clientRequest } from "../lib/clientApi.js";
 import { useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const MAX_FILES = 5;
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
+import { MAX_FILE_BYTES, selectCaseFiles } from "../lib/clientFiles.js";
 
 function getCaseId(search) {
   const params = new URLSearchParams(search);
@@ -28,23 +26,12 @@ export default function DocumentosCore() {
   const [loading, setLoading] = useState(false);
 
   function addFiles(fileList) {
-    const incoming = Array.from(fileList || []);
-    const available = MAX_FILES - files.length;
-    const selected = incoming.slice(0, Math.max(0, available));
-
-    const valid = selected.filter((file) => file.size <= MAX_FILE_BYTES);
-
-    if (incoming.some((file) => file.size > MAX_FILE_BYTES)) {
-      setMessage(`Algún archivo supera el máximo de ${formatBytes(MAX_FILE_BYTES)}.`);
-    } else if (incoming.length > available) {
-      setMessage(`Máximo ${MAX_FILES} documentos por subida.`);
-    } else {
-      setMessage("");
-    }
+    const selected = selectCaseFiles(fileList, files.length);
+    setMessage(selected.message);
 
     setFiles((current) => [
       ...current,
-      ...valid.map((file) => ({
+      ...selected.files.map((file) => ({
         id: crypto.randomUUID(),
         file,
       })),
@@ -205,14 +192,11 @@ export default function DocumentosCore() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
-            <StatusRow text="Datos personales recibidos" />
-            <StatusRow text="Documento de identidad recibido" />
-            <StatusRow text="Autorización firmada recibida" />
-          </div>
+          {!caseId && <p role="alert" style={{ marginBottom: 20, color: "#991b1b" }}>Abre esta pantalla desde tu expediente para adjuntar documentos. Si aún no tienes uno, <Link to="/iniciar-expediente" style={{ textDecoration: "underline" }}>inicia un expediente</Link>.</p>}
 
           <button
             type="button"
+            disabled={loading || !caseId}
             onClick={() => inputRef.current?.click()}
             style={{
               width: "100%",
@@ -235,6 +219,8 @@ export default function DocumentosCore() {
           <input
             ref={inputRef}
             type="file"
+            aria-label="Documentación del caso"
+            disabled={loading || !caseId}
             multiple
             accept="image/*,.pdf,.doc,.docx"
             onChange={(event) => {
@@ -259,12 +245,14 @@ export default function DocumentosCore() {
                     background: "#f1f5f9",
                   }}
                 >
-                  <span style={{ overflowWrap: "anywhere" }}>
+                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
                     Documento {index + 1} · {item.file.name} · {formatBytes(item.file.size)}
                   </span>
 
                   <button
                     type="button"
+                    disabled={loading}
+                    aria-label={`Quitar ${item.file.name}`}
                     onClick={() => removeFile(item.id)}
                     style={{
                       flexShrink: 0,
@@ -325,26 +313,5 @@ export default function DocumentosCore() {
         </section>
       </main>
     </>
-  );
-}
-
-function StatusRow({ text }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        padding: "11px 13px",
-        border: "1px solid #e2e8f0",
-        borderRadius: 13,
-        background: "#fff",
-        color: "#334155",
-        fontWeight: 800,
-      }}
-    >
-      <span style={{ color: "#16a34a" }}>✓</span>
-      <span>{text}</span>
-    </div>
   );
 }

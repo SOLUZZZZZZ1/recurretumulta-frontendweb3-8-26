@@ -55,7 +55,7 @@ try {
       .replace("</head>", head + "\n  </head>")
       .replace(
         '<div id="root"></div>',
-        '<div id="root" data-prerendered="true">' + markup + "</div>"
+        '<div id="root" data-prerendered="true" data-prerendered-path="' + route + '">' + markup + "</div>"
       );
 
     const outputPath = route === "/"

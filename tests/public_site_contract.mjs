@@ -4,7 +4,7 @@ assert.equal(publicOrigin('www.resuelvetusmovidas.es'),'https://www.resuelvetusm
 assert.equal(publicOrigin('resuelvetusmovidas.es'),'https://www.resuelvetusmovidas.es');
 assert.equal(publicUrl('https://www.recurretumulta.eu/trafico','www.resuelvetusmovidas.es'),'https://www.resuelvetusmovidas.es/trafico');
 assert.equal(publicUrl('https://www.recurretumulta.eu/og-recurretumulta.png?v=2','www.resuelvetusmovidas.es'),'https://www.resuelvetusmovidas.es/og-recurretumulta.png?v=2');
-assert.equal(publicOrigin('preview.example.com'),'https://www.recurretumulta.eu');
-assert.equal(publicOrigin('www.resuelvetusmovidas.es.attacker.example'),'https://www.recurretumulta.eu');
+assert.equal(publicOrigin('preview.example.com'),'https://www.resuelvetusmovidas.es');
+assert.equal(publicOrigin('www.resuelvetusmovidas.es.attacker.example'),'https://www.resuelvetusmovidas.es');
 assert.equal(publicUrl('https://external.example/path','www.resuelvetusmovidas.es'),'https://external.example/path');
 console.log(JSON.stringify({passed:true,checks:7,scope:'public-domain display and SEO URL contract; no DNS or TLS acceptance'}));

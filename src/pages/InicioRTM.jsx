@@ -22,9 +22,6 @@ function getCasePhase(data) {
   const paymentStatus = String(data?.payment_status || "").toLowerCase();
   const status = String(data?.status || "").toLowerCase();
 
-  if (!authorized) return "authorize";
-  if (paymentStatus !== "paid") return "pay";
-
   if (
     status.includes("presentado") ||
     status === "submitted" ||
@@ -33,6 +30,9 @@ function getCasePhase(data) {
   ) {
     return "status";
   }
+
+  if (!authorized) return "authorize";
+  if (paymentStatus !== "paid") return "pay";
 
   return "summary";
 }
@@ -122,11 +122,6 @@ export default function InicioRTM() {
 
       if (phase === "authorize") {
         navigate(`/autorizar?case=${encodeURIComponent(caseKey)}`);
-        return;
-      }
-
-      if (phase === "status") {
-        navigate(`/estado-expediente?case=${encodeURIComponent(caseKey)}`);
         return;
       }
 
@@ -281,7 +276,6 @@ export default function InicioRTM() {
               className="rtm-home-services-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1.12fr) minmax(320px, .88fr)",
                 gap: 20,
                 alignItems: "stretch",
               }}
@@ -303,7 +297,7 @@ export default function InicioRTM() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 230px), 1fr))",
                     gap: 14,
                   }}
                 >
@@ -435,7 +429,6 @@ export default function InicioRTM() {
               className="rtm-home-steps"
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 gap: 20,
                 padding: 30,
                 borderRadius: 26,

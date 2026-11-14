@@ -42,7 +42,10 @@ const renderApp = (
   </React.StrictMode>
 );
 
-if (root.dataset.prerendered === "true") {
+// SPA fallbacks and legacy hash links can serve another route's HTML.
+// Hydrate only when that HTML was rendered for the current page.
+const currentPath = window.location.pathname.replace(/\/+$/, "") || "/";
+if (root.dataset.prerendered === "true" && root.dataset.prerenderedPath === currentPath) {
   hydrateRoot(root, renderApp);
 } else {
   createRoot(root).render(renderApp);

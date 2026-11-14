@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import "./Navbar.css";
 import RtmBrand, { RTM_BRAND_LABEL } from "./RtmBrand.jsx";
 
 const MAIN_LINKS = [
@@ -27,7 +28,6 @@ const SERVICE_GROUPS = [
     icon: "✈️",
     landing: "/viajes",
     landingLabel: "Ver todos los servicios de viajes",
-    landing: "/viajes",
     links: [
       { to: "/iniciar-expediente/claims/airline?issue=cancelled_flight", label: "Vuelo cancelado" },
       { to: "/iniciar-expediente/claims/airline?issue=flight_delay", label: "Vuelo retrasado" },
@@ -70,7 +70,7 @@ const SERVICE_LINKS = SERVICE_GROUPS.flatMap((group) => [
 
 
 export default function Navbar() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [open, setOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const servicesRef = useRef(null);
@@ -82,7 +82,7 @@ export default function Navbar() {
   useEffect(() => {
     setOpen(false);
     setServicesOpen(false);
-  }, [pathname]);
+  }, [pathname, search]);
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -100,145 +100,6 @@ export default function Navbar() {
 
   return (
     <>
-      <style>{`
-        .rtm-services-wrap {
-          position: relative;
-        }
-
-        .rtm-services-trigger {
-          border: 0;
-          font-family: inherit;
-          cursor: pointer;
-        }
-
-        .rtm-services-chevron {
-          margin-left: 7px;
-          font-size: 12px;
-          transition: transform .18s ease;
-        }
-
-        .rtm-services-chevron.is-open {
-          transform: rotate(180deg);
-        }
-
-        .rtm-services-dropdown {
-          position: absolute;
-          top: calc(100% + 10px);
-          left: 50%;
-          z-index: 1200;
-          width: min(920px, calc(100vw - 28px));
-          padding: 18px;
-          border: 1px solid #dbeafe;
-          border-radius: 18px;
-          background: #ffffff;
-          box-shadow: 0 24px 60px rgba(15, 23, 42, .24);
-          transform: translateX(-50%);
-        }
-
-        .rtm-services-dropdown::before {
-          content: "";
-          position: absolute;
-          top: -7px;
-          left: 50%;
-          width: 14px;
-          height: 14px;
-          border-top: 1px solid #dbeafe;
-          border-left: 1px solid #dbeafe;
-          background: #ffffff;
-          transform: translateX(-50%) rotate(45deg);
-        }
-
-        .rtm-services-grid {
-          position: relative;
-          z-index: 1;
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .rtm-service-group {
-          min-width: 0;
-          padding: 10px;
-          border-radius: 14px;
-          background: #f8fafc;
-        }
-
-        .rtm-service-group-title {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          margin-bottom: 8px;
-          color: #0f172a;
-          font-size: 14px;
-          font-weight: 900;
-        }
-
-        .rtm-service-option {
-          position: relative;
-          z-index: 1;
-          display: grid;
-          grid-template-columns: minmax(0, 1fr);
-          gap: 4px;
-          align-items: center;
-          padding: 9px 10px;
-          color: #0f172a;
-          text-decoration: none;
-          border-radius: 13px;
-        }
-
-        .rtm-service-option:hover,
-        .rtm-service-option.is-active {
-          background: #eff6ff;
-        }
-
-        .rtm-service-option-icon { display: none; }
-
-        .rtm-service-option strong {
-          display: block;
-          margin-bottom: 3px;
-          font-size: 15px;
-          line-height: 1.2;
-        }
-
-        .rtm-service-option small {
-          display: block;
-          color: #64748b;
-          font-size: 12px;
-          line-height: 1.35;
-        }
-
-        @media (max-width: 980px) {
-          .rtm-services-wrap {
-            width: 100%;
-          }
-
-          .rtm-services-trigger {
-            justify-content: space-between;
-          }
-
-          .rtm-services-dropdown {
-            position: static;
-            width: 100%;
-            margin-top: 4px;
-            padding: 7px;
-            border-radius: 14px;
-            box-shadow: none;
-            transform: none;
-          }
-
-          .rtm-services-dropdown::before {
-            display: none;
-          }
-
-          .rtm-services-grid {
-            grid-template-columns: minmax(0, 1fr);
-          }
-
-          .rtm-service-group {
-            background: rgba(255,255,255,.96);
-          }
-        }
-      `}</style>
 
       <header className="rtm-navbar">
         <div className="rtm-navbar-inner">

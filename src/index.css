@@ -252,7 +252,7 @@ textarea {
 .rtm-home-services-grid {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, .78fr);
+  grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr);
   gap: 18px;
 }
 

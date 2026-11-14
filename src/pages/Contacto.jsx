@@ -74,7 +74,7 @@ export default function Contacto() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
+              gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,260px),1fr))",
               gap: 20,
               alignItems: "center",
             }}

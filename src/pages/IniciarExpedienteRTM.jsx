@@ -1,9 +1,8 @@
 import { clientRequest, clientApiUrl } from "../lib/clientApi.js";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
-
-const MAX_FILE_BYTES = 12 * 1024 * 1024;
+import { fileSizeError } from "../lib/clientFiles.js";
 
 const SERVICE_CONFIG = {
   traffic: {
@@ -113,6 +112,11 @@ export default function IniciarExpedienteRTM() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const messageRef = useRef(null);
+
+  useEffect(() => {
+    if (message) messageRef.current?.focus();
+  }, [message]);
 
   const dniFrontRef = useRef(null);
   const dniBackRef = useRef(null);
@@ -141,7 +145,8 @@ export default function IniciarExpedienteRTM() {
     if (!form.province.trim()) return "Indica la provincia.";
     if (!dniFront) return "Adjunta la parte frontal del documento de identidad.";
     if (!dniBack) return "Adjunta la parte posterior del documento de identidad.";
-    if (dniFront.size > MAX_FILE_BYTES || dniBack.size > MAX_FILE_BYTES) return "Alguna imagen supera 12 MB.";
+    const identityFileError = fileSizeError(dniFront) || fileSizeError(dniBack);
+    if (identityFileError) return identityFileError;
     if (form.customer_comment.trim().length < 15) return "Cuéntanos brevemente qué ha ocurrido.";
     if (!form.representation_confirmed) return "Confirma la generación de la autorización.";
     if (!form.privacy_accepted) return "Acepta la política de privacidad.";
@@ -201,7 +206,7 @@ export default function IniciarExpedienteRTM() {
   async function uploadAuthorization() {
     if (!draftCase?.caseId) return setMessage("Primero crea el expediente.");
     if (!signedAuthorization) return setMessage("Selecciona la autorización firmada.");
-    if (signedAuthorization.size > MAX_FILE_BYTES) return setMessage("La autorización supera 12 MB.");
+    if (fileSizeError(signedAuthorization)) return setMessage(fileSizeError(signedAuthorization));
 
     setUploading(true);
     setMessage("");
@@ -326,7 +331,7 @@ export default function IniciarExpedienteRTM() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
+                gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,230px),1fr))",
                 gap: 17,
               }}
             >
@@ -412,7 +417,7 @@ export default function IniciarExpedienteRTM() {
 
           <form onSubmit={createDraftAndDownload}>
             <Section title="1. Tipo de expediente">
-              <select value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
+              <select aria-label="Tipo de expediente" value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase) || loading}>
                 {Object.entries(config.caseTypes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </Section>
@@ -422,11 +427,11 @@ export default function IniciarExpedienteRTM() {
                 <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(draftCase)} />
                 <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(draftCase)} />
                 <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(draftCase)} />
-                <Field label="Teléfono" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(draftCase)} />
+                <Field label="Teléfono" type="tel" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(draftCase)} />
               </div>
               <div style={{ marginTop: 16 }}>
                 <span style={labelStyle}>Preferencia de contacto</span>
-                <select value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
+                <select aria-label="Preferencia de contacto" value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
                   <option value="email">Email</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option>
                 </select>
               </div>
@@ -452,7 +457,7 @@ export default function IniciarExpedienteRTM() {
             </Section>
 
             <Section title="5. Cuéntanos brevemente qué ha ocurrido">
-              <textarea rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(draftCase)} />
+              <textarea aria-label="Cuéntanos brevemente qué ha ocurrido" rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(draftCase)} />
             </Section>
 
             {!draftCase && <>
@@ -472,7 +477,7 @@ export default function IniciarExpedienteRTM() {
             {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación del caso</button>}
           </Section>}
 
-          {message && <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850 }}>{message}</div>}
+          {message && <div ref={messageRef} tabIndex={-1} role="alert" style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850, overflowWrap: "anywhere" }}>{message}</div>}
         </section>
       </main>
     </>
@@ -484,18 +489,47 @@ function Section({ title, children }) {
 }
 
 function Field({ label, value, onChange, placeholder, type = "text", disabled = false }) {
-  return <label style={{ display: "block" }}><span style={labelStyle}>{label}</span><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} disabled={disabled} /></label>;
+  return <label style={{ display: "block", minWidth: 0 }}><span style={labelStyle}>{label}</span><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} disabled={disabled} /></label>;
 }
 
 function UploadBox({ label, file, inputRef, onChange, accept = "image/*,application/pdf", disabled = false }) {
-  return <div><span style={labelStyle}>{label}</span><button type="button" onClick={() => !disabled && inputRef.current?.click()} disabled={disabled} style={{ width: "100%", minHeight: 118, padding: 16, border: "2px dashed #cbd5e1", borderRadius: 16, background: file ? "#f0fdf4" : "#f8fafc", cursor: disabled ? "not-allowed" : "pointer" }}><div style={{ fontSize: 30 }}>{file ? "✅" : "📷"}</div><strong>{file ? file.name : "Seleccionar archivo"}</strong>{file && <div style={{ color: "#64748b", fontSize: 13 }}>{formatBytes(file.size)}</div>}</button><input ref={inputRef} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} style={{ display: "none" }} disabled={disabled} /></div>;
+  const [error, setError] = useState("");
+  function selectFile(event) {
+    const selected = event.target.files?.[0];
+    if (selected) {
+      const problem = fileSizeError(selected);
+      setError(problem);
+      if (!problem) onChange(selected);
+    }
+    event.target.value = "";
+  }
+
+  return (
+    <div style={{ minWidth: 0 }}>
+      <span style={labelStyle}>{label}</span>
+      <button
+        type="button"
+        aria-label={`${label}: ${file ? file.name : "Seleccionar archivo"}`}
+        onClick={() => !disabled && inputRef.current?.click()}
+        disabled={disabled}
+        style={{ width: "100%", minHeight: 118, padding: 16, border: "2px dashed #cbd5e1", borderRadius: 16, background: file ? "#f0fdf4" : "#f8fafc", cursor: disabled ? "not-allowed" : "pointer", overflowWrap: "anywhere" }}
+      >
+        <div style={{ fontSize: 30 }}>{file ? "✅" : "📷"}</div>
+        <strong>{file ? file.name : "Seleccionar archivo"}</strong>
+        {file && <div style={{ color: "#64748b", fontSize: 13 }}>{formatBytes(file.size)}</div>}
+      </button>
+      <input ref={inputRef} aria-label={label} type="file" accept={accept} onChange={selectFile} style={{ display: "none" }} disabled={disabled} />
+      <small style={{ display: "block", marginTop: 7, color: "#475569" }}>Imagen o PDF · máximo 12 MB</small>
+      {error && <p role="alert" style={{ color: "#991b1b", marginTop: 8 }}>{error}{file ? " Se conserva el archivo anterior." : ""}</p>}
+    </div>
+  );
 }
 
 function Check({ checked, onChange, children }) {
   return <label style={{ display: "flex", gap: 10, marginBottom: 12, color: "#334155" }}><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /><span>{children}</span></label>;
 }
 
-const gridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 };
+const gridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,240px),1fr))", gap: 16 };
 const labelStyle = { display: "block", marginBottom: 7, fontWeight: 850, color: "#0f172a" };
-const inputStyle = { width: "100%", boxSizing: "border-box", padding: "12px 13px", border: "1px solid #cbd5e1", borderRadius: 13, background: "#fff", fontSize: 15 };
+const inputStyle = { width: "100%", minWidth: 0, boxSizing: "border-box", padding: "12px 13px", border: "1px solid #cbd5e1", borderRadius: 13, background: "#fff", fontSize: 16 };
 const primaryButton = { width: "100%", minHeight: 56, border: 0, borderRadius: 15, padding: "15px 18px", background: "#16a34a", color: "#fff", fontSize: 17, fontWeight: 950, cursor: "pointer" };
