@@ -1,15 +1,17 @@
-import { clientRequest, clientApiUrl } from "../lib/clientApi.js";
+import { clientRequest } from "../lib/clientApi.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
 import { fileSizeError } from "../lib/clientFiles.js";
+import UploadBox from "../components/FileUploadBox.jsx";
+import IntakeAuthorization from "../components/IntakeAuthorization.jsx";
+import "./Intake.css";
 
 const SERVICE_CONFIG = {
   traffic: {
     label: "Tráfico",
     icon: "🚗",
     defaultCaseType: "fine",
-    nextPath: "/multas/documentos",
     caseTypes: {
       fine: "Recurrir una multa",
       vehicle_removal: "Eliminar un vehículo",
@@ -20,7 +22,6 @@ const SERVICE_CONFIG = {
     label: "Deudas y morosidad",
     icon: "💳",
     defaultCaseType: "asnef_equifax",
-    nextPath: "/deudas/documentos",
     caseTypes: {
       asnef_equifax: "ASNEF / Equifax",
       creditor_claim: "Reclamación frente al acreedor",
@@ -31,7 +32,6 @@ const SERVICE_CONFIG = {
     label: "Administración",
     icon: "🏛️",
     defaultCaseType: "general_administration",
-    nextPath: "/administracion/documentos",
     caseTypes: {
       aeat: "Hacienda / AEAT",
       social_security: "Seguridad Social",
@@ -43,7 +43,6 @@ const SERVICE_CONFIG = {
     label: "Reclamaciones",
     icon: "✈️",
     defaultCaseType: "airline",
-    nextPath: "/reclamaciones/documentos",
     caseTypes: {
       airline: "Aerolínea",
       consumer: "Consumo",
@@ -51,10 +50,6 @@ const SERVICE_CONFIG = {
     },
   },
 };
-
-function openBackendFile(path) {
-  window.open(clientApiUrl(path), "_blank", "noopener,noreferrer");
-}
 
 function normalizeDni(value = "") {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
@@ -64,14 +59,11 @@ function validEmail(value = "") {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-function formatBytes(bytes = 0) {
-  return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 export default function IniciarExpedienteRTM() {
   const navigate = useNavigate();
   const params = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const caseId = searchParams.get("case") || "";
 
   const requestedDepartment =
     params.department ||
@@ -106,21 +98,32 @@ export default function IniciarExpedienteRTM() {
 
   const [dniFront, setDniFront] = useState(null);
   const [dniBack, setDniBack] = useState(null);
-  const [signedAuthorization, setSignedAuthorization] = useState(null);
-  const [draftCase, setDraftCase] = useState(null);
-  const [authorizationUploaded, setAuthorizationUploaded] = useState(false);
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
   const [message, setMessage] = useState("");
   const messageRef = useRef(null);
+  const stepRef = useRef(null);
+  const previousStep = useRef(1);
+  const submissionLock = useRef(false);
+  const active = useRef(true);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
     if (message) messageRef.current?.focus();
   }, [message]);
 
+  useEffect(() => {
+    if (previousStep.current !== step) stepRef.current?.focus();
+    previousStep.current = step;
+  }, [step]);
+
   const dniFrontRef = useRef(null);
   const dniBackRef = useRef(null);
-  const authRef = useRef(null);
 
   const domicilio = useMemo(() => {
     const line1 = [form.street, form.street_number, form.floor ? `Piso ${form.floor}` : "", form.door ? `Puerta ${form.door}` : ""].filter(Boolean).join(", ");
@@ -133,7 +136,7 @@ export default function IniciarExpedienteRTM() {
     setMessage("");
   }
 
-  function validateDraft() {
+  function validateDetails() {
     if (form.full_name.trim().length < 3) return "Indica el nombre y apellidos.";
     if (normalizeDni(form.dni_nie).length < 5) return "Indica el DNI, NIE o pasaporte.";
     if (!validEmail(form.email)) return "Indica un email válido.";
@@ -143,21 +146,40 @@ export default function IniciarExpedienteRTM() {
     if (!form.postal_code.trim()) return "Indica el código postal.";
     if (!form.city.trim()) return "Indica la población.";
     if (!form.province.trim()) return "Indica la provincia.";
+    if (form.customer_comment.trim().length < 15) return "Cuéntanos brevemente qué ha ocurrido.";
+    return "";
+  }
+
+  function validateDocuments() {
     if (!dniFront) return "Adjunta la parte frontal del documento de identidad.";
     if (!dniBack) return "Adjunta la parte posterior del documento de identidad.";
     const identityFileError = fileSizeError(dniFront) || fileSizeError(dniBack);
     if (identityFileError) return identityFileError;
-    if (form.customer_comment.trim().length < 15) return "Cuéntanos brevemente qué ha ocurrido.";
+    return "";
+  }
+
+  function validateDraft() {
+    const problem = validateDetails() || validateDocuments();
+    if (problem) return problem;
     if (!form.representation_confirmed) return "Confirma la generación de la autorización.";
     if (!form.privacy_accepted) return "Acepta la política de privacidad.";
     return "";
   }
 
-  async function createDraftAndDownload(event) {
+  async function submitStep(event) {
     event.preventDefault();
+    if (submissionLock.current || uncertain) return;
+    if (step < 3) {
+      const error = step === 1 ? validateDetails() : validateDocuments();
+      if (error) { setMessage(error); messageRef.current?.focus(); return; }
+      setMessage("");
+      setStep(current => current + 1);
+      return;
+    }
     const error = validateDraft();
     if (error) return setMessage(error);
 
+    submissionLock.current = true;
     setLoading(true);
     setMessage("");
 
@@ -189,44 +211,34 @@ export default function IniciarExpedienteRTM() {
       fd.append("dni_back", dniBack);
 
       const data = await clientRequest("/cases/intake-draft", { method: "POST", body: fd });
+      if (!active.current) return;
       const caseId = data?.case_id || data?.id;
-      if (!caseId) throw new Error("El backend no devolvió el número del expediente.");
+      if (typeof caseId !== "string" || !caseId) {
+        const error = new Error("No hemos podido confirmar el número del expediente. Contacta con RTM antes de volver a enviar la solicitud.");
+        error.uncertain = true;
+        throw error;
+      }
 
-      const pdfPath = data?.authorization_download_url || `/cases/${caseId}/rtm-authorization-pdf`;
-      setDraftCase({ caseId, pdfPath, nextPath: data?.next_path || config.nextPath });
-      setMessage("✅ Expediente creado. Se ha abierto la autorización para descargar y firmar.");
-      openBackendFile(pdfPath);
+      const nextSearch = new URLSearchParams(searchParams);
+      nextSearch.set("case", caseId);
+      setSearchParams(nextSearch, { replace: true });
+      setMessage("");
     } catch (error) {
+      if (!active.current) return;
+      setUncertain(Boolean(error.uncertain));
       setMessage(error?.message || "No se pudo crear el expediente.");
     } finally {
-      setLoading(false);
+      submissionLock.current = false;
+      if (active.current) setLoading(false);
     }
   }
 
-  async function uploadAuthorization() {
-    if (!draftCase?.caseId) return setMessage("Primero crea el expediente.");
-    if (!signedAuthorization) return setMessage("Selecciona la autorización firmada.");
-    if (fileSizeError(signedAuthorization)) return setMessage(fileSizeError(signedAuthorization));
-
-    setUploading(true);
+  function goToStep(next) {
     setMessage("");
-    try {
-      const fd = new FormData();
-      fd.append("file", signedAuthorization);
-      await clientRequest(`/cases/${draftCase.caseId}/upload-authorization-signed`, { method: "POST", body: fd });
-      setAuthorizationUploaded(true);
-      setMessage("✅ Autorización firmada recibida. Ya puedes continuar con la documentación del expediente.");
-    } catch (error) {
-      setMessage(error?.message || "No se pudo subir la autorización.");
-    } finally {
-      setUploading(false);
-    }
+    setStep(next);
   }
 
-  function continueToDocuments() {
-    const separator = draftCase.nextPath.includes("?") ? "&" : "?";
-    navigate(`${draftCase.nextPath}${separator}case=${encodeURIComponent(draftCase.caseId)}`);
-  }
+  if (caseId) return <><Seo title="Continuar expediente · RTM" description="Continúa la autorización de tu expediente RTM." /><IntakeAuthorization key={caseId} caseId={caseId} /></>;
 
   if (needsServiceSelection) {
     const services = [
@@ -403,81 +415,87 @@ export default function IniciarExpedienteRTM() {
     <>
       <Seo title={`Iniciar expediente · ${config.label} · RTM`} description="Crea tu expediente RTM y descarga la autorización." canonical="https://www.recurretumulta.eu/iniciar-expediente" />
 
-      <main style={{ minHeight: "calc(100vh - 120px)", padding: "42px 16px 68px", background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 56%,#0f766e 100%)" }}>
-        <section style={{ maxWidth: 1040, margin: "0 auto", padding: "30px 22px", borderRadius: 26, background: "rgba(255,255,255,.98)", boxShadow: "0 24px 70px rgba(15,23,42,.34)" }}>
-          <header style={{ marginBottom: 26 }}>
-            <h1 style={{ margin: "0 0 12px", fontSize: "clamp(34px,5vw,50px)", lineHeight: 1.04 }}>Inicia tu expediente</h1>
-            <p style={{ margin: 0, color: "#475569", fontSize: 18, lineHeight: 1.6 }}>
-              Cuéntanos lo necesario para abrir el expediente. Después descarga la autorización RTM, fírmala y continúa con la documentación.
-            </p>
-            <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 14, background: "#eff6ff", color: "#1e3a8a", fontWeight: 800, lineHeight: 1.5 }}>
-              Un único expediente RTM · Datos → Autorización → Documentación → Revisión inicial → Valoración
-            </div>
+      <main className="rtm-intake-page">
+        <section className="rtm-intake-panel">
+          <header>
+            <h1>Inicia tu expediente</h1>
+            <p>Completa estos tres pasos. Podrás revisar los datos antes de enviarlos y después firmar la autorización.</p>
+            <ol aria-label="Progreso del alta" className="rtm-intake-progress">
+              {["Datos", "Documentos", "Revisión"].map((label, index) => <li key={label} aria-current={step === index + 1 ? "step" : undefined}><span aria-hidden="true">{index + 1}</span>{label}</li>)}
+            </ol>
           </header>
 
-          <form onSubmit={createDraftAndDownload}>
-            <Section title="1. Tipo de expediente">
-              <select aria-label="Tipo de expediente" value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle} disabled={Boolean(draftCase) || loading}>
+          <h2 ref={stepRef} tabIndex={-1}>Paso {step} de 3 · {step === 1 ? "Tus datos y tu caso" : step === 2 ? "Documento de identidad" : "Revisa antes de enviar"}</h2>
+          <form onSubmit={submitStep} noValidate>
+            {step === 1 && <>
+            <Section title="Tipo de expediente">
+              <select aria-label="Tipo de expediente" value={form.case_type} onChange={(e) => update("case_type", e.target.value)} style={inputStyle}>
                 {Object.entries(config.caseTypes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </Section>
 
-            <Section title="2. Datos personales">
+            <Section title="Datos personales">
               <div style={gridStyle}>
-                <Field label="Nombre y apellidos" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" disabled={Boolean(draftCase)} />
-                <Field label="DNI / NIE / Pasaporte" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" disabled={Boolean(draftCase)} />
-                <Field label="Email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" disabled={Boolean(draftCase)} />
-                <Field label="Teléfono" type="tel" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" disabled={Boolean(draftCase)} />
+                <Field label="Nombre y apellidos" name="full_name" autoComplete="name" value={form.full_name} onChange={(v) => update("full_name", v)} placeholder="Nombre completo" />
+                <Field label="DNI / NIE / Pasaporte" name="dni_nie" value={form.dni_nie} onChange={(v) => update("dni_nie", v)} placeholder="Ej. 12345678Z" />
+                <Field label="Email" name="email" autoComplete="email" type="email" value={form.email} onChange={(v) => update("email", v)} placeholder="tu@email.com" />
+                <Field label="Teléfono" name="telefono" autoComplete="tel" type="tel" value={form.telefono} onChange={(v) => update("telefono", v)} placeholder="Ej. 600 000 000" />
               </div>
               <div style={{ marginTop: 16 }}>
                 <span style={labelStyle}>Preferencia de contacto</span>
-                <select aria-label="Preferencia de contacto" value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle} disabled={Boolean(draftCase)}>
+                <select aria-label="Preferencia de contacto" value={form.preferred_contact} onChange={(e) => update("preferred_contact", e.target.value)} style={inputStyle}>
                   <option value="email">Email</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option>
                 </select>
               </div>
             </Section>
 
-            <Section title="3. Domicilio a efectos de notificaciones">
+            <Section title="Domicilio de notificaciones">
               <div style={gridStyle}>
-                <Field label="Calle" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" disabled={Boolean(draftCase)} />
-                <Field label="Número" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" disabled={Boolean(draftCase)} />
-                <Field label="Piso" value={form.floor} onChange={(v) => update("floor", v)} placeholder="Opcional" disabled={Boolean(draftCase)} />
-                <Field label="Puerta" value={form.door} onChange={(v) => update("door", v)} placeholder="Opcional" disabled={Boolean(draftCase)} />
-                <Field label="Código postal" value={form.postal_code} onChange={(v) => update("postal_code", v)} placeholder="Código postal" disabled={Boolean(draftCase)} />
-                <Field label="Población" value={form.city} onChange={(v) => update("city", v)} placeholder="Población" disabled={Boolean(draftCase)} />
-                <Field label="Provincia" value={form.province} onChange={(v) => update("province", v)} placeholder="Provincia" disabled={Boolean(draftCase)} />
+                <Field label="Calle" name="street" autoComplete="address-line1" value={form.street} onChange={(v) => update("street", v)} placeholder="Nombre de la vía" />
+                <Field label="Número" name="street_number" value={form.street_number} onChange={(v) => update("street_number", v)} placeholder="Número" />
+                <Field label="Piso" name="floor" value={form.floor} onChange={(v) => update("floor", v)} placeholder="Opcional" />
+                <Field label="Puerta" name="door" value={form.door} onChange={(v) => update("door", v)} placeholder="Opcional" />
+                <Field label="Código postal" name="postal_code" autoComplete="postal-code" inputMode="numeric" value={form.postal_code} onChange={(v) => update("postal_code", v)} placeholder="Código postal" />
+                <Field label="Población" name="city" autoComplete="address-level2" value={form.city} onChange={(v) => update("city", v)} placeholder="Población" />
+                <Field label="Provincia" name="province" autoComplete="address-level1" value={form.province} onChange={(v) => update("province", v)} placeholder="Provincia" />
               </div>
             </Section>
-
-            <Section title="4. Documento de identidad">
-              <div style={gridStyle}>
-                <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} disabled={Boolean(draftCase)} />
-                <UploadBox label="Parte posterior" file={dniBack} inputRef={dniBackRef} onChange={setDniBack} disabled={Boolean(draftCase)} />
-              </div>
+            <Section title="Cuéntanos qué ha ocurrido">
+              <textarea aria-label="Cuéntanos brevemente qué ha ocurrido" rows={5} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} />
             </Section>
-
-            <Section title="5. Cuéntanos brevemente qué ha ocurrido">
-              <textarea aria-label="Cuéntanos brevemente qué ha ocurrido" rows={7} maxLength={1500} value={form.customer_comment} onChange={(e) => update("customer_comment", e.target.value)} placeholder="Explica brevemente el problema..." style={{ ...inputStyle, resize: "vertical" }} disabled={Boolean(draftCase)} />
-            </Section>
-
-            {!draftCase && <>
-              <Check checked={form.representation_confirmed} onChange={(v) => update("representation_confirmed", v)}>Deseo generar la autorización RTM vinculada a este expediente.</Check>
-              <Check checked={form.privacy_accepted} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
-              <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : "Crear expediente y descargar autorización"}</button>
             </>}
+            {step === 2 && <Section title="Adjunta las dos caras">
+              <p className="rtm-intake-hint">Comprueba que las imágenes sean legibles y que se vean los bordes del documento. A continuación revisarás los datos y los archivos seleccionados.</p>
+              <div style={gridStyle}>
+                <UploadBox label="Parte frontal" file={dniFront} inputRef={dniFrontRef} onChange={setDniFront} />
+                <UploadBox label="Parte posterior" file={dniBack} inputRef={dniBackRef} onChange={setDniBack} />
+              </div>
+            </Section>}
+            {step === 3 && <>
+              <Section title="Resumen de tu solicitud">
+                <dl className="rtm-intake-summary">
+                  <SummaryItem label="Servicio" value={`${config.label} · ${config.caseTypes[form.case_type]}`} />
+                  <SummaryItem label="Nombre y documento" value={`${form.full_name}\n${form.dni_nie}`} />
+                  <SummaryItem label="Contacto" value={`${form.email}\n${form.telefono}\nPreferencia: ${form.preferred_contact === "phone" ? "Teléfono" : form.preferred_contact === "whatsapp" ? "WhatsApp" : "Email"}`} />
+                  <SummaryItem label="Domicilio de notificaciones" value={domicilio} />
+                  <SummaryItem label="Qué ha ocurrido" value={form.customer_comment} />
+                  <SummaryItem label="Archivos seleccionados" value={`Parte frontal: ${dniFront?.name || "Pendiente"}\nParte posterior: ${dniBack?.name || "Pendiente"}`} />
+                </dl>
+                <p className="rtm-intake-hint">Los datos y archivos se enviarán al pulsar «Crear expediente».</p>
+                <div className="rtm-intake-actions">
+                  <button type="button" className="sr-btn-secondary" disabled={loading || uncertain} onClick={() => goToStep(1)}>Editar datos</button>
+                  <button type="button" className="sr-btn-secondary" disabled={loading || uncertain} onClick={() => goToStep(2)}>Cambiar documentos</button>
+                </div>
+              </Section>
+              <Check checked={form.representation_confirmed} disabled={loading || uncertain} onChange={(v) => update("representation_confirmed", v)}>Deseo generar la autorización RTM vinculada a este expediente.</Check>
+              <Check checked={form.privacy_accepted} disabled={loading || uncertain} onChange={(v) => update("privacy_accepted", v)}>Acepto la política de privacidad y confirmo que los datos son correctos.</Check>
+            </>}
+            {message && <div ref={messageRef} tabIndex={-1} role="alert" className="rtm-intake-error">{message}</div>}
+            {uncertain ? <p>Conserva esta pantalla y <Link to="/contacto">contacta con RTM</Link> para confirmar el alta antes de volver a enviarla.</p> : <div className="rtm-intake-actions">
+              {step > 1 && <button type="button" className="sr-btn-secondary" disabled={loading} onClick={() => goToStep(step - 1)}>Atrás</button>}
+              <button type="submit" disabled={loading} style={primaryButton}>{loading ? "Creando expediente…" : step === 1 ? "Continuar a documentos" : step === 2 ? "Revisar solicitud" : "Crear expediente"}</button>
+            </div>}
           </form>
-
-          {draftCase && <Section title="6. Descargar y subir la autorización RTM">
-            <div style={{ padding: 14, marginBottom: 16, borderRadius: 14, background: "#dcfce7", color: "#166534", fontWeight: 900, overflowWrap: "anywhere" }}>Expediente: {draftCase.caseId}</div>
-            <button type="button" className="sr-btn-primary" onClick={() => openBackendFile(draftCase.pdfPath)}>⬇ Descargar autorización RTM</button>
-            <div style={{ marginTop: 18 }}>
-              <UploadBox label="Autorización firmada" file={signedAuthorization} inputRef={authRef} onChange={setSignedAuthorization} accept=".pdf,.jpg,.jpeg,.png,image/*" />
-            </div>
-            <button type="button" className="sr-btn-primary" onClick={uploadAuthorization} disabled={uploading || !signedAuthorization} style={{ marginTop: 16 }}>{uploading ? "Subiendo…" : "Subir autorización firmada"}</button>
-            {authorizationUploaded && <button type="button" className="sr-btn-primary" onClick={continueToDocuments} style={{ marginTop: 16, width: "100%" }}>Continuar y subir documentación del caso</button>}
-          </Section>}
-
-          {message && <div ref={messageRef} tabIndex={-1} role="alert" style={{ marginTop: 16, padding: 14, borderRadius: 14, background: message.startsWith("✅") ? "#ecfdf5" : "#fef2f2", color: message.startsWith("✅") ? "#166534" : "#991b1b", fontWeight: 850, overflowWrap: "anywhere" }}>{message}</div>}
         </section>
       </main>
     </>
@@ -485,48 +503,19 @@ export default function IniciarExpedienteRTM() {
 }
 
 function Section({ title, children }) {
-  return <section style={{ marginBottom: 22, padding: 22, border: "1px solid #e2e8f0", borderRadius: 20, background: "#fff" }}><h2 style={{ margin: "0 0 16px", fontSize: 23 }}>{title}</h2>{children}</section>;
+  return <section className="rtm-intake-section" style={{ marginBottom: 22, border: "1px solid #e2e8f0", borderRadius: 20, background: "#fff" }}><h3 style={{ margin: "0 0 16px", fontSize: 20 }}>{title}</h3>{children}</section>;
 }
 
-function Field({ label, value, onChange, placeholder, type = "text", disabled = false }) {
-  return <label style={{ display: "block", minWidth: 0 }}><span style={labelStyle}>{label}</span><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} disabled={disabled} /></label>;
+function Field({ label, name, value, onChange, placeholder, type = "text", autoComplete = "off", inputMode }) {
+  return <label style={{ display: "block", minWidth: 0 }}><span style={labelStyle}>{label}</span><input name={name} type={type} autoComplete={autoComplete} inputMode={inputMode} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} /></label>;
 }
 
-function UploadBox({ label, file, inputRef, onChange, accept = "image/*,application/pdf", disabled = false }) {
-  const [error, setError] = useState("");
-  function selectFile(event) {
-    const selected = event.target.files?.[0];
-    if (selected) {
-      const problem = fileSizeError(selected);
-      setError(problem);
-      if (!problem) onChange(selected);
-    }
-    event.target.value = "";
-  }
-
-  return (
-    <div style={{ minWidth: 0 }}>
-      <span style={labelStyle}>{label}</span>
-      <button
-        type="button"
-        aria-label={`${label}: ${file ? file.name : "Seleccionar archivo"}`}
-        onClick={() => !disabled && inputRef.current?.click()}
-        disabled={disabled}
-        style={{ width: "100%", minHeight: 118, padding: 16, border: "2px dashed #cbd5e1", borderRadius: 16, background: file ? "#f0fdf4" : "#f8fafc", cursor: disabled ? "not-allowed" : "pointer", overflowWrap: "anywhere" }}
-      >
-        <div style={{ fontSize: 30 }}>{file ? "✅" : "📷"}</div>
-        <strong>{file ? file.name : "Seleccionar archivo"}</strong>
-        {file && <div style={{ color: "#64748b", fontSize: 13 }}>{formatBytes(file.size)}</div>}
-      </button>
-      <input ref={inputRef} aria-label={label} type="file" accept={accept} onChange={selectFile} style={{ display: "none" }} disabled={disabled} />
-      <small style={{ display: "block", marginTop: 7, color: "#475569" }}>Imagen o PDF · máximo 12 MB</small>
-      {error && <p role="alert" style={{ color: "#991b1b", marginTop: 8 }}>{error}{file ? " Se conserva el archivo anterior." : ""}</p>}
-    </div>
-  );
+function SummaryItem({ label, value }) {
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
-function Check({ checked, onChange, children }) {
-  return <label style={{ display: "flex", gap: 10, marginBottom: 12, color: "#334155" }}><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /><span>{children}</span></label>;
+function Check({ checked, onChange, disabled, children }) {
+  return <label style={{ display: "flex", gap: 10, marginBottom: 12, color: "#334155" }}><input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /><span>{children}</span></label>;
 }
 
 const gridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,240px),1fr))", gap: 16 };

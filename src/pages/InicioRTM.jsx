@@ -2,6 +2,7 @@ import { clientRequest } from "../lib/clientApi.js";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Seo from "../components/Seo.jsx";
+import { intakeContinuationPath } from "../lib/intakeJourney.js";
 
 function looksLikeUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -121,7 +122,7 @@ export default function InicioRTM() {
       const phase = getCasePhase(data);
 
       if (phase === "authorize") {
-        navigate(`/autorizar?case=${encodeURIComponent(caseKey)}`);
+        navigate(intakeContinuationPath(data, caseKey) || `/autorizar?case=${encodeURIComponent(caseKey)}`);
         return;
       }
 

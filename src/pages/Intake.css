@@ -1,0 +1,35 @@
+.rtm-intake-page { min-height: calc(100vh - 120px); padding: 32px 16px 60px; background: linear-gradient(135deg,#0f172a 0%,#1e3a8a 56%,#0f766e 100%); }
+.rtm-intake-panel { max-width: 880px; margin: 0 auto; padding: 28px; border-radius: 24px; background: #f8fafc; color: #0f172a; box-shadow: 0 24px 70px #0f172a57; overflow-wrap: anywhere; }
+.rtm-intake-panel h1 { margin: 0 0 12px; font-size: clamp(28px,5vw,40px); line-height: 1.15; }
+.rtm-intake-panel h2 { font-size: 22px; margin: 22px 0 14px; }
+.rtm-intake-section { padding: 22px; }
+.rtm-intake-panel p { line-height: 1.6; }
+.rtm-intake-progress { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); list-style: none; padding: 0; margin: 22px 0; gap: 8px; }
+.rtm-intake-progress li { padding: 10px 4px; border-radius: 12px; background: #e2e8f0; text-align: center; font-size: 13px; font-weight: 800; }
+.rtm-intake-progress [aria-current="step"] { background: #1e3a8a; color: #fff; }
+.rtm-intake-progress span { display: block; margin-bottom: 4px; }
+.rtm-intake-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.rtm-intake-actions > * { flex: 1 1 190px; }
+.rtm-intake-panel button, .rtm-intake-panel .sr-btn-primary, .rtm-intake-panel .sr-btn-secondary { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.rtm-intake-panel .sr-btn-primary, .rtm-intake-panel .sr-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; }
+.rtm-intake-panel button:disabled { opacity: .6; cursor: not-allowed; }
+.rtm-intake-error, .rtm-intake-success { padding: 14px; border-radius: 12px; font-weight: 700; }
+.rtm-intake-error { background: #fef2f2; color: #991b1b; }
+.rtm-intake-success { background: #ecfdf5; color: #166534; }
+.rtm-intake-reference { display: grid; gap: 8px; padding: 16px; margin: 20px 0; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 14px; }
+.rtm-intake-reference code { user-select: all; font-size: 15px; }
+.rtm-intake-summary { display: grid; gap: 14px; margin: 0 0 18px; }
+.rtm-intake-summary dt { font-weight: 800; }
+.rtm-intake-summary dd { margin: 4px 0 0; color: #475569; white-space: pre-line; }
+.rtm-intake-instructions { padding-left: 22px; line-height: 1.6; list-style: decimal; }
+.rtm-intake-instructions li { margin-bottom: 10px; }
+.rtm-intake-hint { color: #475569; font-size: 14px; margin: 12px 0 16px; }
+.rtm-intake-wide { width: 100%; margin-top: 16px; text-align: center; }
+@media (max-width: 480px) {
+  .rtm-intake-page { padding: 24px 12px 40px; }
+  .rtm-intake-panel { padding: 22px 16px; }
+  .rtm-intake-panel .rtm-intake-section { padding: 16px; }
+}
+@media (max-width: 380px) {
+  .rtm-intake-progress li { font-size: 12px; padding: 10px 2px; white-space: nowrap; }
+}
