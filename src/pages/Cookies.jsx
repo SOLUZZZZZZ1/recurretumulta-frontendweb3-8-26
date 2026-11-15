@@ -4,7 +4,7 @@ export default function Cookies() {
   return (
     <>
       <Seo
-        title="Cookies · RecurreTuMulta"
+        title="Cookies · Resuelve tus movidas"
         description="Política de cookies del sitio web."
         canonical="https://www.resuelvetusmovidas.es/cookies"
       />

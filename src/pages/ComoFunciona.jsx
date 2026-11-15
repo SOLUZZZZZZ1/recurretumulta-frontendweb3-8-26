@@ -76,8 +76,8 @@ export default function ComoFunciona() {
   return (
     <>
       <Seo
-        title="Cómo trabajamos · RTM"
-        description="Así funciona RTM: estudio de la documentación, valoración de opciones y presupuesto antes de que decidas si continúas." canonical="https://www.resuelvetusmovidas.es/como-funciona"
+        title="Cómo trabajamos · Resuelve tus movidas"
+        description="Así funciona Resuelve tus movidas: estudio de la documentación, valoración de opciones y presupuesto antes de que decidas si continúas." canonical="https://www.resuelvetusmovidas.es/como-funciona"
       />
 
       <style>{`

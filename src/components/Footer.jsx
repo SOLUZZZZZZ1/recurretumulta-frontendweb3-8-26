@@ -24,13 +24,14 @@ export default function Footer() {
     >
       <div
         className="sr-container rtm-footer-grid"
+        data-nosnippet=""
         style={{
           display: "grid",
           gap: 20,
           gridTemplateColumns: "repeat(3, minmax(0,1fr))",
         }}
       >
-        {/* RECURRE TU MULTA */}
+        {/* MARCA Y NAVEGACIÓN */}
         <div>
           <RtmBrand placement="footer" />
           <ul style={{ listStyle: "none", padding: 0, lineHeight: 1.9 }}>
@@ -119,6 +120,7 @@ export default function Footer() {
 
       <div
         className="sr-container"
+        data-nosnippet=""
         style={{
           marginTop: 24,
           fontSize: 12,
@@ -127,7 +129,7 @@ export default function Footer() {
           lineHeight: 1.7,
         }}
       >
-        © {new Date().getFullYear()} RecurreTuMulta · Asistencia automatizada en
+        © {new Date().getFullYear()} Resuelve tus movidas · Asistencia en
         trámites administrativos
         <br />
         Este sitio presta asesoramiento jurídico pero no garantiza resultados.

@@ -165,8 +165,8 @@ export default function FAQ() {
   return (
     <>
       <Seo
-        title="Preguntas frecuentes · RTM"
-        description="Resuelve tus dudas sobre el estudio documental, recursos de multas, precios, documentación, expedientes y plazos de RTM." canonical="https://www.resuelvetusmovidas.es/faq"
+        title="Preguntas frecuentes · Resuelve tus movidas"
+        description="Resuelve tus dudas sobre el estudio documental, recursos de multas, precios, documentación, expedientes y plazos en Resuelve tus movidas." canonical="https://www.resuelvetusmovidas.es/faq"
       />
 
       <main

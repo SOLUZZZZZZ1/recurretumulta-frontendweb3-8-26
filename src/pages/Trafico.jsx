@@ -35,7 +35,7 @@ export default function Trafico() {
   return (
     <>
       <Seo
-        title="Estudio de multas de tráfico y sanciones · RTM"
+        title="Multas de tráfico y sanciones · Resuelve tus movidas"
         description="Estudio documental de multas de la DGT y ayuntamientos. Revisamos notificación, plazos y pruebas; cualquier recurso requiere presupuesto y aceptación previa."
         canonical="https://www.resuelvetusmovidas.es/trafico"
       />

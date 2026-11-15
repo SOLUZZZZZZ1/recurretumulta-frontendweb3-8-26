@@ -4,8 +4,8 @@ export default function AvisoLegal() {
   return (
     <>
       <Seo
-        title="Aviso legal · RecurreTuMulta"
-        description="Aviso legal del sitio web RecurreTuMulta."
+        title="Aviso legal · Resuelve tus movidas"
+        description="Aviso legal del sitio web Resuelve tus movidas."
         canonical="https://www.resuelvetusmovidas.es/aviso-legal"
       />
 
