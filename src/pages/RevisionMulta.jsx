@@ -25,7 +25,7 @@ function StartReview({ children = "Iniciar revisión por 10 €" }) {
 export default function RevisionMulta() {
   return (
     <>
-      <Seo title="Revisión de multas por 10 € · RTM" description="Una persona del equipo RTM revisa tu multa y la documentación por 10 €. Conoce qué incluye el estudio y qué necesitas. Los recursos se presupuestan aparte." canonical="https://www.resuelvetusmovidas.es/revision-multa" />
+      <Seo title="Revisión de multas por 10 € · Resuelve tus movidas" description="Una persona de Resuelve tus movidas revisa tu multa y documentación por 10 €. Conoce qué incluye y qué necesitas. Los recursos se presupuestan aparte." canonical="https://www.resuelvetusmovidas.es/revision-multa" />
       <main className="fine-landing">
         <section className="fine-landing-hero" aria-labelledby="fine-title">
           <div className="fine-landing-container fine-landing-hero-grid">

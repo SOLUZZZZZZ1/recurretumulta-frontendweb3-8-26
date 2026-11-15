@@ -34,7 +34,7 @@ export default function Precios() {
   return (
     <>
       <Seo
-        title="Precios · RTM"
+        title="Precios · Resuelve tus movidas"
         description="Consulta el precio del estudio documental y cómo recibirás un presupuesto personalizado antes de preparar un recurso." canonical="https://www.resuelvetusmovidas.es/precios"
       />
 

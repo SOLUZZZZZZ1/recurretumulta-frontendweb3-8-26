@@ -2,8 +2,8 @@ import { Helmet } from "react-helmet-async";
 import { publicOrigin, publicUrl } from '../lib/publicSite.js';
 
 export default function Seo({
-  title = "RecurreTuMulta | Asistencia administrativa para recurrir sanciones",
-  description = "Recurrimos sanciones administrativas de forma clara y eficiente. Tráfico, ayuntamientos, hacienda y más. Análisis rápido y tramitación completa.",
+  title = "Resuelve tus movidas | Multas y trámites administrativos",
+  description = "Resuelve tus movidas: revisión de multas, deudas y trámites administrativos. Estudiamos tus documentos y te explicamos las opciones antes de continuar.",
   canonical = "https://www.resuelvetusmovidas.es/",
   image = "https://www.resuelvetusmovidas.es/og-cover.jpg",
   noindex = false,
@@ -20,7 +20,7 @@ export default function Seo({
         "@id": organizationId,
         name: "LA TALAMANQUINA, S.L.",
         legalName: "LA TALAMANQUINA, S.L.",
-        alternateName: "RTM · Resuelve tus movidas",
+        alternateName: ["Resuelve tus movidas", "RTM"],
         url: `${origin}/`,
         logo: `${origin}/rtm-logo-transparente-recortado.png`,
         taxID: "B75440115",
@@ -51,7 +51,8 @@ export default function Seo({
         "@type": "WebSite",
         "@id": `${origin}/#website`,
         url: `${origin}/`,
-        name: "RTM · Resuelve tus movidas",
+        name: "Resuelve tus movidas",
+        alternateName: ["RTM", "resuelvetusmovidas.es"],
         inLanguage: "es-ES",
         publisher: { "@id": organizationId },
       },
@@ -80,7 +81,7 @@ export default function Seo({
 
       {/* Open Graph */}
       <meta property="og:type" content="website" />
-      <meta property="og:site_name" content="RTM · Resuelve tus movidas" />
+      <meta property="og:site_name" content="Resuelve tus movidas" />
       <meta property="og:title" content={title} />
       <meta property="og:description" content={description} />
       <meta property="og:url" content={canonical} />

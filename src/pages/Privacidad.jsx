@@ -4,7 +4,7 @@ export default function Privacidad() {
   return (
     <>
       <Seo
-        title="Privacidad · RecurreTuMulta"
+        title="Privacidad · Resuelve tus movidas"
         description="Política de privacidad conforme al RGPD."
         canonical="https://www.resuelvetusmovidas.es/privacidad"
       />

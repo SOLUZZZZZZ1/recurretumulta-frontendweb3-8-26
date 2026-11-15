@@ -33,7 +33,7 @@ export default function ViajesHome() {
   return (
     <>
       <Seo
-        title="Reclamaciones de vuelos y viajes · RTM"
+        title="Reclamaciones de vuelos y viajes · Resuelve tus movidas"
         description="Estudio de reclamaciones por vuelos cancelados o retrasados, equipaje, overbooking y viajes combinados. Te explicamos las opciones y el presupuesto antes de cualquier gestión."
         canonical="https://www.resuelvetusmovidas.es/viajes"
       />

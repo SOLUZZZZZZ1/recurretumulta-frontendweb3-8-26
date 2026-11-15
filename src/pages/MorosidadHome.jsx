@@ -62,7 +62,7 @@ export default function MorosidadHome() {
   return (
     <>
       <Seo
-        title="Deudas y morosidad · ASNEF y Equifax · RTM"
+        title="Deudas, ASNEF y Equifax · Resuelve tus movidas"
         description="¿Apareces en ASNEF, Equifax u otro fichero? Estudiamos el origen de la deuda, las comunicaciones y tus documentos. La gestión posterior requiere presupuesto y aceptación."
         canonical="https://www.resuelvetusmovidas.es/morosidad"
       />

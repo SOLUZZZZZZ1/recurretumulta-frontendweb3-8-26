@@ -62,7 +62,7 @@ export default function AdministracionHome() {
   return (
     <>
       <Seo
-        title="Administración Pública · Revisión de expedientes · RTM"
+        title="Expedientes administrativos · Resuelve tus movidas"
         description="Revisión inicial de expedientes de Hacienda, Seguridad Social, ayuntamientos, Catastro y otros organismos públicos."
         canonical="https://www.resuelvetusmovidas.es/administracion"
       />

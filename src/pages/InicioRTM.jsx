@@ -137,8 +137,8 @@ export default function InicioRTM() {
   return (
     <>
       <Seo
-        title="RecurreTuMulta | Estudio de multas y recursos"
-        description="Estudio documental de multas y expedientes administrativos. Revisamos la documentación y explicamos las opciones, precios y siguientes pasos antes de que decidas."
+        title="Resuelve tus movidas | Multas y trámites administrativos"
+        description="Resuelve tus movidas: revisión de multas, deudas y trámites administrativos. Estudiamos tus documentos y te explicamos las opciones antes de continuar."
         canonical="https://www.resuelvetusmovidas.es/"
       />
 
@@ -172,7 +172,7 @@ export default function InicioRTM() {
                   fontWeight: 850,
                 }}
               >
-                Plataforma RTM
+                Resuelve tus movidas
               </div>
 
               <h1
@@ -196,7 +196,7 @@ export default function InicioRTM() {
                   color: "rgba(255,255,255,.88)",
                 }}
               >
-                Seleccione el área relacionada con su problema. RTM le guiará paso a paso
+                Seleccione el área relacionada con su problema. Resuelve tus movidas le guiará paso a paso
                 para abrir el expediente y valorar la forma más adecuada de actuar.
               </p>
             </div>

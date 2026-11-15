@@ -9,8 +9,8 @@ export default function Contacto() {
   return (
     <>
       <Seo
-        title="Contacto RTM | Soporte e información"
-        description="Contacta con RTM para consultas sobre expedientes, soporte técnico e información general."
+        title="Contacto y soporte · Resuelve tus movidas"
+        description="Contacta con Resuelve tus movidas para consultas sobre expedientes, soporte técnico e información general."
         canonical="https://www.resuelvetusmovidas.es/contacto"
       />
       <main
