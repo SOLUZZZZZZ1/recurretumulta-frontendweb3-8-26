@@ -74,7 +74,14 @@ export default function ClientManagement(){
     const r=await post(request,path+'/checkout',{quote_id:q.id,quote_sha256:q.sha256,expected_session_ref:fresh.session_ref,
       invoice_requested:invoiceRequested,invoice_data:invoiceRequested?invoiceData:null},signal);
     if(!valid(signal))return;
-    if(r.balance.checkout_url){const url=new URL(r.balance.checkout_url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com'||url.username||url.password||!url.pathname.startsWith('/c/'))throw new Error('Dirección de pago no verificada.');window.location.assign(url.href);}
+    if(r.balance.checkout_url){
+      const url=new URL(r.balance.checkout_url),host=url.hostname;
+      const parts=url.pathname.split('/').filter(Boolean);
+      const hasSession=parts.some((part,index)=>part==='pay'&&/^cs_(?:test|live)_[A-Za-z0-9]+$/.test(parts[index+1]||''));
+      const stripeHost=host==='stripe.com'||host.endsWith('.stripe.com');
+      if(url.protocol!=='https:'||!stripeHost||url.username||url.password||(url.port&&url.port!=='443')||!hasSession)throw new Error('Dirección de pago no verificada.');
+      window.location.assign(url.href);
+    }
     else{await load(signal);setNotice(BALANCE_LABELS[r.balance.state]||'Consulta del pago pendiente.');}
   });}
   return <main className="cw-case sr-container"><header><h1>Tu expediente · acceso privado</h1><p>Conservamos tu estudio y su pago. Este acceso no crea otro expediente ni repite la autorización.</p></header>
