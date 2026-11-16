@@ -30,9 +30,10 @@ export default function OpsPaidStudy({caseId,operatorId,authFetch,study,document
     const val=value===undefined ? factText[key] : value;
     setFactText(f=>({...f,[key]:val}));
     const source=sourceId===undefined ? previous.sources[0]?.document_id||'' : sourceId;
-    const valid=!!val.trim() && !!source;
+    const hasText=!!val.trim();
+    const valid=hasText && !!source;
     change('facts',{...form.facts,[key]:{value:valid?val:null,status:valid?'validated':'unresolved',confidence:valid?1:0,
-      sources:valid?[{document_id:source,source_type:'document',extraction_method:'human_review',confidence:1,page_index:null,evidence:null}]:[],conflicts:[],notes:[]}});
+      sources:source?[{document_id:source,source_type:'document',extraction_method:'human_review',confidence:1,page_index:null,evidence:null}]:[],conflicts:[],notes:[]}});
   }
   async function task(fn){
     if(lock.current)return;lock.current=true;
