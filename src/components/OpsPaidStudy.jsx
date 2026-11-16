@@ -143,21 +143,36 @@ export default function OpsPaidStudy({caseId,operatorId,authFetch,study,document
     }catch(e){if(live.current&&!signal.aborted)setMessage(e.message);}
   });}
   const ready=canWrite&&editable&&ack&&form.assessment.trim()&&form.next_action.trim()&&reviewed.length>=3;
+  const factEntries=Object.entries(FACT_LABELS);
+  function renderFact([key,label]){
+    return <div className="cw-fact" key={key}>
+      <label>{label}<textarea aria-label={label} value={factText[key]} maxLength={8000} onChange={e=>factChange(key,e.target.value)}/></label>
+      <label>Documento que sustenta la revisión<select value={form.facts[key].sources[0]?.document_id||''} onChange={e=>factChange(key,undefined,e.target.value)}>
+        <option value="">Sin comprobar</option>{reviewed.map(r=><option key={r.document_id} value={r.document_id}>{documentLabel(documents.find(d=>d.id===r.document_id)||{},documents.findIndex(d=>d.id===r.document_id))}</option>)}</select></label>
+      <small>{form.facts[key].status==='validated'?'Revisado por el operador, con fuente seleccionada':'Pendiente de revisión documental; no se deduce de otra identidad.'}</small>
+    </div>;
+  }
   return <section aria-label="Estudio inicial"><h2>Estudio inicial pagado</h2>
     <p>La valoración es interna. Guardarla no la comunica al cliente, no genera un recurso ni contrata la gestión posterior.</p>
     <p>Responsable de la última valoración: {study.latest?.snapshot.author.name||'Sin valoración guardada'}. Los hechos sin revisar conservan su estado pendiente.</p>
     <form onSubmit={e=>{e.preventDefault();void save();}}>
       <fieldset disabled={!editable||!canWrite}><legend>Revisión documental y valoración</legend>
-      <p>Documentos confirmados en esta sesión: {reviewed.length}. Abre y revisa la multa, la autorización y la identidad antes de guardar.</p>
-      {Object.entries(FACT_LABELS).map(([key,label])=><div className="cw-fact" key={key}>
-        <label>{label}<textarea aria-label={label} value={factText[key]} maxLength={8000} onChange={e=>factChange(key,e.target.value)}/></label>
-        <label>Documento que sustenta la revisión<select value={form.facts[key].sources[0]?.document_id||''} onChange={e=>factChange(key,undefined,e.target.value)}>
-          <option value="">Sin comprobar</option>{reviewed.map(r=><option key={r.document_id} value={r.document_id}>{documentLabel(documents.find(d=>d.id===r.document_id)||{},documents.findIndex(d=>d.id===r.document_id))}</option>)}</select></label>
-        <small>{form.facts[key].status==='validated'?'Revisado por el operador, con fuente seleccionada':'Pendiente de revisión documental; no se deduce de otra identidad.'}</small>
-      </div>)}
+      <p>Documentos confirmados en esta sesión: {reviewed.length}. Para guardar, revisa la multa, la autorización y la identidad.</p>
+      <h3>Datos principales de la notificación</h3>
+      <p>Completa estos datos primero. Las identidades y las notas adicionales están agrupadas debajo; lo que no se revise seguirá pendiente.</p>
+      {factEntries.slice(0,5).map(renderFact)}
+      <details className="cw-study-more"><summary>Identidades y representación (5 datos)</summary>
+        <p>Revisa por separado interesado, contacto, conductor, titular y representante, especialmente si los nombres no coinciden.</p>
+        {factEntries.slice(5).map(renderFact)}
+      </details>
       <label>Estado del estudio<select value={form.state} onChange={e=>change('state',e.target.value)}>
         <option value="in_progress">En curso</option><option value="blocked">Bloqueado por un requisito</option><option value="completed">Valoración terminada</option></select></label>
-      {[['assessment','Valoración del asunto',12000],['missing','Qué falta o bloquea el estudio',4000],['options','Opciones y alcance propuestos',8000],['next_action','Siguiente acción concreta',2000]].map(([k,label,max])=><label key={k}>{label}<textarea aria-label={label} required={k==='assessment'||k==='next_action'} maxLength={max} value={form[k]} onChange={e=>change(k,e.target.value)}/></label>)}
+      <label>Valoración del asunto<textarea aria-label="Valoración del asunto" required maxLength={12000} value={form.assessment} onChange={e=>change('assessment',e.target.value)}/></label>
+      <label>Siguiente acción concreta<textarea aria-label="Siguiente acción concreta" required maxLength={2000} value={form.next_action} onChange={e=>change('next_action',e.target.value)}/></label>
+      <details className="cw-study-more" open={form.state==='blocked'}><summary>Notas internas: qué falta y opciones</summary>
+        <label>Qué falta o bloquea el estudio<textarea aria-label="Qué falta o bloquea el estudio" maxLength={4000} value={form.missing} onChange={e=>change('missing',e.target.value)}/></label>
+        <label>Opciones y alcance propuestos<textarea aria-label="Opciones y alcance propuestos" maxLength={8000} value={form.options} onChange={e=>change('options',e.target.value)}/></label>
+      </details>
       <label><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/> Confirmo guardar una nueva valoración interna con estos hechos y fuentes.</label>
       <button type="submit" disabled={!ready}>Guardar valoración</button></fieldset>
     </form>
