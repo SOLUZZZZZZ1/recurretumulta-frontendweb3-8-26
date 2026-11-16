@@ -9,6 +9,7 @@
 .cw-case dl {display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin:1rem 0}
 .cw-case dt {font-size:.85rem;font-weight:600;color:#496b61}.cw-case dd {overflow-wrap:anywhere}
 .cw-next {padding:.9rem;background:#e0f3d8;border-radius:.6rem}.cw-case details {margin:1rem 0;border:1px solid #d9e5e1;padding:.8rem;border-radius:.6rem}
+.cw-management-locked {margin:1rem 0;padding:1rem 1.2rem;border-left:4px solid #b5832f;border-radius:.6rem;background:#fff9eb}
 .cw-case summary {cursor:pointer;font-weight:600}.cw-case pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:36rem;overflow:auto;font-size:.85rem}
 .cw-case label {display:block;margin:.8rem 0;font-weight:600}.cw-case textarea,.cw-case select {display:block;border:1px solid #859f96;border-radius:.4rem;padding:.55rem;max-width:100%;width:100%;font-weight:400;background:white;color:#153a30}
 .cw-case textarea {min-height:5rem}.cw-case input[type=checkbox] {margin-right:.5rem}
