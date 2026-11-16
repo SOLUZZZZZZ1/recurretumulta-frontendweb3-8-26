@@ -54,6 +54,7 @@ function Case({caseId}){
   if(!work)return <main className="cw-case sr-container"><p role="status">Recuperando datos, pago y trabajo guardado…</p></main>;
   const {fields,identities}=work.workspace.case;
   const docs=work.workspace.sections.documents, latest=work.study.latest?.snapshot;
+  const managementAvailable=work.capabilities.management_journey===true;
   const state={in_progress:'En curso',blocked:'Bloqueado',completed:'Valoración terminada'}[latest?.study.state]||'Sin iniciar';
   const paid=fields.payment_status?.status==='available'&&fields.payment_status.value==='paid';
   const next=latest?.study.next_action||(paid?'Abrir la documentación y comenzar el estudio inicial.':'Comprobar el estado registrado del pago antes de iniciar el estudio.');
@@ -69,7 +70,8 @@ function Case({caseId}){
         <div><dt>Autor de la última valoración</dt><dd>{latest?.author.name||'Todavía no hay valoración guardada'}</dd></div>
         <div><dt>Responsable asignado</dt><dd>No consta una asignación en este contrato. La sesión identifica al autor de cada guardado.</dd></div>
       </dl><p className="cw-next"><strong>Siguiente acción:</strong> {next}</p></header>
-    <nav className="cw-tabs" aria-label="Secciones del expediente">{['Resumen','Documentos','Estudio','Comunicaciones','Presupuesto y pagos','Recurso','Historial'].map(t=><button key={t} aria-current={tab===t?'page':undefined} onClick={()=>setTab(t)}>{t}</button>)}</nav>
+    <nav className="cw-tabs" aria-label="Secciones del expediente">{['Resumen','Documentos','Estudio','Comunicaciones',...(managementAvailable?['Presupuesto y pagos']:[]),'Recurso','Historial'].map(t=><button key={t} aria-current={tab===t?'page':undefined} onClick={()=>setTab(t)}>{t}</button>)}</nav>
+    {!managementAvailable&&<section className="cw-management-locked" role="status"><h2>Gestión posterior no habilitada</h2><p>Este expediente permite revisar documentos y el estudio inicial. La preparación de presupuestos, su cobro y la generación del recurso no están habilitados ahora.</p></section>}
     <div hidden={tab!=='Resumen'}><h2>Resumen y datos</h2><p>El pago del estudio no equivale a contratar ni pagar toda la gestión.</p>
       <dl>{[['Interesado',identities.interested.full_name],['Contacto',identities.contact.full_name],['Organismo',fields.organismo],['Notificación guardada',fields.notified_at],['Autorización guardada',fields.authorized]].map(([label,v])=><div key={label}><dt>{label}</dt><dd>{v?.value===true?'Consta recibida; su contenido debe revisarse':fieldText(v)}</dd></div>)}</dl>
       <p>Conductor, titular y representante se revisan por separado en el estudio; no se deducen del contacto.</p>
@@ -83,9 +85,9 @@ function Case({caseId}){
       {document&&<OpsDocumentViewer key={`${caseId}:${document.id}`} caseId={caseId} document={document} authFetch={auth.authFetch} onReviewed={markReviewed} onClose={()=>setDocument(null)}/>}</div>
     <div hidden={tab!=='Estudio'}><details><summary>Extracciones anteriores pendientes de revisión</summary>{work.extractions.length?<>{work.extractions.map(e=><pre key={e.id}>{JSON.stringify(e.values,null,2)}</pre>)}<p>No se han convertido automáticamente en hechos validados.</p></>:<p>Esta lectura no devuelve extracciones. Los originales pueden revisarse en Documentos.</p>}</details>
       <OpsPaidStudy caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} documents={docs.items||[]} reviewed={reviewed} canWrite={paid&&work.capabilities.study_write} onRefresh={setWork}/></div>
-    <div hidden={tab!=='Presupuesto y pagos'}><OpsManagementQuote caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} canWrite={work.capabilities.study_write}/></div>
+    {managementAvailable&&tab==='Presupuesto y pagos'&&<OpsManagementQuote caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} canWrite={work.capabilities.study_write}/>}
     {tab==='Comunicaciones'&&<OpsCommunications caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} canWrite={work.capabilities.study_write} caseEmail={identities.contact.email?.status==='available'?identities.contact.email.value:null}/>}
-    <div hidden={tab!=='Recurso'}><OpsManagementDraft caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} resources={work.resources} canWrite={work.capabilities.study_write}/><details><summary>Archivo anterior conservado</summary><Resource caseId={caseId} resources={work.resources} authFetch={auth.authFetch}/></details></div>
+    {tab==='Recurso'&&<section>{managementAvailable&&<OpsManagementDraft caseId={caseId} operatorId={auth.session.operator.id} authFetch={auth.authFetch} study={work.study} resources={work.resources} canWrite={work.capabilities.study_write}/>}<details><summary>Archivo anterior conservado</summary><Resource caseId={caseId} resources={work.resources} authFetch={auth.authFetch}/></details></section>}
     <div hidden={tab!=='Historial'}><h2>Historial del trabajo</h2><ol>{work.study.history.map(h=><li key={h.operation_id}>Valoración {h.revision} · {h.author.name} · {new Date(h.created_at).toLocaleString('es-ES')}</li>)}</ol>
       <details><summary>Identificadores y eventos técnicos</summary><p>Expediente: {caseId}</p><pre>{JSON.stringify(work.workspace.sections.timeline,null,2)}</pre></details></div>
     <footer className="cw-no-presentation">No presentado. Esta entrega no firma, aprueba un recurso ni actúa en una sede administrativa.</footer>
