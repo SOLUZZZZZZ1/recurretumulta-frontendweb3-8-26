@@ -10,6 +10,7 @@ import OpsManagementQuote from './OpsManagementQuote.jsx';
 import OpsManagementDraft from './OpsManagementDraft.jsx';
 import './OpsPaidCase.css';
 import OpsClientRehearsal from './OpsClientRehearsal.jsx';
+import OpsAuthorizationReview from './OpsAuthorizationReview.jsx';
 
 function CaseList(){
   const auth=useOpsAuth();const [result,setResult]=useState(null),[error,setError]=useState('');
@@ -77,6 +78,10 @@ function Case({caseId}){
       <p>Conductor, titular y representante se revisan por separado en el estudio; no se deducen del contacto.</p>
       <details><summary>Datos completos y procedencia de la lectura</summary><pre>{JSON.stringify(work.workspace.case,null,2)}</pre></details></div>
     <div hidden={tab!=='Documentos'}><h2>Documentos del expediente</h2>
+      {tab==='Documentos'&&auth.status?.authProfile==='provider_test_casework'&&<OpsAuthorizationReview
+        key={`${caseId}:${auth.session.sessionId}`} caseId={caseId} sessionId={auth.session.sessionId}
+        authFetch={auth.authFetch} canReview={work.capabilities.study_write&&auth.session.operator.roleCode==='rtm.supervisor'}
+        onSaved={()=>setEpoch(e=>e+1)}/>}
       {docs.status==='schema_unavailable'?<p role="alert">No se pudieron consultar los documentos. No se acredita que falten.</p>:<>
         {docs.status==='empty'&&<p>La consulta completada no devuelve documentos registrados.</p>}{docs.status==='partial'&&<p>Listado parcial; faltan registros por consultar.</p>}
         <ul className="cw-documents">{docs.items.map((d,i)=><li key={d.id}><h3>{documentLabel(d,i)}</h3><p>{d.mime} · {d.created_at?new Date(d.created_at).toLocaleDateString('es-ES'):'Fecha no registrada'}</p>
